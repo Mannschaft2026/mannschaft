@@ -64,8 +64,46 @@ jobs:
 
             const pull = context.payload.pull_request;
             if (!pull) throw new Error('pull_request payload is missing');
+            const { pathToFileURL } = require('node:url');
             const validatorPath = path.join(process.cwd(), 'scripts', 'completion-evidence.mjs');
             const validatorAvailable = fs.existsSync(validatorPath);
+            // 台帳の両配置（旧: docs/task-list.md 1ファイル / 新: 索引＋docs/task-list/YYYY-MM.md・legacy.md）は信頼 base の
+            // scripts/task-list-ledger.mjs（readLedger）で読む。Contents API はディレクトリ単位で取得し、404 だけを不在、それ以外の失敗は例外にする。
+            const ledgerLibPath = path.join(process.cwd(), 'scripts', 'task-list-ledger.mjs');
+            if (!fs.existsSync(ledgerLibPath)) throw new Error('The trusted ledger reader scripts/task-list-ledger.mjs is absent from the base checkout.');
+            const ledgerLib = await import(pathToFileURL(ledgerLibPath).href);
+            async function readContent(filePath, ref) {
+              try {
+                const response = await github.rest.repos.getContent({ owner, repo, path: filePath, ref });
+                if (Array.isArray(response.data) || response.data.type !== 'file') throw new Error(`Expected a file: ${filePath}@${ref}`);
+                if (response.data.encoding === 'base64') return Buffer.from(response.data.content, 'base64').toString('utf8');
+                // 1MiB 超のファイルは contents API が encoding:"none" で本文を返さない。blob API（100MB まで）で読む。
+                if (response.data.encoding !== 'none' || !response.data.sha) throw new Error(`Expected a base64 file: ${filePath}@${ref}`);
+                const blob = await github.rest.git.getBlob({ owner, repo, file_sha: response.data.sha });
+                if (blob.data.encoding !== 'base64') throw new Error(`Expected a base64 blob: ${filePath}@${ref}`);
+                return Buffer.from(blob.data.content, 'base64').toString('utf8');
+              } catch (error) {
+                if (error.status === 404) return null;
+                throw error;
+              }
+            }
+            async function listContentDir(dirPath, ref) {
+              try {
+                const response = await github.rest.repos.getContent({ owner, repo, path: dirPath, ref });
+                if (!Array.isArray(response.data)) throw new Error(`Expected a directory: ${dirPath}@${ref}`);
+                return response.data.map(entry => entry.name);
+              } catch (error) {
+                if (error.status === 404) return null;
+                throw error;
+              }
+            }
+            async function readLedgerAt(ref, label) {
+              try {
+                return await ledgerLib.readLedger({ listDir: dirPath => listContentDir(dirPath, ref), readFile: filePath => readContent(filePath, ref) });
+              } catch (error) {
+                throw new Error(`The task list could not be read from ${label} (${ref}): ${error.message}`);
+              }
+            }
             const files = await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number: pull.number, per_page: 100 });
             if (!Number.isSafeInteger(pull.changed_files) || pull.changed_files < 0 || files.length !== pull.changed_files) {
               throw new Error(`PR file list is incomplete or its count is invalid (${files.length}/${pull.changed_files}); evidence changes cannot be determined.`);
@@ -76,35 +114,24 @@ jobs:
               || file.previous_filename === validatorPathInBase
             );
             if (validatorRemoval) throw new Error('The trusted completion validator cannot be deleted or renamed.');
+            const ledgerLibPathInBase = 'scripts/task-list-ledger.mjs';
+            const ledgerLibRemoval = files.find(file =>
+              file.filename === ledgerLibPathInBase && file.status === 'removed'
+              || file.previous_filename === ledgerLibPathInBase
+            );
+            if (ledgerLibRemoval) throw new Error('The trusted ledger reader cannot be deleted or renamed.');
 
             let trustedValidator = null;
             if (validatorAvailable) {
-              async function readContent(filePath, ref) {
-                try {
-                  const response = await github.rest.repos.getContent({ owner, repo, path: filePath, ref });
-                  if (Array.isArray(response.data) || response.data.type !== 'file') throw new Error(`Expected a file: ${filePath}@${ref}`);
-                  if (response.data.encoding === 'base64') return Buffer.from(response.data.content, 'base64').toString('utf8');
-                  // 1MiB 超のファイルは contents API が encoding:"none" で本文を返さない。blob API（100MB まで）で読む。
-                  if (response.data.encoding !== 'none' || !response.data.sha) throw new Error(`Expected a base64 file: ${filePath}@${ref}`);
-                  const blob = await github.rest.git.getBlob({ owner, repo, file_sha: response.data.sha });
-                  if (blob.data.encoding !== 'base64') throw new Error(`Expected a base64 blob: ${filePath}@${ref}`);
-                  return Buffer.from(blob.data.content, 'base64').toString('utf8');
-                } catch (error) {
-                  if (error.status === 404) return null;
-                  throw error;
-                }
-              }
               const baseRef = pull.base.sha;
               const headRef = pull.head.sha;
               const comparison = await github.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead: `${baseRef}...${headRef}` });
               const ancestorRef = comparison.data.merge_base_commit?.sha;
               if (!/^[0-9a-f]{40}$/i.test(ancestorRef || '')) throw new Error('A valid common ancestor SHA could not be read.');
-              const baseTaskList = await readContent('docs/task-list.md', baseRef);
-              const headTaskList = await readContent('docs/task-list.md', headRef);
-              const ancestorTaskList = await readContent('docs/task-list.md', ancestorRef);
-              if (baseTaskList === null || headTaskList === null) throw new Error('docs/task-list.md could not be read from base and PR head.');
-              if (ancestorTaskList === null) throw new Error('docs/task-list.md could not be read from the common ancestor.');
-              const { pathToFileURL } = require('node:url');
+              // base・head・分岐点それぞれの配置を判別して読む（取得失敗・索引不在・0件は例外）。
+              const baseTaskList = await readLedgerAt(baseRef, 'base');
+              const headTaskList = await readLedgerAt(headRef, 'PR head');
+              const ancestorTaskList = await readLedgerAt(ancestorRef, 'the common ancestor');
               trustedValidator = await import(pathToFileURL(validatorPath).href);
               const evidencePathPattern = /^docs\/evidence\/CMP-(?:\d{6}-\d{4}|\d{3})\.json$/;
               const changedEvidencePaths = [...new Set(files.flatMap(file => [file.filename, file.previous_filename]).filter(filePath => evidencePathPattern.test(filePath)))];
@@ -206,22 +233,13 @@ jobs:
               return;
             }
             const cmpId = references[0];
-            const response = await github.rest.repos.getContent({ owner, repo, path: 'docs/task-list.md', ref: pull.base.ref });
-            if (Array.isArray(response.data) || response.data.type !== 'file') throw new Error('Could not read docs/task-list.md from the PR base branch.');
-            let taskListBase64 = response.data.content;
-            if (response.data.encoding === 'none' && response.data.sha) {
-              // 1MiB 超は contents API が本文を返さないため blob API で読む。
-              const blob = await github.rest.git.getBlob({ owner, repo, file_sha: response.data.sha });
-              if (blob.data.encoding !== 'base64') throw new Error('Could not read docs/task-list.md blob from the PR base branch.');
-              taskListBase64 = blob.data.content;
-            } else if (response.data.encoding !== 'base64') {
-              throw new Error('Could not read docs/task-list.md from the PR base branch.');
-            }
-            const taskList = Buffer.from(taskListBase64, 'base64').toString('utf8');
+            // 実装 PR は base で登録済み・実装中であること（台帳の配置は base 側で判別する）。
+            const taskList = await readLedgerAt(pull.base.ref, 'the PR base branch');
+            const ledgerRow = taskList.rows.find(item => item.id === cmpId);
             const matchedRow = trustedValidator
               ? trustedValidator.parseTaskList(taskList).byId.get(cmpId)
-              : taskList.split(/\r?\n/).filter(line => line.startsWith('|') && line.includes(cmpId)).map(line => line.split('|').map(cell => cell.trim())).find(cells => cells[1] === cmpId);
-            if (!matchedRow) throw new Error(`${cmpId} must appear exactly once in docs/task-list.md on ${pull.base.ref}; found 0.`);
+              : ledgerRow && ledgerLib.splitTableRow(ledgerRow.line).map(cell => cell.trim());
+            if (!matchedRow) throw new Error(`${cmpId} must appear exactly once in the task list (docs/task-list.md or docs/task-list/*.md) on ${pull.base.ref}; found 0.`);
             const state = trustedValidator ? matchedRow.state : matchedRow[3]?.replace(/^\*\*(.*)\*\*$/, '$1').trim().replace(/^P[1-5]\s+/, '');
             if (state !== '\u5b9f\u88c5\u4e2d') throw new Error(`${cmpId} must be registered as 実装中 on ${pull.base.ref} (state: ${state || 'missing'}).`);
             core.info(`${cmpId} is registered as 実装中 on ${pull.base.ref}; checked ${codeFiles.length} code/configuration file(s).`);

@@ -69,18 +69,15 @@ const sectionWidgets = computed(
       ]),
     ),
 )
-const expandedKeys = ref<Set<SectionKey>>(new Set())
-const mountedKeys = ref<Set<SectionKey>>(new Set())
-function isExpanded(key: SectionKey): boolean {
-  return expandedKeys.value.has(key)
-}
-function toggleSection(key: SectionKey) {
-  const next = new Set(expandedKeys.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  expandedKeys.value = next
-  mountedKeys.value = new Set([...mountedKeys.value, key])
-}
+const authStore = useAuthStore()
+const storageKey = computed(() => {
+  const userId = authStore.currentUser?.id
+  return userId != null ? `personal-sections:${userId}` : null
+})
+const { mountedKeys, toggle: toggleSection, isExpanded } = useSessionOpenSections<SectionKey>({
+  storageKey,
+  allowedKeys: sections.map((section) => section.key),
+})
 function previewLabels(section: SectionDefinition): string {
   return (sectionWidgets.value.get(section.key) ?? [])
     .slice(0, 2)
