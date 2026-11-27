@@ -67,8 +67,8 @@ export function useTeamAccessGate(slug: MaybeRefOrGetter<string>) {
     }
   }
 
-  /** 'ok' になるたびに fn を呼ぶ。本文 API は必ずここ（または state==='ok' の描画）から呼ぶこと。 */
-  function onOk(fn: () => void | Promise<void>): void {
+  /** 'ok' になるたびに fn を呼ぶ。戻り値は無視する（Promise を返してよい）。本文 API は必ずここ（または state==='ok' の描画）から呼ぶこと。 */
+  function onOk(fn: () => unknown): void {
     watch(state, (s) => { if (s === 'ok') void fn() }, { immediate: true })
   }
 
