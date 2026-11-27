@@ -16,7 +16,7 @@ export function parseFriendErrorCodes(source: string): string[] {
 
 /** FEの明示集合をASTで読む。コード全体の文字列grepで集合外の言及を誤算入しない。 */
 export function parseFriendI18nCodes(source: string): string[] {
-  const file = ts.createSourceFile('useErrorHandler.ts', source, ts.ScriptTarget.Latest, true)
+  const file = ts.createSourceFile('resolveApiErrorMessage.ts', source, ts.ScriptTarget.Latest, true)
   let codes: string[] = []
   function visit(node: ts.Node): void {
     if (ts.isVariableDeclaration(node) && node.name.getText(file) === 'FRIEND_I18N_CODES' && node.initializer) {

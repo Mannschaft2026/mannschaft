@@ -21,7 +21,7 @@ describe('CMP-261014-2035 フレンドi18n契約', () => {
   })
   it('R6 BEのFRIEND定数とFEの明示集合が完全一致する', () => {
     expect(beCodes.length, 'BEパス誤り・空抽出を合格にしない').toBeGreaterThan(0)
-    const feCodes = parseFriendI18nCodes(read('app/composables/useErrorHandler.ts'))
+    const feCodes = parseFriendI18nCodes(read('app/utils/resolveApiErrorMessage.ts'))
     expect({ missing: beCodes.filter(code => !feCodes.includes(code)), extra: feCodes.filter(code => !beCodes.includes(code)) }).toEqual({ missing: [], extra: [] })
     expect(feCodes).toHaveLength(new Set(feCodes).size)
   })
