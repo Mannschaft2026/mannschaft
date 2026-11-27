@@ -244,6 +244,20 @@ private String getClientIp(HttpServletRequest request) {
 
 > 注意: `X-Forwarded-For` はスプーフィング可能なため、信頼できるリバースプロキシからのリクエストのみを前提とする。
 
+#### 4.4.1 許否の判定に使う送信元 IP（`TrustedProxyClientIpResolver`・CMP-261127-1814）
+
+上の左端方式（`IpAddressUtils#getClientIp`）は、クライアントが自分で付けた `X-Forwarded-For` をそのまま採る。ログ・レート制限キーのように詐称されても実害が限られる用途に留め、**IP 許可リストのような許否の判定には使わない**。許否の判定には `com.mannschaft.app.common.security.TrustedProxyClientIpResolver` を使う。
+
+| 状況 | 送信元として採る値 |
+|---|---|
+| 信頼プロキシ未設定（既定）／接続元（`remoteAddr`）が信頼プロキシでない | `remoteAddr`（`X-Forwarded-For` / `X-Real-IP` は見ない） |
+| 接続元が信頼プロキシ | `X-Forwarded-For` を**右端から**辿り、信頼プロキシでない最初の値。IP リテラルでない値に当たればそこで止め、直前の信頼ホップを採る |
+
+- 信頼プロキシは `mannschaft.client-ip.trusted-proxies`（環境変数 `MANNSCHAFT_TRUSTED_PROXIES`、カンマ区切りの IP / CIDR）。書式不正の値があれば起動時に失敗させる
+- 本番（Cloudflare → AWS）では LB のサブネットと Cloudflare の公開 IP 範囲を設定する。未設定のままだと送信元が LB の IP に見え、IP 許可リスト付きの機能は許可内の端末も拒否する（安全側に倒れる）
+- 照合は `IpAllowList`（単一 IP / CIDR、IPv4 / IPv6。Spring Security `IpAddressMatcher` に委ねる前に IP リテラルであることを確かめ、DNS 解決を起こさない）
+- 現在の利用箇所: デジタルサイネージ表示の `allowed_ips`（F09.10 §6）
+
 ---
 
 ## 5. ドメイン別の詳細実装ガイド

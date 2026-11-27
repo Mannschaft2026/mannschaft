@@ -446,15 +446,132 @@ class SignageScopeContractIT extends AbstractMySqlIntegrationTest {
     }
 
     // ═════════════════════════════════════════════════════════════════════
+    // 表示API(GET /signage/{token}) の許可IP（allowedIps）検証（CMP-261127-1814）
+    // ═════════════════════════════════════════════════════════════════════
+
+    /**
+     * allowedIps を指定したトークンは許可外 IP からの表示要求を拒否する。拒否は無効トークンと
+     * 同じ 400(SIGNAGE_002) に畳む（トークンの実在を漏らさない）。送信元 IP は
+     * {@code TrustedProxyClientIpResolver} が決め、信頼プロキシ未設定（試験既定）では
+     * TCP の接続元（remoteAddr）だけを使い、クライアントが付けた X-Forwarded-For は信じない。
+     */
+    @Nested
+    @DisplayName("表示API(GET /signage/{token}) の許可IP検証")
+    class DisplayAllowedIps {
+
+        @Test
+        @DisplayName("許可IPに一致する送信元からの表示取得は200")
+        void 許可IPに一致する送信元からの表示取得は200() throws Exception {
+            String token = issueTokenAsAdminA("IP許可トークン", null, List.of("192.0.2.10"))
+                    .path("token").asText();
+
+            SecurityContextHolder.clearContext();
+            mockMvc.perform(get("/signage/{token}", token).with(remoteAddr("192.0.2.10")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.screen.id").value(screenId));
+        }
+
+        @Test
+        @DisplayName("許可CIDR内の送信元からの表示取得は200")
+        void 許可CIDR内の送信元からの表示取得は200() throws Exception {
+            String token = issueTokenAsAdminA("CIDR許可トークン", null, List.of("198.51.100.0/24"))
+                    .path("token").asText();
+
+            SecurityContextHolder.clearContext();
+            mockMvc.perform(get("/signage/{token}", token).with(remoteAddr("198.51.100.77")))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("許可IPv6 CIDR内の送信元からの表示取得は200")
+        void 許可IPv6CIDR内の送信元からの表示取得は200() throws Exception {
+            String token = issueTokenAsAdminA("IPv6許可トークン", null, List.of("2001:db8::/32"))
+                    .path("token").asText();
+
+            SecurityContextHolder.clearContext();
+            mockMvc.perform(get("/signage/{token}", token).with(remoteAddr("2001:db8::77")))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("許可外の送信元からの表示取得は無効トークンと同じ400(SIGNAGE_002)")
+        void 許可外の送信元からの表示取得は400() throws Exception {
+            String token = issueTokenAsAdminA("IP拒否トークン", null, List.of("192.0.2.10", "198.51.100.0/24"))
+                    .path("token").asText();
+
+            SecurityContextHolder.clearContext();
+            mockMvc.perform(get("/signage/{token}", token).with(remoteAddr("203.0.113.9")))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error.code").value("SIGNAGE_002"));
+        }
+
+        @Test
+        @DisplayName("偽装したX-Forwarded-Forでは許可IPを名乗れず400(SIGNAGE_002)")
+        void 偽装したXFFでは許可IPを名乗れない() throws Exception {
+            String token = issueTokenAsAdminA("XFF偽装トークン", null, List.of("192.0.2.10"))
+                    .path("token").asText();
+
+            SecurityContextHolder.clearContext();
+            mockMvc.perform(get("/signage/{token}", token)
+                            .with(remoteAddr("203.0.113.9"))
+                            .header("X-Forwarded-For", "192.0.2.10")
+                            .header("X-Real-IP", "192.0.2.10"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error.code").value("SIGNAGE_002"));
+        }
+
+        @Test
+        @DisplayName("allowedIps未指定のトークンは従来どおり送信元を問わず200")
+        void 未指定のトークンは送信元を問わず200() throws Exception {
+            String token = issueTokenAsAdminA("IP無制限トークン", null, null).path("token").asText();
+
+            SecurityContextHolder.clearContext();
+            mockMvc.perform(get("/signage/{token}", token).with(remoteAddr("203.0.113.9")))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("IPでもCIDRでもない値を含むallowedIpsでの発行は400(SIGNAGE_010)")
+        void 書式不正のallowedIpsでの発行は400() throws Exception {
+            setAuthentication(adminAId);
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("name", "書式不正トークン");
+            body.put("allowedIps", List.of("192.0.2.10", "office.example.com"));
+            mockMvc.perform(post("/api/v1/signage/screens/{id}/tokens", screenId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(body)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error.code").value("SIGNAGE_010"));
+        }
+    }
+
+    /** MockMvc の TCP 接続元（remoteAddr）を差し替える。 */
+    private static org.springframework.test.web.servlet.request.RequestPostProcessor remoteAddr(String ip) {
+        return request -> {
+            request.setRemoteAddr(ip);
+            return request;
+        };
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
     // ヘルパー
     // ═════════════════════════════════════════════════════════════════════
 
     /** トークン発行リクエストの JSON を組み立てる（expiredAt が null なら無期限）。 */
     private String tokenRequestJson(String name, LocalDateTime expiredAt) throws Exception {
+        return tokenRequestJson(name, expiredAt, null);
+    }
+
+    /** allowedIps 付きの発行リクエスト JSON（allowedIps が null なら項目ごと省く）。 */
+    private String tokenRequestJson(String name, LocalDateTime expiredAt, List<String> allowedIps)
+            throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("name", name);
         if (expiredAt != null) {
             body.put("expiredAt", expiredAt.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+        }
+        if (allowedIps != null) {
+            body.put("allowedIps", allowedIps);
         }
         return objectMapper.writeValueAsString(body);
     }
@@ -464,10 +581,16 @@ class SignageScopeContractIT extends AbstractMySqlIntegrationTest {
      * 呼び出し側は {@code path("token")} / {@code path("id")} で必要な値を取り出す。
      */
     private JsonNode issueTokenAsAdminA(String name, LocalDateTime expiredAt) throws Exception {
+        return issueTokenAsAdminA(name, expiredAt, null);
+    }
+
+    /** allowedIps を指定して adminA でトークンを1件発行する（null なら IP 無制限）。 */
+    private JsonNode issueTokenAsAdminA(String name, LocalDateTime expiredAt, List<String> allowedIps)
+            throws Exception {
         setAuthentication(adminAId);
         String resp = mockMvc.perform(post("/api/v1/signage/screens/{id}/tokens", screenId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(tokenRequestJson(name, expiredAt)))
+                        .content(tokenRequestJson(name, expiredAt, allowedIps)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(resp).path("data");

@@ -2,6 +2,7 @@ package com.mannschaft.app.signage.service;
 
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.security.IpAllowList;
 import com.mannschaft.app.common.token.IssuedToken;
 import com.mannschaft.app.common.token.SecretTokenVault;
 import com.mannschaft.app.signage.SignageErrorCode;
@@ -92,6 +93,9 @@ public class SignageAccessTokenService {
         // 認可: 当該画面スコープの ADMIN/DEPUTY_ADMIN のみトークン発行可能
         accessControlService.checkAdminOrAbove(createdBy, screen.getScopeId(), screen.getScopeType());
 
+        // 許可IPの書式検証（表示時に照合できない値を黙って保存しない。JSON 列を壊す値もここで弾く）
+        validateAllowedIps(req.allowedIps());
+
         // 乱数トークン生成（平文は応答にだけ載せ、保存するのはハッシュのみ）
         IssuedToken issuedToken = vault.issueBase64Url();
 
@@ -151,19 +155,30 @@ public class SignageAccessTokenService {
      * トークン文字列（平文）を検証し、有効なトークンエンティティを返す。ハッシュで照合する。
      *
      * <p>受け付けるのは「存在し」「無効化されておらず（{@code isActive=true}）」
-     * 「有効期限を過ぎていない」トークンのみである。いずれの条件を満たさない場合も
-     * 同一の SIGNAGE_002 を返し、失敗理由を呼び出し側に区別させない。</p>
+     * 「有効期限を過ぎていない」「許可IP（{@code allowedIps}）が指定されていれば送信元がその範囲内」
+     * のトークンのみである。いずれの条件を満たさない場合も同一の SIGNAGE_002 を返し、
+     * 失敗理由を呼び出し側に区別させない（IP 拒否だけ別応答にすると「トークンは実在する」ことを
+     * 教える存在オラクルになる）。</p>
      *
-     * @param token トークン文字列
+     * @param token    トークン文字列
+     * @param clientIp 送信元 IP。{@link com.mannschaft.app.common.security.TrustedProxyClientIpResolver}
+     *                 で決めた値を渡すこと（X-Forwarded-For の左端を渡してはならない）
      * @return 有効なトークンエンティティ
      */
-    public SignageAccessTokenEntity validateToken(String token) {
+    public SignageAccessTokenEntity validateToken(String token, String clientIp) {
         // isActive=true のトークンを取得
         SignageAccessTokenEntity entity = tokenRepository.findByTokenHashAndIsActiveTrue(vault.hash(token))
                 .orElseThrow(() -> new BusinessException(SignageErrorCode.SIGNAGE_002));
 
         // 有効期限が満了したトークンは受け付けない（発行時に指定された期限を entity から判定する）
         if (entity.isExpired(LocalDateTime.now())) {
+            throw new BusinessException(SignageErrorCode.SIGNAGE_002);
+        }
+
+        // 許可IPが指定されたトークンは、送信元がその範囲内でなければ受け付けない（未指定は全許可）
+        List<String> allowedIps = parseAllowedIps(entity.getAllowedIps());
+        if (!allowedIps.isEmpty() && !IpAllowList.of(allowedIps).contains(clientIp)) {
+            log.warn("サイネージトークン IP 制限で拒否: id={}, clientIp={}", entity.getId(), clientIp);
             throw new BusinessException(SignageErrorCode.SIGNAGE_002);
         }
 
@@ -197,6 +212,21 @@ public class SignageAccessTokenService {
     }
 
     /**
+     * 許可IPリストの各項目が単一IPまたはCIDR（IPv4/IPv6）であることを検証する。
+     * 不正な値を含む場合は SIGNAGE_010 をスローする。
+     */
+    private void validateAllowedIps(List<String> allowedIps) {
+        if (allowedIps == null) {
+            return;
+        }
+        for (String entry : allowedIps) {
+            if (!IpAllowList.isValidEntry(entry)) {
+                throw new BusinessException(SignageErrorCode.SIGNAGE_010);
+            }
+        }
+    }
+
+    /**
      * 許可IPリストをJSON配列文字列に変換する。
      * nullまたは空リストの場合はnullを返す（全許可）。
      */
@@ -208,7 +238,8 @@ public class SignageAccessTokenService {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < allowedIps.size(); i++) {
             if (i > 0) sb.append(",");
-            sb.append("\"").append(allowedIps.get(i)).append("\"");
+            // 値は validateAllowedIps で IP / CIDR の文字種に限定済み（引用符・バックスラッシュを含まない）
+            sb.append("\"").append(allowedIps.get(i).trim()).append("\"");
         }
         sb.append("]");
         return sb.toString();

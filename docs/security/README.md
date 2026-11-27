@@ -161,6 +161,7 @@ ArchUnit 認可番人（`AuthzControllerGuardArchTest`）は、公開エンド�
 - [ ] SES 通知 SQS: `SES_NOTIFICATION_QUEUE_NAME` を設定し、SES Identity/Configuration Set の Bounce/Complaint 通知先が SNS Topic に結線されていることを確認（F09.6 Phase 8a）
 - [ ] CSP 違反がブラウザコンソールに出ないことを主要画面で確認
 - [ ] HTTPS/HSTS が有効（アプリ層 or Cloudflare/LB 層、[03](03_security_headers_and_csp.md) §TLS）
+- [ ] `MANNSCHAFT_TRUSTED_PROXIES` に LB のサブネットと Cloudflare の公開 IP 範囲を設定（IP 許可リストの送信元判定。[06](06_business_logic_and_abuse_prevention.md) §4.4.1）
 
 ---
 
