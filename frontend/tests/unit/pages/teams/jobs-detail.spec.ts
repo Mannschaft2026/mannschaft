@@ -18,6 +18,8 @@ import TeamJobDetailPage from '~/pages/teams/[slug]/jobs/[jobId]/index.vue'
  *          （listApplicationsByJob）も呼ばれ、応募者が表示される（検分差し戻し分。
  *          初回表示 onMounted は「loadJob→成功なら loadApplications」だが、
  *          再試行が loadJob だけを呼ぶと応募者一覧が未取得のまま残っていた）
+ *   JD-004 求人取得が 404（見えない求人・不存在。CMP-261127-1118）のとき、シェルの ScopeNotFound へ寄せ
+ *          （markIfDenied）、エラートースト・エラー状態を出さず、応募者一覧も取得しない（FE 規約 §12）
  */
 
 const getJob = vi.fn()
@@ -49,6 +51,13 @@ vi.mock('~/composables/useNotification', () => ({ useNotification: () => notific
 
 mockNuxtImport('useRoute', () => () => ({ params: { slug: '1', jobId: '10' } }))
 
+// CMP-261127-1118: 見えない求人は BE が不在と同一の 404 を返す。シェルの ScopeNotFound へ寄せたかを観測する。
+const markIfDenied = vi.hoisted(() => vi.fn((e: unknown) => {
+  const status = (e as { statusCode?: number } | null)?.statusCode
+  return status === 403 || status === 404
+}))
+mockNuxtImport('useScopeNotFound', () => () => ({ markIfDenied, markDenied: vi.fn() }))
+
 beforeAll(async () => {
   listApplicationsByJob.mockResolvedValue({ data: [], meta: { total: 0, page: 0, size: 20, totalPages: 0 } })
   listMyContracts.mockResolvedValue({ data: [], meta: { total: 0, page: 0, size: 100, totalPages: 0 } })
@@ -79,6 +88,20 @@ describe('pages/teams/[slug]/jobs/[jobId]/index.vue — 取得失敗時のエラ
   beforeEach(() => {
     getJob.mockReset()
     notificationMock.error.mockClear()
+    markIfDenied.mockClear()
+  })
+
+  it('JD-004: 求人取得が 404 なら ScopeNotFound へ寄せ、トースト・エラー状態・応募者一覧取得を出さない', async () => {
+    listApplicationsByJob.mockClear()
+    const notFound = Object.assign(new Error('Not Found'), { statusCode: 404 })
+    getJob.mockRejectedValue(notFound)
+    const wrapper = await mountSuspended(TeamJobDetailPage)
+    await flushMicrotasks()
+
+    expect(markIfDenied).toHaveBeenCalledWith(notFound)
+    expect(notificationMock.error).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="job-detail-error-state"]').exists()).toBe(false)
+    expect(listApplicationsByJob).not.toHaveBeenCalled()
   })
 
   it('JD-001: 求人取得失敗時に job-detail-error-state が描画される', async () => {
