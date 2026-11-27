@@ -13796,6 +13796,87 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/system-admin/support-access/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 自分の依頼一覧
+         * @description 自分が出した依頼だけを新しい順に返す。cursor は直前ページ末尾の requestedAt。
+         */
+        get: operations["listGrants"];
+        put?: never;
+        /**
+         * サポート閲覧の依頼
+         * @description 対象・理由（10〜1000字）を指定して本人へ許可を依頼する。依頼は72時間で失効する。
+         */
+        post: operations["createGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system-admin/support-access/grants/{id}/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 代理閲覧の開始
+         * @description 承認済みで期限内の許可で閲覧を開始する。開始記録を残し、本人へ通知する。以後 X-Support-Access-Grant-Id ヘッダーで本人の視点を閲覧のみできる。
+         */
+        post: operations["startSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system-admin/support-access/grants/{id}/sessions/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 代理閲覧の終了 */
+        post: operations["endSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system-admin/support-access/grants/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 依頼・許可の撤回
+         * @description PENDING/APPROVED を CANCELLED にする。次のリクエストから代理閲覧は拒否される。
+         */
+        post: operations["cancel_5"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/system-admin/storage-migration/run": {
         parameters: {
             query?: never;
@@ -14022,7 +14103,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** 招待を取消す */
-        post: operations["cancel_5"];
+        post: operations["cancel_6"];
         delete?: never;
         options?: never;
         head?: never;
@@ -14558,13 +14639,13 @@ export interface paths {
          * 付与一覧
          * @description grantKind/betaPhase/reviewFlag/scopeKind/scopeId で絞り込み・grantedAt 降順。
          */
-        get: operations["listGrants"];
+        get: operations["listGrants_1"];
         put?: never;
         /**
          * 手動付与
          * @description TEAM_ORG の正規経路（INDIVIDUAL も可）。organizationId は本層で解決して渡す。
          */
-        post: operations["createGrant"];
+        post: operations["createGrant_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -16010,7 +16091,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** 募集枠 主催者キャンセル */
-        post: operations["cancel_6"];
+        post: operations["cancel_7"];
         delete?: never;
         options?: never;
         head?: never;
@@ -17717,7 +17798,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["cancel_7"];
+        post: operations["cancel_8"];
         delete?: never;
         options?: never;
         head?: never;
@@ -18747,7 +18828,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** 封緘解除申請のキャンセル（申請者本人または ADMIN） */
-        post: operations["cancel_8"];
+        post: operations["cancel_9"];
         delete?: never;
         options?: never;
         head?: never;
@@ -19241,7 +19322,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** 配信キャンセル */
-        post: operations["cancel_9"];
+        post: operations["cancel_10"];
         delete?: never;
         options?: never;
         head?: never;
@@ -19596,7 +19677,7 @@ export interface paths {
          * 送り出し取消
          * @description 手放す側 org ADMIN のみ（応答前 DISPATCHED のみ）→ CANCELLED
          */
-        post: operations["cancel_10"];
+        post: operations["cancel_11"];
         delete?: never;
         options?: never;
         head?: never;
@@ -20915,6 +20996,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/support-access/grants/{id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * サポート閲覧の許可の取消
+         * @description いつでも取り消せる。取消の次のリクエストから代理閲覧は拒否される。
+         */
+        post: operations["revoke"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/support-access/grants/{id}/deny": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** サポート閲覧の拒否 */
+        post: operations["deny"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/support-access/grants/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * サポート閲覧の許可
+         * @description 再認証（currentPassword か passkeyAssertionJson）が必須。期限は許可から24時間で固定・延長不可。未成年・後見下は本人と保護者の両方の許可で有効になる。
+         */
+        post: operations["approve_8"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/scope-folders": {
         parameters: {
             query?: never;
@@ -21159,7 +21297,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["cancel_11"];
+        post: operations["cancel_12"];
         delete?: never;
         options?: never;
         head?: never;
@@ -21670,7 +21808,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** 個人札の取消 */
-        post: operations["cancel_12"];
+        post: operations["cancel_13"];
         delete?: never;
         options?: never;
         head?: never;
@@ -21823,7 +21961,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["startSession"];
+        post: operations["startSession_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -22058,7 +22196,7 @@ export interface paths {
          * 契約の解約（期末解約の予約）
          * @description 有償契約は current_period_end までの利用を残したまま解約を予約する。Idempotency-Key 必須。
          */
-        post: operations["cancel_13"];
+        post: operations["cancel_14"];
         /**
          * 解約予約の撤回
          * @description 期末を跨ぐ前に限り、cancel_at_period_end を解除して契約を継続させる。Idempotency-Key 必須。
@@ -25385,7 +25523,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** @deprecated */
-        post: operations["cancel_14"];
+        post: operations["cancel_15"];
         delete?: never;
         options?: never;
         head?: never;
@@ -25476,7 +25614,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** 運営: 村作成申請を承認 */
-        post: operations["approve_8"];
+        post: operations["approve_9"];
         delete?: never;
         options?: never;
         head?: never;
@@ -27771,7 +27909,7 @@ export interface paths {
         options?: never;
         head?: never;
         /** チームサブリース承認 */
-        patch: operations["approve_9"];
+        patch: operations["approve_10"];
         trace?: never;
     };
     "/api/v1/teams/{teamId}/parking/spaces/{id}/maintenance": {
@@ -27856,7 +27994,7 @@ export interface paths {
         options?: never;
         head?: never;
         /** チーム申請承認 */
-        patch: operations["approve_10"];
+        patch: operations["approve_11"];
         trace?: never;
     };
     "/api/v1/organizations/{orgId}/teams/{teamId}/matches/{matchId}/status": {
@@ -28323,7 +28461,7 @@ export interface paths {
         options?: never;
         head?: never;
         /** 確認通知キャンセル */
-        patch: operations["cancel_15"];
+        patch: operations["cancel_16"];
         trace?: never;
     };
     "/api/v1/teams/{teamId}/circulations/{documentId}": {
@@ -29313,7 +29451,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch: operations["approve_11"];
+        patch: operations["approve_12"];
         trace?: never;
     };
     "/api/v1/system-admin/ad-campaigns-operational/{id}/unsuspend": {
@@ -29365,7 +29503,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch: operations["approve_12"];
+        patch: operations["approve_13"];
         trace?: never;
     };
     "/api/v1/sync/conflicts/{id}/resolve": {
@@ -30342,7 +30480,7 @@ export interface paths {
         options?: never;
         head?: never;
         /** 組織サブリース承認 */
-        patch: operations["approve_13"];
+        patch: operations["approve_14"];
         trace?: never;
     };
     "/api/v1/organizations/{organizationId}/parking/spaces/{id}/maintenance": {
@@ -30427,7 +30565,7 @@ export interface paths {
         options?: never;
         head?: never;
         /** 組織申請承認 */
-        patch: operations["approve_14"];
+        patch: operations["approve_15"];
         trace?: never;
     };
     "/api/v1/organizations/{organizationId}/facilities/bookings/{bookingId}": {
@@ -30960,7 +31098,7 @@ export interface paths {
         options?: never;
         head?: never;
         /** 協会請求の取消（CANCELLED） */
-        patch: operations["cancel_16"];
+        patch: operations["cancel_17"];
         trace?: never;
     };
     "/api/v1/teams/{teamId}/matches/{matchId}/events/{eventId}": {
@@ -31083,7 +31221,7 @@ export interface paths {
         options?: never;
         head?: never;
         /** 確認通知キャンセル（組織） */
-        patch: operations["cancel_17"];
+        patch: operations["cancel_18"];
         trace?: never;
     };
     "/api/v1/organizations/{orgId}/circulations/{documentId}": {
@@ -37982,6 +38120,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/system-admin/support-access/grants/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 依頼の詳細 */
+        get: operations["getGrant"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system-admin/support-access/grants/{id}/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 閲覧記録
+         * @description この依頼の代理閲覧の記録を新しい順に返す。cursor は直前ページ末尾の occurredAt。
+         */
+        get: operations["listLogs_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/system-admin/storage-migration/status": {
         parameters: {
             query?: never;
@@ -44092,6 +44267,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/support-access/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 自分の画面が閲覧された記録
+         * @description 日時・運営者の表示名・画面（パス）・スコープを新しい順に返す。メールは含まない。
+         */
+        get: operations["listLogs_2"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/support-access/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 自分宛のサポート閲覧の依頼・許可の一覧
+         * @description 運営者は表示名のみ。依頼理由はプレーンテキストとして表示すること。
+         */
+        get: operations["listGrants_2"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/subscriptions": {
         parameters: {
             query?: never;
@@ -48457,7 +48672,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** 村代表委任の取消し（HEADMAN/ELDER） */
-        delete: operations["revoke"];
+        delete: operations["revoke_1"];
         options?: never;
         head?: never;
         patch?: never;
@@ -48525,7 +48740,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** 招待を失効させる（冪等） */
-        delete: operations["revoke_1"];
+        delete: operations["revoke_2"];
         options?: never;
         head?: never;
         patch?: never;
@@ -48850,7 +49065,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** チーム申請取消 */
-        delete: operations["cancel_18"];
+        delete: operations["cancel_19"];
         options?: never;
         head?: never;
         patch?: never;
@@ -49082,7 +49297,7 @@ export interface paths {
          * 転送取消
          * @description 指定転送履歴の is_revoked を TRUE にし、転送先投稿を論理削除する。取消後は同一投稿を再度転送可能。
          */
-        delete: operations["revoke_2"];
+        delete: operations["revoke_3"];
         options?: never;
         head?: never;
         patch?: never;
@@ -49438,7 +49653,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** 招待の取消（組織 ADMIN） */
-        delete: operations["cancel_19"];
+        delete: operations["cancel_20"];
         options?: never;
         head?: never;
         patch?: never;
@@ -49557,7 +49772,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** 組織申請取消 */
-        delete: operations["cancel_20"];
+        delete: operations["cancel_21"];
         options?: never;
         head?: never;
         patch?: never;
@@ -49769,7 +49984,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** 継続課金 期末解約（F08.9 P5） */
-        delete: operations["cancel_21"];
+        delete: operations["cancel_22"];
         options?: never;
         head?: never;
         patch?: never;
@@ -65267,6 +65482,56 @@ export interface components {
             templateSlug?: string;
             thumbnailUrl?: string;
         };
+        CreateSupportAccessGrantRequest: {
+            reason?: string;
+            /** Format: int64 */
+            referenceId?: number;
+            referenceType?: string;
+            /** Format: int64 */
+            targetUserId: number;
+        };
+        ApiResponseSupportAccessGrantResponse: {
+            data?: components["schemas"]["SupportAccessGrantResponse"];
+        };
+        SupportAccessGrantResponse: {
+            /** Format: date-time */
+            decidedAt?: string;
+            endedReason?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+            guardianApprovalRequired?: boolean;
+            /** Format: date-time */
+            guardianDecidedAt?: string;
+            /** Format: uuid */
+            id?: string;
+            /** Format: int64 */
+            referenceId?: number;
+            referenceType?: string;
+            /** Format: date-time */
+            requestExpiresAt?: string;
+            requestReason?: string;
+            /** Format: date-time */
+            requestedAt?: string;
+            /** Format: date-time */
+            revokedAt?: string;
+            sessionActive?: boolean;
+            status?: string;
+            targetDisplayName?: string;
+            /** Format: int64 */
+            targetUserId?: number;
+        };
+        ApiResponseSupportAccessSessionResponse: {
+            data?: components["schemas"]["SupportAccessSessionResponse"];
+        };
+        SupportAccessSessionResponse: {
+            /** Format: date-time */
+            expiresAt?: string;
+            /** Format: uuid */
+            grantId?: string;
+            targetDisplayName?: string;
+            /** Format: int64 */
+            targetUserId?: number;
+        };
         SecurityIncidentCreateRequest: {
             description?: string;
             /** Format: date-time */
@@ -69049,6 +69314,41 @@ export interface components {
             sortOrder?: number;
             /** Format: date-time */
             updatedAt?: string;
+        };
+        ApiResponseMySupportAccessGrantResponse: {
+            data?: components["schemas"]["MySupportAccessGrantResponse"];
+        };
+        MySupportAccessGrantResponse: {
+            canApprove?: boolean;
+            /** Format: date-time */
+            decidedAt?: string;
+            endedReason?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+            guardianApprovalRequired?: boolean;
+            guardianApproved?: boolean;
+            /** Format: uuid */
+            id?: string;
+            operatorDisplayName?: string;
+            referenceType?: string;
+            /** Format: date-time */
+            requestExpiresAt?: string;
+            requestReason?: string;
+            /** Format: date-time */
+            requestedAt?: string;
+            /** Format: date-time */
+            revokedAt?: string;
+            role?: string;
+            status?: string;
+            targetApproved?: boolean;
+            targetDisplayName?: string;
+        };
+        SupportAccessDenyRequest: {
+            comment?: string;
+        };
+        SupportAccessApproveRequest: {
+            currentPassword?: string;
+            passkeyAssertionJson?: string;
         };
         AddFolderItemRequest: {
             /** Format: int64 */
@@ -79543,6 +79843,26 @@ export interface components {
             sizeBytes?: number;
             type?: string;
         };
+        CursorPagedResponseSupportAccessGrantResponse: {
+            data?: components["schemas"]["SupportAccessGrantResponse"][];
+            meta?: components["schemas"]["CursorMeta"];
+        };
+        CursorPagedResponseSupportAccessLogView: {
+            data?: components["schemas"]["SupportAccessLogView"][];
+            meta?: components["schemas"]["CursorMeta"];
+        };
+        SupportAccessLogView: {
+            eventKind?: string;
+            /** Format: uuid */
+            grantId?: string;
+            /** Format: date-time */
+            occurredAt?: string;
+            operatorDisplayName?: string;
+            requestPath?: string;
+            /** Format: int64 */
+            scopeId?: number;
+            scopeType?: string;
+        };
         ApiResponseStorageMigrationStatus: {
             data?: components["schemas"]["StorageMigrationStatus"];
         };
@@ -83859,6 +84179,10 @@ export interface components {
             title?: string;
             /** Format: int32 */
             totalTodos?: number;
+        };
+        CursorPagedResponseMySupportAccessGrantResponse: {
+            data?: components["schemas"]["MySupportAccessGrantResponse"][];
+            meta?: components["schemas"]["CursorMeta"];
         };
         ApiResponseListObject: {
             data?: Record<string, never>[];
@@ -119915,6 +120239,119 @@ export interface operations {
             };
         };
     };
+    listGrants: {
+        parameters: {
+            query?: {
+                status?: string;
+                targetUserId?: number;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CursorPagedResponseSupportAccessGrantResponse"];
+                };
+            };
+        };
+    };
+    createGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSupportAccessGrantRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseSupportAccessGrantResponse"];
+                };
+            };
+        };
+    };
+    startSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseSupportAccessSessionResponse"];
+                };
+            };
+        };
+    };
+    endSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cancel_5: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseSupportAccessGrantResponse"];
+                };
+            };
+        };
+    };
     runMigration: {
         parameters: {
             query?: never;
@@ -120326,7 +120763,7 @@ export interface operations {
             };
         };
     };
-    cancel_5: {
+    cancel_6: {
         parameters: {
             query?: never;
             header?: never;
@@ -121190,7 +121627,7 @@ export interface operations {
             };
         };
     };
-    listGrants: {
+    listGrants_1: {
         parameters: {
             query?: {
                 grantKind?: "INDIVIDUAL" | "TEAM_ORG";
@@ -121218,7 +121655,7 @@ export interface operations {
             };
         };
     };
-    createGrant: {
+    createGrant_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -123864,7 +124301,7 @@ export interface operations {
             };
         };
     };
-    cancel_6: {
+    cancel_7: {
         parameters: {
             query?: never;
             header?: never;
@@ -127285,7 +127722,7 @@ export interface operations {
             };
         };
     };
-    cancel_7: {
+    cancel_8: {
         parameters: {
             query?: never;
             header?: never;
@@ -129383,7 +129820,7 @@ export interface operations {
             };
         };
     };
-    cancel_8: {
+    cancel_9: {
         parameters: {
             query?: never;
             header?: never;
@@ -130377,7 +130814,7 @@ export interface operations {
             };
         };
     };
-    cancel_9: {
+    cancel_10: {
         parameters: {
             query?: never;
             header?: never;
@@ -131074,7 +131511,7 @@ export interface operations {
             };
         };
     };
-    cancel_10: {
+    cancel_11: {
         parameters: {
             query?: never;
             header?: never;
@@ -133479,6 +133916,80 @@ export interface operations {
             };
         };
     };
+    revoke: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMySupportAccessGrantResponse"];
+                };
+            };
+        };
+    };
+    deny: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SupportAccessDenyRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMySupportAccessGrantResponse"];
+                };
+            };
+        };
+    };
+    approve_8: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SupportAccessApproveRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMySupportAccessGrantResponse"];
+                };
+            };
+        };
+    };
     getFolders: {
         parameters: {
             query: {
@@ -133910,7 +134421,7 @@ export interface operations {
             };
         };
     };
-    cancel_11: {
+    cancel_12: {
         parameters: {
             query?: never;
             header: {
@@ -134747,7 +135258,7 @@ export interface operations {
             };
         };
     };
-    cancel_12: {
+    cancel_13: {
         parameters: {
             query?: never;
             header?: never;
@@ -135027,7 +135538,7 @@ export interface operations {
             };
         };
     };
-    startSession: {
+    startSession_1: {
         parameters: {
             query?: never;
             header: {
@@ -135408,7 +135919,7 @@ export interface operations {
             };
         };
     };
-    cancel_13: {
+    cancel_14: {
         parameters: {
             query?: never;
             header: {
@@ -141315,7 +141826,7 @@ export interface operations {
             };
         };
     };
-    cancel_14: {
+    cancel_15: {
         parameters: {
             query: {
                 organizationId: number;
@@ -141459,7 +141970,7 @@ export interface operations {
             };
         };
     };
-    approve_8: {
+    approve_9: {
         parameters: {
             query?: never;
             header?: never;
@@ -145996,7 +146507,7 @@ export interface operations {
             };
         };
     };
-    approve_9: {
+    approve_10: {
         parameters: {
             query?: never;
             header?: never;
@@ -146127,7 +146638,7 @@ export interface operations {
             };
         };
     };
-    approve_10: {
+    approve_11: {
         parameters: {
             query?: never;
             header?: never;
@@ -147122,7 +147633,7 @@ export interface operations {
             };
         };
     };
-    cancel_15: {
+    cancel_16: {
         parameters: {
             query?: never;
             header?: never;
@@ -149019,7 +149530,7 @@ export interface operations {
             };
         };
     };
-    approve_11: {
+    approve_12: {
         parameters: {
             query?: never;
             header?: never;
@@ -149089,7 +149600,7 @@ export interface operations {
             };
         };
     };
-    approve_12: {
+    approve_13: {
         parameters: {
             query?: never;
             header?: never;
@@ -151004,7 +151515,7 @@ export interface operations {
             };
         };
     };
-    approve_13: {
+    approve_14: {
         parameters: {
             query?: never;
             header?: never;
@@ -151135,7 +151646,7 @@ export interface operations {
             };
         };
     };
-    approve_14: {
+    approve_15: {
         parameters: {
             query?: never;
             header?: never;
@@ -152283,7 +152794,7 @@ export interface operations {
             };
         };
     };
-    cancel_16: {
+    cancel_17: {
         parameters: {
             query?: never;
             header?: never;
@@ -152554,7 +153065,7 @@ export interface operations {
             };
         };
     };
-    cancel_17: {
+    cancel_18: {
         parameters: {
             query?: never;
             header?: never;
@@ -163587,6 +164098,53 @@ export interface operations {
             };
         };
     };
+    getGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseSupportAccessGrantResponse"];
+                };
+            };
+        };
+    };
+    listLogs_1: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CursorPagedResponseSupportAccessLogView"];
+                };
+            };
+        };
+    };
     getStatus_4: {
         parameters: {
             query?: never;
@@ -172016,6 +172574,54 @@ export interface operations {
             };
         };
     };
+    listLogs_2: {
+        parameters: {
+            query?: {
+                grantId?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CursorPagedResponseSupportAccessLogView"];
+                };
+            };
+        };
+    };
+    listGrants_2: {
+        parameters: {
+            query?: {
+                status?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CursorPagedResponseMySupportAccessGrantResponse"];
+                };
+            };
+        };
+    };
     listMySubscriptions: {
         parameters: {
             query?: never;
@@ -178013,7 +178619,7 @@ export interface operations {
             };
         };
     };
-    revoke: {
+    revoke_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -178105,7 +178711,7 @@ export interface operations {
             };
         };
     };
-    revoke_1: {
+    revoke_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -178572,7 +179178,7 @@ export interface operations {
             };
         };
     };
-    cancel_18: {
+    cancel_19: {
         parameters: {
             query?: never;
             header?: never;
@@ -178849,7 +179455,7 @@ export interface operations {
             };
         };
     };
-    revoke_2: {
+    revoke_3: {
         parameters: {
             query?: never;
             header?: never;
@@ -179294,7 +179900,7 @@ export interface operations {
             };
         };
     };
-    cancel_19: {
+    cancel_20: {
         parameters: {
             query?: never;
             header?: never;
@@ -179475,7 +180081,7 @@ export interface operations {
             };
         };
     };
-    cancel_20: {
+    cancel_21: {
         parameters: {
             query?: never;
             header?: never;
@@ -179740,7 +180346,7 @@ export interface operations {
             };
         };
     };
-    cancel_21: {
+    cancel_22: {
         parameters: {
             query?: never;
             header?: never;
