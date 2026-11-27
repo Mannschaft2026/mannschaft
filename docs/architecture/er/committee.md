@@ -21,7 +21,7 @@ erDiagram
         bigint id PK
         bigint committee_id FK
         bigint invitee_user_id "ID参照"
-        varchar invite_token UK
+        varchar invite_token_hash UK
         bigint invited_by "ID参照"
     }
     committee_members {
@@ -95,7 +95,7 @@ erDiagram
 | `committee_id` | `bigint unsigned` | NO | （なし） | FK → committees（ON DELETE CASCADE） |
 | `invitee_user_id` | `bigint unsigned` | NO | （なし） | FK → users（ON DELETE CASCADE）被招集者 |
 | `proposed_role` | `varchar(20)` | NO | `MEMBER` | 提案ロール |
-| `invite_token` | `varchar(36)` | NO | （なし） | UUID。承諾 URL で使用 |
+| `invite_token_hash` | `varchar(64)` | NO | （なし） | 招集トークンのSHA-256ハッシュ(hex)。平文は保存しない |
 | `invited_by` | `bigint unsigned` | YES | NULL | FK → users（ON DELETE SET NULL）招集者 |
 | `message` | `text` | YES | NULL | 招集時のメッセージ |
 | `expires_at` | `datetime` | NO | （なし） | 承諾期限（デフォルト 7 日後） |

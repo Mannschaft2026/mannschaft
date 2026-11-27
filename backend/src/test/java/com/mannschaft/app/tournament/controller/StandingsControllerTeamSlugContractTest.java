@@ -7,6 +7,7 @@ import com.mannschaft.app.tournament.dto.TeamTournamentStatsResponse;
 import com.mannschaft.app.tournament.service.RankingsCalculationService;
 import com.mannschaft.app.tournament.service.StandingsCalculationService;
 import com.mannschaft.app.tournament.service.StandingsQueryService;
+import com.mannschaft.app.tournament.service.TeamTournamentHistoryFacade;
 import com.mannschaft.app.common.visibility.ContentVisibilityChecker;
 import com.mannschaft.app.team.service.TeamService;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,6 +60,8 @@ class StandingsControllerTeamSlugContractTest {
     private ContentVisibilityChecker contentVisibilityChecker;
     @Mock
     private TeamService teamService;
+    @Mock
+    private TeamTournamentHistoryFacade teamTournamentHistoryFacade;
 
     @InjectMocks
     private StandingsController controller;
@@ -91,11 +94,12 @@ class StandingsControllerTeamSlugContractTest {
     @DisplayName("GET tournament-history は slug を解決して 200 を返す")
     void teamHistory_slug_resolved_200() throws Exception {
         given(teamService.resolveTeamId(TEAM_SLUG)).willReturn(RESOLVED_TEAM_ID);
-        given(standingsQueryService.getTeamHistory(RESOLVED_TEAM_ID))
-                .willReturn(TeamTournamentHistoryResponse.builder()
-                        .teamId(RESOLVED_TEAM_ID)
-                        .history(List.of())
-                        .build());
+        TeamTournamentHistoryResponse history = TeamTournamentHistoryResponse.builder()
+                .teamId(RESOLVED_TEAM_ID)
+                .history(List.of())
+                .build();
+        given(standingsQueryService.getTeamHistory(RESOLVED_TEAM_ID)).willReturn(history);
+        given(teamTournamentHistoryFacade.attachOrganizationSlugs(history)).willReturn(history);
 
         mockMvc.perform(get("/api/v1/teams/" + TEAM_SLUG + "/tournament-history"))
                 .andExpect(status().isOk());

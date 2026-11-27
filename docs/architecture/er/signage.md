@@ -14,7 +14,7 @@ erDiagram
     signage_access_tokens {
         bigint id PK
         bigint screen_id FK
-        varchar token UK
+        varchar token_hash UK
         bigint created_by "ID参照"
     }
     signage_emergency_messages {
@@ -66,7 +66,7 @@ erDiagram
 | --- | --- | --- | --- | --- |
 | `id` | `bigint unsigned` | NO | （なし） auto_increment |  |
 | `screen_id` | `bigint unsigned` | NO | （なし） |  |
-| `token` | `varchar(36)` | NO | （なし） | UUID v4 |
+| `token_hash` | `varchar(64)` | NO | （なし） | アクセストークンのSHA-256ハッシュ(hex)。平文は保存しない |
 | `name` | `varchar(100)` | NO | （なし） |  |
 | `is_active` | `tinyint(1)` | NO | `1` |  |
 | `allowed_ips` | `json` | YES | NULL | CIDR表記の許可IPリスト。NULLは全許可 |

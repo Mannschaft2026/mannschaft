@@ -117,10 +117,10 @@ class EventInviteTokenTicketTypeTimetableScopeContractIT extends AbstractMySqlIn
         eventBId = insertEvent(teamBId, "itkauthz-event-b");
 
         tokenAId = inviteTokenRepository.save(EventGuestInviteTokenEntity.builder()
-                .eventId(eventAId).token(UUID.randomUUID().toString()).label("ITKAUTHZ A")
+                .eventId(eventAId).tokenHash(UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "")).label("ITKAUTHZ A")
                 .maxUses(10).createdBy(adminTeamAId).build()).getId();
         tokenBId = inviteTokenRepository.save(EventGuestInviteTokenEntity.builder()
-                .eventId(eventBId).token(UUID.randomUUID().toString()).label("ITKAUTHZ B")
+                .eventId(eventBId).tokenHash(UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "")).label("ITKAUTHZ B")
                 .maxUses(10).createdBy(adminTeamAId).build()).getId();
 
         ticketTypeAId = ticketTypeRepository.save(EventTicketTypeEntity.builder()

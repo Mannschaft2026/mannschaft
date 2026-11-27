@@ -95,7 +95,6 @@ public class SignageMapper {
         return new SignageAccessTokenResponse(
                 e.getId(),
                 e.getScreenId(),
-                e.getToken(),
                 e.getName(),
                 e.getIsActive(),
                 parseAllowedIps(e.getAllowedIps()),

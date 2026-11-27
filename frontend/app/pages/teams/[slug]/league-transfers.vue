@@ -11,6 +11,7 @@ const { formatDate } = useDatetime()
 const route = useRoute()
 const teamSlug = String(route.params.slug)
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 
 const { getTeamTransfers } = useTeamLeagueTransfer(teamSlug)
 
@@ -22,7 +23,9 @@ async function load() {
   try {
     const res = await getTeamTransfers()
     transfers.value = res.data ?? []
-  } catch {
+  } catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(e)) return
     notification.error(t('transfer.empty_history'))
   } finally {
     loading.value = false

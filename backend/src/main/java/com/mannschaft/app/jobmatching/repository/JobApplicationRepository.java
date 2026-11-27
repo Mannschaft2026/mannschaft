@@ -5,6 +5,8 @@ import com.mannschaft.app.jobmatching.enums.JobApplicationStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -44,4 +46,15 @@ public interface JobApplicationRepository extends JpaRepository<JobApplicationEn
      * 求人の特定ステータスの応募件数を取得する（採用済み人数カウント等）。
      */
     int countByJobPostingIdAndStatus(Long jobPostingId, JobApplicationStatus status);
+
+    /**
+     * 求人の採用済み（ACCEPTED）応募件数を locking read（{@code FOR SHARE}）で数える（採用確定の定員判定用）。
+     *
+     * <p>REPEATABLE READ の通常 SELECT は TX 内で最初に確定したスナップショットを読むため、求人行のロック待ちの間に
+     * コミットされた並行受諾を数え漏らす。locking read は最新のコミット済み行を読み、数えた範囲に共有ロックを
+     * 掛けてコミットまで保持する。求人行を {@code FOR UPDATE} でロックした TX の中で呼ぶこと（CMP-261021-0355）。</p>
+     */
+    @Query(value = "SELECT COUNT(*) FROM job_applications WHERE job_posting_id = :jobPostingId "
+            + "AND status = 'ACCEPTED' FOR SHARE", nativeQuery = true)
+    long countAcceptedByJobPostingIdForShare(@Param("jobPostingId") Long jobPostingId);
 }

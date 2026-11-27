@@ -11,6 +11,7 @@ const { fetchTeamPublicSettings, updateTeamPublicSettings } = usePublicApi()
 const { isAdminOrDeputy, loadPermissions } = useRoleAccess('team', teamSlug)
 const { handleApiError } = useErrorHandler()
 const { success } = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const settings = shallowRef<PublicSettingsResponse | null>(null)
 const timelinePostsPublic = ref(false)
 const publicEventsEnabled = ref(false)
@@ -42,6 +43,8 @@ async function loadSettings() {
     publicEventsEnabled.value = response.publicEventsEnabled
   } catch (error) {
     if (isCurrent()) {
+      // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+      if (markIfDenied(error)) return
       loadError.value = error
       handleApiError(error)
     }

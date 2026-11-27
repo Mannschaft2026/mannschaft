@@ -65,6 +65,9 @@ class ContactInviteUsedNotificationTransactionIT extends AbstractMySqlIntegratio
     private ContactInviteTokenRepository tokenRepository;
 
     @Autowired
+    private com.mannschaft.app.common.token.SecretTokenVault vault;
+
+    @Autowired
     private UserRepository userRepository;
 
     @Autowired
@@ -96,7 +99,7 @@ class ContactInviteUsedNotificationTransactionIT extends AbstractMySqlIntegratio
 
         // 本丸: 業務行（利用回数）はコミットされている。
         ContactInviteTokenEntity saved = transactionTemplate.execute(
-                tx -> tokenRepository.findByToken(token).orElseThrow());
+                tx -> tokenRepository.findByTokenHash(vault.hash(token)).orElseThrow());
         assertThat(saved.getUsedCount())
                 .as("通知配送が失敗しても招待受諾の永続化は巻き戻らない")
                 .isEqualTo(1);
@@ -121,7 +124,7 @@ class ContactInviteUsedNotificationTransactionIT extends AbstractMySqlIntegratio
 
         // 業務行がロールバックされていること（前提の確認）。
         ContactInviteTokenEntity saved = transactionTemplate.execute(
-                tx -> tokenRepository.findByToken(token).orElseThrow());
+                tx -> tokenRepository.findByTokenHash(vault.hash(token)).orElseThrow());
         assertThat(saved.getUsedCount()).isZero();
 
         // 本丸: AFTER_COMMIT は発火しないため通知配送は一度も呼ばれない。
@@ -139,7 +142,7 @@ class ContactInviteUsedNotificationTransactionIT extends AbstractMySqlIntegratio
         contactInviteTokenService.acceptInvite(actorId, token);
 
         Long tokenId = transactionTemplate.execute(
-                tx -> tokenRepository.findByToken(token).orElseThrow().getId());
+                tx -> tokenRepository.findByTokenHash(vault.hash(token)).orElseThrow().getId());
 
         await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
             List<NotificationEntity> notifications = transactionTemplate.execute(
@@ -157,7 +160,7 @@ class ContactInviteUsedNotificationTransactionIT extends AbstractMySqlIntegratio
         String token = UUID.randomUUID().toString();
         transactionTemplate.execute(tx -> tokenRepository.save(ContactInviteTokenEntity.builder()
                 .userId(issuerId)
-                .token(token)
+                .tokenHash(vault.hash(token))
                 .label("CMP-056 検証用")
                 .expiresAt(LocalDateTime.now().plusDays(7))
                 .build()));

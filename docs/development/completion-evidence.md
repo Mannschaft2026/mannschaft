@@ -1,6 +1,8 @@
 # 完了証拠ゲート
 
-`docs/task-list.md` の状態を新たに「完了」へ変えるPRは、同じPRで `docs/evidence/<CMP-ID>.json` を追加し、証拠列へ `[完了証拠](evidence/<CMP-ID>.json)` の形でリンクする。リンク先は台帳ファイルからの相対pathである。台帳は従来どおり7列で、セル内の `|` は `\|` にする。
+`docs/task-list.md` の状態を新たに「完了」へ変えるPRは、同じPRで `docs/evidence/<CMP-ID>.json` を追加し、証拠列へ `[完了証拠](evidence/<CMP-ID>.json)` の形でリンクする。リンク先は台帳ファイルからの相対pathである（台帳の新配置の月別・legacy ファイル `docs/task-list/*.md` からは `[完了証拠](../evidence/<CMP-ID>.json)`。検査器は `evidence/X` と `../evidence/X` を同じ証拠として扱い、配置の移行を証拠の差し替えとは判定しない）。新しい行は ID の月のファイル `docs/task-list/YYYY-MM.md` の末尾に追加し（無ければ作る）、索引 `docs/task-list.md` には CMP 行を置かない。台帳は従来どおり7列で、セル内の `|` は `\|` にする。
+
+台帳の配置（CMP-261124-1222）: 旧配置は `docs/task-list.md` 1ファイル、新配置は索引 `docs/task-list.md`（前置きのみ）＋ `docs/task-list/YYYY-MM.md`（ID `CMP-YYMMDD-HHMM` の YYMM の月）＋ `docs/task-list/legacy.md`（旧形式 ID）。`docs/task-list/` に `YYYY-MM.md` か `legacy.md` があれば新配置と判定する。読む側（Task-List PR Gate・merge_group 検査・完了証拠 CLI・台帳衝突の自動修復・Java 番人・β棚卸し）はすべて共通の読み取り（`scripts/task-list-ledger.mjs` の `readLedger`、Java は `TaskListLedger`）で両配置を同じ行集合として読み、base・head・分岐点の配置が異なっていても判定は変わらない。取得失敗は空とみなさず、行0件は赤にする。
 
 validatorは `pull_request_target` で動くため、workflowのbase SHAからcheckoutしたtrusted版だけを実行する。PR headから取得するのは台帳とJSONなどのデータだけで、PR由来のソースをcheckout・import・実行しない。証拠JSONだけのdocs PRはコード登録対象から除外する一方、完了遷移と証拠変更は検査する。validatorがbaseにまだ無い初回導入PRはbootstrapとして登録検査だけ行い、このPRがmainへ入った後に完了証拠検査が有効になる。mainからvalidatorを削除・改名するPRはTask-List PR Gateが`pulls.listFiles`の`removed` / `previous_filename`で拒否し、bootstrap経由で検査を無効化できないようにする。
 
@@ -9,7 +11,7 @@ validatorは `pull_request_target` で動くため、workflowのbase SHAからch
 `pull_request_target` は `merge_group` で発火しないため、merge queue 用に別 workflow `.github/workflows/task-list-pr-gate-merge-group.yml`（`on: merge_group` の `checks_requested` のみ）を置き、同名ジョブ `Task-List PR Gate` を報告させる。PR 側の `task-list-pr-gate.yml` には `merge_group` を入れない。同一 workflow 内でジョブ単位の `if` で分けると skipped の同名チェックが PR 側にも報告され、必須チェックの判定に混ざるためである。
 
 - PR 側（`pull_request_target`）: 従来どおり（CMP-ID 登録・完了証拠の検査。checkout・権限・判定ロジックは不変）。
-- merge_group 側: PR 本文検査・完了証拠検査は各 PR の `pull_request_target` で済んでいるため行わない。合成コミット（`merge_group.head_sha`）の `docs/task-list.md` の構造だけを `scripts/task-list-structure-check.mjs` で検査する。CMP-ID（新旧両形式）の重複、列数≠7、未完行の状態セル先頭の優先度 `P1`〜`P5` 欠落、ファイル不在・空・CMP 行0件・緩い走査と厳密抽出の件数不一致はいずれも理由を出力して fail にする。判定規則は Java 番人 `TaskListCmpIdDuplicateGuardTest` の移植で、行終端（LF・CRLF・CR・NEL・U+2028・U+2029）や空白・trim の扱いも Java に合わせている。規則を変えるときは両方と `scripts/task-list-structure-check.test.mjs` の共通 fixture を同時に直す。
+- merge_group 側: PR 本文検査・完了証拠検査は各 PR の `pull_request_target` で済んでいるため行わない。合成コミット（`merge_group.head_sha`）の台帳（`docs/task-list.md`、新配置では `docs/task-list/*.md` も横断）の構造だけを `scripts/task-list-structure-check.mjs` で検査する。新配置のときだけ配置違反（ID の月以外のファイル・旧形式 ID が legacy 以外・legacy に新形式・ファイル名が YYYY-MM.md / legacy.md 以外・索引に CMP 行）もファイル名付きで fail にする。CMP-ID（新旧両形式）の重複、列数≠7、未完行の状態セル先頭の優先度 `P1`〜`P5` 欠落、ファイル不在・空・CMP 行0件・緩い走査と厳密抽出の件数不一致はいずれも理由を出力して fail にする。判定規則は Java 番人 `TaskListCmpIdDuplicateGuardTest` の移植で、行終端（LF・CRLF・CR・NEL・U+2028・U+2029）や空白・trim の扱いも Java に合わせている。規則を変えるときは両方と共有 fixture `scripts/fixtures/task-list-ledger-cases.json`（Node・Java の両方が読む）を同時に直す。
 - 検査器は信頼できる `merge_group.base_sha` からワークスペース直下へ checkout したものだけを実行し、`head_sha` からは台帳1ファイルだけを sparse checkout で別ディレクトリ（`.merge-group-head/`）へ取得する。キュー内の PR が改変した検査器で自己承認することはできない。base に検査器が無い場合は合格にせず fail する（本 workflow を入れた PR が main に入るまでは merge queue を有効化しないこと）。権限は `contents: read` のみ、`persist-credentials: false`。
 
 ## JSON形式
@@ -57,7 +59,7 @@ check runとcommit statusはhead SHA単位でしか取得できず、`check_run.
 scopeは `app` / `tooling` / `test-only` の3値。実装PRの変更ファイルを1件ずつ次の順（先勝ち）で分類する。改名ファイルは `previous_filename` も同じ規則で分類する。
 
 1. 不正path（文字列でない、filename欠落、`..` セグメント、`/` か `\` で始まる、`\` を含む、`path.posix.normalize` で変わる）→ app
-2. `scripts/`、`.github/`、`.claude/`、`docs/` または既知の開発規約ファイル（`backend/.claudecode.md` を含む） → tooling
+2. `scripts/`、`backend/scripts/`（CI・シード用スクリプト）、`.github/`、`.claude/`、`docs/` または既知の開発規約ファイル（`backend/.claudecode.md` を含む） → tooling
 3. 次のいずれか（大文字小文字を区別）→ test
    - `backend/src/test/` 配下
    - `frontend/tests/` 配下

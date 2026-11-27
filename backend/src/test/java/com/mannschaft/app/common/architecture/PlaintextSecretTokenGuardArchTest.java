@@ -29,7 +29,9 @@ import org.junit.jupiter.params.provider.MethodSource;
  *   <li>既存の違反（台帳の16系統の平文列・金庫を通さない発行メソッド）は、すべて {@code @PlaintextTokenDebt(cmp = "CMP-260826-1457")}
  *       で列挙して免除する。1-C の恒久除外は {@code @PlaintextSecretRequired(reason)}。</li>
  *   <li>W1〜W2 の各波は自分の系統の債務注釈を<b>外すだけ</b>で、本クラスを書き換えない。債務注釈の型は汎用の仕組みとして
- *       残し（削除しない）、W3 は {@code cmp="CMP-260826-1457"} の債務がゼロであることを確認する。他戦役の債務は
+ *       残し（削除しない）、W3 は {@code cmp="CMP-260826-1457"} の債務がゼロであること
+ *       （{@link PlaintextSecretTokenGuardRules#debtsOf}）を本クラスの {@code W3_招待共有トークンの債務がゼロ} が検査する。招待・共有以外の
+ *       系統の債務は切り出し先の {@code cmp="CMP-261125-0945"} が負う。他戦役の債務も
  *       台帳に登録された未完了の CMP ID のときだけ許す。</li>
  * </ul>
  *
@@ -114,6 +116,15 @@ class PlaintextSecretTokenGuardArchTest {
                     .as("%s は合言葉キーではない（BearerSecretValkeyKey.of を呼ばない）ので、違反にも免除にも数えない", csvClass)
                     .noneMatch(element -> element.startsWith(csvClass + "#"));
         }
+    }
+
+    @Test
+    @DisplayName("W3（AC-Z）: 本番に @PlaintextTokenDebt(cmp=CMP-260826-1457) の債務が1件も残っていない")
+    void W3_招待共有トークンの債務がゼロ() {
+        assertThat(PlaintextSecretTokenGuardRules.debtsOf(production, "CMP-260826-1457"))
+                .as("CMP-260826-1457（招待・共有トークンのハッシュ保存化）の債務注釈は全系統で外れているはず。"
+                        + "招待・共有以外の系統は CMP-261125-0945 の債務として付ける")
+                .isEmpty();
     }
 
     /**

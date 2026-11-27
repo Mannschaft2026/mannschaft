@@ -26,7 +26,8 @@
       "visibility_to_org": "Visibilidad en la organización",
       "start_date": "Fecha de inicio",
       "end_date": "Fecha de fin",
-      "member_count": "Miembros"
+      "member_count": "Miembros",
+      "chair": "Presidente/a"
     },
     "visibility": {
       "HIDDEN": "Oculto",
@@ -96,7 +97,16 @@
       "invitee": "Invitado"
     },
     "create_dialog": {
-      "title": "Establecer un comité"
+      "title": "Establecer un comité",
+      "chair_placeholder": "Seleccione un presidente",
+      "purpose_placeholder": "Seleccione una etiqueta de propósito"
+    },
+    "purpose_tag": {
+      "TOURNAMENT": "Torneo",
+      "GOVERNANCE": "Gobernanza",
+      "ELECTION": "Elección",
+      "PROJECT": "Proyecto",
+      "OTHER": "Otro"
     }
   }
 }

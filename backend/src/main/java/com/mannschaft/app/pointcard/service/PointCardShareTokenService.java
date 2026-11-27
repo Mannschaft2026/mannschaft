@@ -4,6 +4,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.token.BearerSecretValkeyKey;
+import com.mannschaft.app.common.token.IssuedToken;
+import com.mannschaft.app.common.token.SecretTokenVault;
 import com.mannschaft.app.pointcard.dto.ResolveTokenResponse;
 import com.mannschaft.app.pointcard.dto.ShareTokenResponse;
 import com.mannschaft.app.pointcard.entity.PointCardProviderEntity;
@@ -23,7 +26,6 @@ import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
-import com.mannschaft.app.common.token.PlaintextTokenDebt;
 
 /**
  * F18 個人ポイントカードウォレット — QR 自動特定 (Phase 3 第二陣 2A) サービス。
@@ -32,13 +34,15 @@ import com.mannschaft.app.common.token.PlaintextTokenDebt;
  *
  * <h2>責務</h2>
  * <ul>
- *   <li>{@link #generate(Long, UUID)} — 顧客側で 5 分 TTL の UUID トークンを Valkey に発行する</li>
+ *   <li>{@link #generate(Long, UUID)} — 顧客側で 5 分 TTL の Base64URL 43 字トークンを発行し、Valkey にはハッシュのキーで置く</li>
  *   <li>{@link #resolve(Long, String)} — 店主側で GETDEL によりトークンを 1 回限り消費して cardId 特定</li>
  * </ul>
  *
  * <h2>セキュリティ方針</h2>
  * <ul>
- *   <li>トークンは {@code UUID.randomUUID()} の v4。256 bit エントロピー相当 → 推測困難</li>
+ *   <li>トークンは {@link SecretTokenVault#issueBase64Url()}（SecureRandom 256 bit・Base64URL 43 字）→ 推測困難</li>
+ *   <li>Valkey のキーは {@code BearerSecretValkeyKey.of(接頭辞, vault.hash(平文))}。平文は発行応答の 1 回だけ返し、
+ *       Valkey・ログ・ペイロードのどこにも残さない（Valkey が覗かれても使えるトークンは取れない）</li>
  *   <li>{@code SET NX EX 300} で書き込み → 衝突は超レアケースだが {@code IllegalStateException} で fail-fast</li>
  *   <li>{@code GETDEL} で原子的に取得＋削除 → 再生防止（同じトークンを 2 回 resolve できない）</li>
  *   <li>店主側 resolve では (a) トークン由来 cardId を読み、(b) その provider.organization_id と
@@ -56,7 +60,7 @@ import com.mannschaft.app.common.token.PlaintextTokenDebt;
 @RequiredArgsConstructor
 public class PointCardShareTokenService {
 
-    /** Valkey キー接頭辞。{@code mannschaft:wallet:share_token:{token}}。 */
+    /** Valkey キー接頭辞。{@code mannschaft:wallet:share_token:{SHA-256 hex64}}（平文トークンは置かない）。 */
     static final String KEY_PREFIX = "mannschaft:wallet:share_token:";
 
     /** TTL 5 分（WebAuthn 再認証と同形）。 */
@@ -70,6 +74,7 @@ public class PointCardShareTokenService {
     private final UserPointCardRepository cardRepository;
     private final PointCardProviderRepository providerRepository;
     private final AccessControlService accessControlService;
+    private final SecretTokenVault vault;
 
     // ─────────────────────────────────────────────
     // 一時トークン発行（顧客側）
@@ -80,8 +85,8 @@ public class PointCardShareTokenService {
      *
      * <ol>
      *   <li><strong>本人カード確認</strong>: {@code findByIdAndUserId(cardId, userId)} で IDOR 防止</li>
-     *   <li><strong>UUID 生成</strong>: {@code UUID.randomUUID()} で v4 を発行</li>
-     *   <li><strong>Valkey 書き込み</strong>: {@code SET NX EX 300} で衝突防止 + TTL 設定</li>
+     *   <li><strong>トークン発行</strong>: {@code SecretTokenVault#issueBase64Url()} で 43 字を発行</li>
+     *   <li><strong>Valkey 書き込み</strong>: ハッシュのキーへ {@code SET NX EX 300}（衝突防止 + TTL 設定）</li>
      *   <li><strong>レスポンス</strong>: token / expiresAt / deepLinkUrl を返却</li>
      * </ol>
      *
@@ -89,16 +94,16 @@ public class PointCardShareTokenService {
      * @param cardId 対象カード ID
      * @return 発行されたトークン情報
      * @throws BusinessException     カードが本人のものでない / 存在しない場合（{@code POINT_CARD_006}）
-     * @throws IllegalStateException UUID 衝突という超レアケース（実質発生しない）
+     * @throws IllegalStateException トークン衝突という超レアケース（実質発生しない）
      */
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
     public ShareTokenResponse generate(Long userId, UUID cardId) {
         // 1. 本人カード確認（IDOR 防止）— PointCardController と同パターン
         cardRepository.findByIdAndUserId(cardId, userId)
                 .orElseThrow(() -> new BusinessException(PointCardErrorCode.CARD_NOT_FOUND));
 
-        // 2. UUID v4 トークン生成
-        String token = UUID.randomUUID().toString();
+        // 2. トークン発行（平文は応答でだけ返す。Valkey には hash のキーで置く）
+        IssuedToken issued = vault.issueBase64Url();
+        String token = issued.plaintext();
         Instant now = Instant.now();
         Instant expiresAtInstant = now.plus(TTL);
         OffsetDateTime expiresAt = expiresAtInstant.atOffset(ZoneOffset.UTC);
@@ -118,13 +123,14 @@ public class PointCardShareTokenService {
         }
 
         // 4. SET NX EX で書き込み（衝突防止 + TTL 設定）
-        String key = KEY_PREFIX + token;
+        String key = BearerSecretValkeyKey.of(KEY_PREFIX, issued.hash());
         Boolean setOk = redisTemplate.opsForValue().setIfAbsent(key, json, TTL);
         if (!Boolean.TRUE.equals(setOk)) {
-            // UUID v4 が既存トークンと衝突する確率は実質 0（2^122 空間）。
+            // 256 bit の乱数が既存トークンと衝突する確率は実質 0。
             // ここに到達するのは Valkey 接続不安定など異常系のみ。fail-fast で例外。
-            log.error("ShareToken UUID collision (extremely unlikely) or Valkey write failure: key={}", key);
-            throw new IllegalStateException("Token UUID collision; retry");
+            // キーは平文のハッシュだが、念のため値を出さずカード ID だけで追えるようにする
+            log.error("ShareToken collision (extremely unlikely) or Valkey write failure: cardId={}", cardId);
+            throw new IllegalStateException("Token collision; retry");
         }
 
         log.info("一時トークンを発行しました: userId={}, cardId={}, expiresAt={}",
@@ -164,7 +170,7 @@ public class PointCardShareTokenService {
         accessControlService.checkAdminOrAbove(userId, orgId, "ORGANIZATION");
 
         // 2. GETDEL でトークン取得 + 削除（再生防止）
-        String key = KEY_PREFIX + token;
+        String key = BearerSecretValkeyKey.of(KEY_PREFIX, vault.hash(token));
         String json = redisTemplate.opsForValue().getAndDelete(key);
         if (json == null) {
             // 期限切れ / 使用済 / 不存在を区別しない（情報漏洩防止）
@@ -177,7 +183,7 @@ public class PointCardShareTokenService {
             data = objectMapper.readValue(json, new TypeReference<>() {});
         } catch (Exception e) {
             // 既に削除済みなので復元できない。データ破損として 019 を返す。
-            log.error("ShareToken JSON parse failed: token={}, json={}", token, json, e);
+            log.error("ShareToken JSON parse failed: orgId={}, resolvedBy={}", orgId, userId, e);
             throw new BusinessException(PointCardErrorCode.TOKEN_NOT_FOUND);
         }
 
@@ -185,7 +191,7 @@ public class PointCardShareTokenService {
         try {
             cardId = UUID.fromString((String) data.get("cardId"));
         } catch (Exception e) {
-            log.error("ShareToken cardId parse failed: token={}, data={}", token, data, e);
+            log.error("ShareToken cardId parse failed: orgId={}, resolvedBy={}", orgId, userId, e);
             throw new BusinessException(PointCardErrorCode.TOKEN_NOT_FOUND);
         }
 

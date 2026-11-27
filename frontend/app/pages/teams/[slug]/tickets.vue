@@ -6,6 +6,7 @@ const route = useRoute()
 const teamSlug = String(route.params.slug)
 
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const { t } = useI18n()
 const { handleApiError } = useErrorHandler()
 const { getProducts, getBooks, createProduct } = useTicketApi()
@@ -34,6 +35,8 @@ async function load() {
     products.value = pRes.data
     books.value = bRes.data
   } catch (error) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(error)) return
     handleApiError(error)
   } finally {
     loading.value = false
