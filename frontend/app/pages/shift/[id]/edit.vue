@@ -335,7 +335,7 @@ function formatDate(dateStr: string): string {
               class="shrink-0 whitespace-nowrap rounded-full bg-surface-100 px-2 py-0.5 text-xs font-medium text-surface-600 dark:bg-surface-700 dark:text-surface-300"
               :title="t('shift.slot.assignmentMaskedHint')"
             >
-              {{ t('shift.slot.assignmentMasked') }}
+              {{ t('shift.slot.assignmentHidden') }}
             </span>
             <span
               v-else

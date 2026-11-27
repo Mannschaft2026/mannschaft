@@ -59,7 +59,7 @@ test.describe('CMP-260910-1609 AC5/6: 時刻とメンバー取得状態', () => 
     await mockFeatureFlags(page)
     const team = { id: TEAM_ID, slug: String(TEAM_ID), name: 'ボード試験チーム', nickname1: null }
     await page.route('**/api/v1/me/teams', route => route.fulfill({ json: { data: [team] } }))
-    await page.route(`**/api/v1/teams/${TEAM_ID}`, route => route.fulfill({ json: { data: team } }))
+    await page.route(`**/api/v1/teams/${TEAM_ID}`, route => route.fulfill({ json: { data: { ...team, numericId: TEAM_ID } } }))
     await page.route(`**/api/v1/teams/${TEAM_ID}/me/permissions`, route => route.fulfill({
       json: { data: { roleName: 'ADMIN', permissions: [], scopeAdmin: true } },
     }))
@@ -87,7 +87,7 @@ test.describe('CMP-260910-1609 AC5/6: 時刻とメンバー取得状態', () => 
     await waitForHydration(page)
     await expect(page.getByRole('heading', { name: 'シフトボード', exact: true })).toBeVisible()
     await expect(page.getByRole('columnheader', { name: '受付', exact: true })).toBeVisible()
-    await expect(page.locator('.w-60.flex-shrink-0').getByText(boardMember.displayName, { exact: true })).toBeVisible()
+    await expect(page.getByTestId('member-pool-aside').getByText(boardMember.displayName, { exact: true })).toBeVisible()
   })
 
   test('AC5: 秒付きのAPI時刻をHH:mmの時間帯で表示する', async ({ page }) => {
@@ -110,7 +110,7 @@ test.describe('CMP-260910-1609 AC5/6: 時刻とメンバー取得状態', () => 
     try {
       await page.goto(BOARD_URL)
       await waitForHydration(page)
-      const pool = page.locator('.w-60.flex-shrink-0')
+      const pool = page.getByTestId('member-pool-aside')
       await expect(pool).toBeVisible()
       // PageLoading→LoadingBounceの実ProgressSpinner。未存在のroleやtestidは仮定しない。
       await expect.soft(pool.locator('.p-progressspinner')).toBeVisible()
@@ -119,7 +119,7 @@ test.describe('CMP-260910-1609 AC5/6: 時刻とメンバー取得状態', () => 
     finally {
       release()
     }
-    await expect(page.locator('.w-60.flex-shrink-0').getByText(boardMember.displayName, { exact: true })).toBeVisible()
+    await expect(page.getByTestId('member-pool-aside').getByText(boardMember.displayName, { exact: true })).toBeVisible()
   })
 
   test('AC6: 取得失敗は再読込で復旧し、検索0と真の0件を区別する', async ({ page }) => {
@@ -135,7 +135,7 @@ test.describe('CMP-260910-1609 AC5/6: 時刻とメンバー取得状態', () => 
     })
     await page.goto(BOARD_URL)
     await waitForHydration(page)
-    const pool = page.locator('.w-60.flex-shrink-0')
+    const pool = page.getByTestId('member-pool-aside')
     await expect(pool.getByTestId('load-error-state')).toBeVisible()
     await expect(pool).not.toContainText('フォロー中のユーザーはいません')
     const failedReads = memberReads.length
@@ -171,6 +171,13 @@ test.describe('BOARD-001〜004: F03.5 Phase 2 D&D シフトボード', () => {
     await mockCatchAllApis(page)
     // catch-all より後に登録し、feature-gate が無効フラグで /dashboard に差し戻さないようにする
     await mockFeatureFlags(page)
+    // board.vue は URL の teamId とチームの numericId を突き合わせ、ADMIN / MANAGE_SHIFTS 持ちの DEPUTY_ADMIN にだけ
+    // 割当操作（未割当プール等）を出す（CMP-261125-1336）。ここでは ADMIN として開く
+    const team = { id: TEAM_ID, slug: String(TEAM_ID), name: 'ボード試験チーム', nickname1: null, numericId: TEAM_ID }
+    await page.route(`**/api/v1/teams/${TEAM_ID}`, route => route.fulfill({ json: { data: team } }))
+    await page.route(`**/api/v1/teams/${TEAM_ID}/me/permissions`, route => route.fulfill({
+      json: { data: { roleName: 'ADMIN', permissions: [], scopeAdmin: true } },
+    }))
     // チームメンバー API をモック（board.vue の loadMembers() が呼ぶ）
     await mockTeamMembersApi(page)
   })
@@ -197,8 +204,8 @@ test.describe('BOARD-001〜004: F03.5 Phase 2 D&D シフトボード', () => {
     // スケジュールタイトルが表示される
     await expect(page.getByText('E2Eテスト用シフトスケジュール')).toBeVisible({ timeout: 10_000 })
 
-    // ステータスタグが表示される（ADJUSTING）
-    await expect(page.getByText('ADJUSTING')).toBeVisible({ timeout: 10_000 })
+    // ステータスバッジが i18n 表示される（ADJUSTING → 調整中。英語の生値を出さない）
+    await expect(page.getByText('調整中', { exact: true })).toBeVisible({ timeout: 10_000 })
   })
 
   test('BOARD-002: 未割当メンバープールが表示される', async ({ page }) => {
@@ -218,7 +225,7 @@ test.describe('BOARD-001〜004: F03.5 Phase 2 D&D シフトボード', () => {
     await waitForHydration(page)
 
     // 未割当メンバープールのラベルが表示される（i18n shift.board.memberPool = "未割当メンバー"）
-    await expect(page.getByText('未割当メンバー')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('member-pool-aside').getByText('未割当メンバー')).toBeVisible({ timeout: 10_000 })
   })
 
   test('BOARD-003: メンバーをスロットにドラッグして割当できる（vuedraggable）', async ({ page }) => {
@@ -260,7 +267,7 @@ test.describe('BOARD-001〜004: F03.5 Phase 2 D&D シフトボード', () => {
     })
 
     // 未割当メンバープールが表示される
-    await expect(page.getByText('未割当メンバー')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('member-pool-aside').getByText('未割当メンバー')).toBeVisible({ timeout: 10_000 })
 
     // ドラッグ操作をシミュレート
     // vuedraggable の D&D は Playwright の mouse イベントで再現可能

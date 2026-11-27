@@ -14,11 +14,16 @@ export function useShiftBoard(scheduleId: Ref<number>, slots: Ref<ShiftSlotRespo
   async function loadSlots(): Promise<void> {
     const load = ++latestLoad
     const requestedSchedule = scheduleId.value
-    const before = slots.value
     const res = await shiftApi.getShiftSlots(requestedSchedule)
-    // PATCH の確定応答や別スケジュールを、先に開始した GET で上書きしない。
-    if (load !== latestLoad || requestedSchedule !== scheduleId.value || slots.value !== before) return
-    slots.value = res.data
+    // 古い応答（後から開始した GET がある）と別スケジュールの応答は捨てる。
+    if (load !== latestLoad || requestedSchedule !== scheduleId.value) return
+    // 並行した別枠の PATCH 成功で、すでに GET の応答より新しい版を持つ枠は巻き戻さず、
+    // それ以外（失敗した枠など）は応答で必ず最新へ更新する。
+    const localById = new Map(slots.value.map((slot) => [slot.id, slot]))
+    slots.value = res.data.map((fetched) => {
+      const local = localById.get(fetched.id)
+      return local && local.version > fetched.version ? local : fetched
+    })
     syncAssignments()
   }
 
@@ -58,21 +63,41 @@ export function useShiftBoard(scheduleId: Ref<number>, slots: Ref<ShiftSlotRespo
       await patch(fromSlotId, fromVersion, { removeUserIds: [userId] })
       await patch(toSlotId, toVersion, { addUserIds: [userId] })
     } catch (error) {
-      try {
-        await loadSlots()
-      } catch {
-        // 再取得失敗でも、確定した第1 PATCH の状態と元の操作エラーを保持する。
-      }
+      await reloadAfterFailure()
       throw error
     }
   }
 
+  /**
+   * 失敗（409 版競合・5xx 等）の後は枠一覧を取り直し、次の操作が最新の版で成功するようにする。
+   * 再取得の失敗で元の操作エラーを隠さない（元のエラーを再送出する）。
+   */
+  async function reloadAfterFailure(): Promise<void> {
+    try {
+      await loadSlots()
+    } catch (reloadError) {
+      // 再取得失敗でも、利用者へは元の操作エラーを通知する。再取得の失敗は握りつぶさず記録する。
+      const { captureQuiet } = useErrorReport()
+      captureQuiet(reloadError, { context: 'useShiftBoard: 失敗後の枠再取得' })
+    }
+  }
+
   async function addUser(slotId: number, userId: number): Promise<void> {
-    await patch(slotId, versionOf(slotId), { addUserIds: [userId] })
+    try {
+      await patch(slotId, versionOf(slotId), { addUserIds: [userId] })
+    } catch (error) {
+      await reloadAfterFailure()
+      throw error
+    }
   }
 
   async function removeUser(slotId: number, userId: number): Promise<void> {
-    await patch(slotId, versionOf(slotId), { removeUserIds: [userId] })
+    try {
+      await patch(slotId, versionOf(slotId), { removeUserIds: [userId] })
+    } catch (error) {
+      await reloadAfterFailure()
+      throw error
+    }
   }
 
   watch(scheduleId, () => {
