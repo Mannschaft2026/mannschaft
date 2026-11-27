@@ -12,6 +12,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 const { t } = useI18n()
 const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const api = useTeamExtendedProfileApi()
 const notification = useNotification()
 const { markIfDenied } = useScopeNotFound()
@@ -300,289 +301,298 @@ async function loadData() {
   }
 }
 
-onMounted(loadData)
+onGateOk(loadData)
 </script>
 
 <template>
-  <div class="mx-auto max-w-3xl">
-    <div class="mb-6 flex items-center gap-3">
-      <PageHeader :title="$t('extended_profile.title')" />
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
-
-    <PageLoading v-if="profileLoading" />
-
-    <template v-else-if="isAdminOrDeputy">
-      <!-- 基本プロフィール -->
-      <section class="mb-8 rounded-xl border border-surface-200 bg-white p-6 shadow-sm dark:border-surface-700 dark:bg-surface-900">
-        <h2 class="mb-4 text-lg font-semibold text-surface-700 dark:text-surface-200">
-          {{ $t('extended_profile.section_profile') }}
-        </h2>
-        <div class="space-y-4">
-          <div>
-            <label class="mb-1 block text-sm font-medium">{{ $t('extended_profile.homepage_url') }}</label>
-            <InputText
-              v-model="profileForm.homepage_url"
-              class="w-full"
-              placeholder="https://..."
-            />
-          </div>
-          <div>
-            <label class="mb-1 block text-sm font-medium">{{ $t('extended_profile.established_date') }}</label>
-            <InputText
-              v-model="profileForm.established_date"
-              class="w-full"
-              placeholder="YYYY-MM-DD"
-            />
-          </div>
-          <div>
-            <label class="mb-1 block text-sm font-medium">{{ $t('extended_profile.established_date_precision') }}</label>
-            <Select
-              v-model="profileForm.established_date_precision"
-              :options="precisionOptions"
-              option-label="label"
-              option-value="value"
-              class="w-full"
-            />
-          </div>
-          <div>
-            <label class="mb-1 block text-sm font-medium">{{ $t('extended_profile.philosophy') }}</label>
-            <Textarea
-              v-model="profileForm.philosophy"
-              class="w-full"
-              :rows="6"
-              :maxlength="2000"
-            />
-            <p class="mt-1 text-right text-xs text-surface-400">
-              {{ philosophyRemaining }} / 2000
-            </p>
-          </div>
-          <div class="flex justify-end">
-            <Button :label="$t('extended_profile.save_profile')" icon="pi pi-check" @click="saveProfile" />
-          </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+      <div class="mx-auto max-w-3xl">
+        <div class="mb-6 flex items-center gap-3">
+          <PageHeader :title="$t('extended_profile.title')" />
         </div>
-      </section>
 
-      <!-- 公開設定 -->
-      <section class="mb-8 rounded-xl border border-surface-200 bg-white p-6 shadow-sm dark:border-surface-700 dark:bg-surface-900">
-        <h2 class="mb-4 text-lg font-semibold text-surface-700 dark:text-surface-200">
-          {{ $t('extended_profile.section_visibility') }}
-        </h2>
-        <div class="space-y-3">
-          <div class="flex items-center justify-between">
-            <label class="text-sm">{{ $t('extended_profile.visibility_homepage_url') }}</label>
-            <ToggleSwitch v-model="visibilityForm.homepage_url" />
-          </div>
-          <div class="flex items-center justify-between">
-            <label class="text-sm">{{ $t('extended_profile.visibility_established_date') }}</label>
-            <ToggleSwitch v-model="visibilityForm.established_date" />
-          </div>
-          <div class="flex items-center justify-between">
-            <label class="text-sm">{{ $t('extended_profile.visibility_philosophy') }}</label>
-            <ToggleSwitch v-model="visibilityForm.philosophy" />
-          </div>
-          <div class="flex items-center justify-between">
-            <label class="text-sm">{{ $t('extended_profile.visibility_officers') }}</label>
-            <ToggleSwitch v-model="visibilityForm.officers" />
-          </div>
-          <div class="flex items-center justify-between">
-            <label class="text-sm">{{ $t('extended_profile.visibility_custom_fields') }}</label>
-            <ToggleSwitch v-model="visibilityForm.custom_fields" />
-          </div>
-          <div class="flex justify-end pt-2">
-            <Button :label="$t('extended_profile.save_profile')" icon="pi pi-check" @click="saveProfile" />
-          </div>
-        </div>
-      </section>
+        <PageLoading v-if="profileLoading" />
 
-      <!-- 役員セクション -->
-      <section class="mb-8 rounded-xl border border-surface-200 bg-white p-6 shadow-sm dark:border-surface-700 dark:bg-surface-900">
-        <h2 class="mb-4 text-lg font-semibold text-surface-700 dark:text-surface-200">
-          {{ $t('extended_profile.section_officers') }}
-        </h2>
-
-        <div class="mb-4 space-y-2">
-          <div
-            v-for="(officer, index) in officers"
-            :key="officer.id"
-            class="flex cursor-grab items-center gap-3 rounded-lg border border-surface-200 p-3 transition-colors dark:border-surface-700"
-            :class="{
-              'bg-primary/5': officerDropTarget === index && officerDragIndex !== index,
-              'opacity-50': officerDragIndex === index,
-            }"
-            draggable="true"
-            @dragstart="onOfficerDragStart(index, $event)"
-            @dragover="onOfficerDragOver(index, $event)"
-            @drop.prevent="onOfficerDrop(index)"
-            @dragend="onOfficerDragEnd"
-          >
-            <i class="pi pi-bars cursor-grab text-surface-400 active:cursor-grabbing" />
-            <div class="flex-1">
-              <span class="font-medium">{{ officer.name }}</span>
-              <span class="ml-2 text-sm text-surface-500">{{ officer.title }}</span>
+        <template v-else-if="isAdminOrDeputy">
+          <!-- 基本プロフィール -->
+          <section class="mb-8 rounded-xl border border-surface-200 bg-white p-6 shadow-sm dark:border-surface-700 dark:bg-surface-900">
+            <h2 class="mb-4 text-lg font-semibold text-surface-700 dark:text-surface-200">
+              {{ $t('extended_profile.section_profile') }}
+            </h2>
+            <div class="space-y-4">
+              <div>
+                <label class="mb-1 block text-sm font-medium">{{ $t('extended_profile.homepage_url') }}</label>
+                <InputText
+                  v-model="profileForm.homepage_url"
+                  class="w-full"
+                  placeholder="https://..."
+                />
+              </div>
+              <div>
+                <label class="mb-1 block text-sm font-medium">{{ $t('extended_profile.established_date') }}</label>
+                <InputText
+                  v-model="profileForm.established_date"
+                  class="w-full"
+                  placeholder="YYYY-MM-DD"
+                />
+              </div>
+              <div>
+                <label class="mb-1 block text-sm font-medium">{{ $t('extended_profile.established_date_precision') }}</label>
+                <Select
+                  v-model="profileForm.established_date_precision"
+                  :options="precisionOptions"
+                  option-label="label"
+                  option-value="value"
+                  class="w-full"
+                />
+              </div>
+              <div>
+                <label class="mb-1 block text-sm font-medium">{{ $t('extended_profile.philosophy') }}</label>
+                <Textarea
+                  v-model="profileForm.philosophy"
+                  class="w-full"
+                  :rows="6"
+                  :maxlength="2000"
+                />
+                <p class="mt-1 text-right text-xs text-surface-400">
+                  {{ philosophyRemaining }} / 2000
+                </p>
+              </div>
+              <div class="flex justify-end">
+                <Button :label="$t('extended_profile.save_profile')" icon="pi pi-check" @click="saveProfile" />
+              </div>
             </div>
-            <Tag
-              :value="officer.is_visible ? $t('extended_profile.officer_visible') : $t('button.close')"
-              :severity="officer.is_visible ? 'success' : 'secondary'"
-            />
-            <Button
-              icon="pi pi-pencil"
-              size="small"
-              text
-              severity="secondary"
-              @click="openEditOfficer(officer)"
-            />
-            <Button
-              icon="pi pi-trash"
-              size="small"
-              text
-              severity="danger"
-              @click="deleteOfficer(officer)"
-            />
-          </div>
-        </div>
+          </section>
 
-        <div class="flex gap-2">
-          <Button
-            :label="$t('extended_profile.add_officer')"
-            icon="pi pi-plus"
-            severity="secondary"
-            @click="openCreateOfficer"
-          />
-          <Button
-            :label="$t('extended_profile.save_order')"
-            icon="pi pi-sort"
-            :disabled="!officerOrderDirty"
-            @click="saveOfficerOrder"
-          />
-        </div>
-      </section>
-
-      <!-- カスタムフィールドセクション -->
-      <section class="mb-8 rounded-xl border border-surface-200 bg-white p-6 shadow-sm dark:border-surface-700 dark:bg-surface-900">
-        <h2 class="mb-4 text-lg font-semibold text-surface-700 dark:text-surface-200">
-          {{ $t('extended_profile.section_custom_fields') }}
-        </h2>
-
-        <div class="mb-4 space-y-2">
-          <div
-            v-for="(field, index) in customFields"
-            :key="field.id"
-            class="flex cursor-grab items-center gap-3 rounded-lg border border-surface-200 p-3 transition-colors dark:border-surface-700"
-            :class="{
-              'bg-primary/5': cfDropTarget === index && cfDragIndex !== index,
-              'opacity-50': cfDragIndex === index,
-            }"
-            draggable="true"
-            @dragstart="onCfDragStart(index, $event)"
-            @dragover="onCfDragOver(index, $event)"
-            @drop.prevent="onCfDrop(index)"
-            @dragend="onCfDragEnd"
-          >
-            <i class="pi pi-bars cursor-grab text-surface-400 active:cursor-grabbing" />
-            <div class="flex-1">
-              <span class="font-medium">{{ field.label }}</span>
-              <span class="ml-2 text-sm text-surface-500">{{ field.value }}</span>
+          <!-- 公開設定 -->
+          <section class="mb-8 rounded-xl border border-surface-200 bg-white p-6 shadow-sm dark:border-surface-700 dark:bg-surface-900">
+            <h2 class="mb-4 text-lg font-semibold text-surface-700 dark:text-surface-200">
+              {{ $t('extended_profile.section_visibility') }}
+            </h2>
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <label class="text-sm">{{ $t('extended_profile.visibility_homepage_url') }}</label>
+                <ToggleSwitch v-model="visibilityForm.homepage_url" />
+              </div>
+              <div class="flex items-center justify-between">
+                <label class="text-sm">{{ $t('extended_profile.visibility_established_date') }}</label>
+                <ToggleSwitch v-model="visibilityForm.established_date" />
+              </div>
+              <div class="flex items-center justify-between">
+                <label class="text-sm">{{ $t('extended_profile.visibility_philosophy') }}</label>
+                <ToggleSwitch v-model="visibilityForm.philosophy" />
+              </div>
+              <div class="flex items-center justify-between">
+                <label class="text-sm">{{ $t('extended_profile.visibility_officers') }}</label>
+                <ToggleSwitch v-model="visibilityForm.officers" />
+              </div>
+              <div class="flex items-center justify-between">
+                <label class="text-sm">{{ $t('extended_profile.visibility_custom_fields') }}</label>
+                <ToggleSwitch v-model="visibilityForm.custom_fields" />
+              </div>
+              <div class="flex justify-end pt-2">
+                <Button :label="$t('extended_profile.save_profile')" icon="pi pi-check" @click="saveProfile" />
+              </div>
             </div>
-            <Tag
-              :value="field.is_visible ? $t('extended_profile.officer_visible') : $t('button.close')"
-              :severity="field.is_visible ? 'success' : 'secondary'"
-            />
-            <Button
-              icon="pi pi-pencil"
-              size="small"
-              text
-              severity="secondary"
-              @click="openEditCf(field)"
-            />
-            <Button
-              icon="pi pi-trash"
-              size="small"
-              text
-              severity="danger"
-              @click="deleteCf(field)"
-            />
-          </div>
-        </div>
+          </section>
 
-        <div class="flex gap-2">
-          <Button
-            :label="$t('extended_profile.add_custom_field')"
-            icon="pi pi-plus"
-            severity="secondary"
-            @click="openCreateCf"
-          />
-          <Button
-            :label="$t('extended_profile.save_order')"
-            icon="pi pi-sort"
-            :disabled="!cfOrderDirty"
-            @click="saveCfOrder"
-          />
-        </div>
-      </section>
+          <!-- 役員セクション -->
+          <section class="mb-8 rounded-xl border border-surface-200 bg-white p-6 shadow-sm dark:border-surface-700 dark:bg-surface-900">
+            <h2 class="mb-4 text-lg font-semibold text-surface-700 dark:text-surface-200">
+              {{ $t('extended_profile.section_officers') }}
+            </h2>
+
+            <div class="mb-4 space-y-2">
+              <div
+                v-for="(officer, index) in officers"
+                :key="officer.id"
+                class="flex cursor-grab items-center gap-3 rounded-lg border border-surface-200 p-3 transition-colors dark:border-surface-700"
+                :class="{
+                  'bg-primary/5': officerDropTarget === index && officerDragIndex !== index,
+                  'opacity-50': officerDragIndex === index,
+                }"
+                draggable="true"
+                @dragstart="onOfficerDragStart(index, $event)"
+                @dragover="onOfficerDragOver(index, $event)"
+                @drop.prevent="onOfficerDrop(index)"
+                @dragend="onOfficerDragEnd"
+              >
+                <i class="pi pi-bars cursor-grab text-surface-400 active:cursor-grabbing" />
+                <div class="flex-1">
+                  <span class="font-medium">{{ officer.name }}</span>
+                  <span class="ml-2 text-sm text-surface-500">{{ officer.title }}</span>
+                </div>
+                <Tag
+                  :value="officer.is_visible ? $t('extended_profile.officer_visible') : $t('button.close')"
+                  :severity="officer.is_visible ? 'success' : 'secondary'"
+                />
+                <Button
+                  icon="pi pi-pencil"
+                  size="small"
+                  text
+                  severity="secondary"
+                  @click="openEditOfficer(officer)"
+                />
+                <Button
+                  icon="pi pi-trash"
+                  size="small"
+                  text
+                  severity="danger"
+                  @click="deleteOfficer(officer)"
+                />
+              </div>
+            </div>
+
+            <div class="flex gap-2">
+              <Button
+                :label="$t('extended_profile.add_officer')"
+                icon="pi pi-plus"
+                severity="secondary"
+                @click="openCreateOfficer"
+              />
+              <Button
+                :label="$t('extended_profile.save_order')"
+                icon="pi pi-sort"
+                :disabled="!officerOrderDirty"
+                @click="saveOfficerOrder"
+              />
+            </div>
+          </section>
+
+          <!-- カスタムフィールドセクション -->
+          <section class="mb-8 rounded-xl border border-surface-200 bg-white p-6 shadow-sm dark:border-surface-700 dark:bg-surface-900">
+            <h2 class="mb-4 text-lg font-semibold text-surface-700 dark:text-surface-200">
+              {{ $t('extended_profile.section_custom_fields') }}
+            </h2>
+
+            <div class="mb-4 space-y-2">
+              <div
+                v-for="(field, index) in customFields"
+                :key="field.id"
+                class="flex cursor-grab items-center gap-3 rounded-lg border border-surface-200 p-3 transition-colors dark:border-surface-700"
+                :class="{
+                  'bg-primary/5': cfDropTarget === index && cfDragIndex !== index,
+                  'opacity-50': cfDragIndex === index,
+                }"
+                draggable="true"
+                @dragstart="onCfDragStart(index, $event)"
+                @dragover="onCfDragOver(index, $event)"
+                @drop.prevent="onCfDrop(index)"
+                @dragend="onCfDragEnd"
+              >
+                <i class="pi pi-bars cursor-grab text-surface-400 active:cursor-grabbing" />
+                <div class="flex-1">
+                  <span class="font-medium">{{ field.label }}</span>
+                  <span class="ml-2 text-sm text-surface-500">{{ field.value }}</span>
+                </div>
+                <Tag
+                  :value="field.is_visible ? $t('extended_profile.officer_visible') : $t('button.close')"
+                  :severity="field.is_visible ? 'success' : 'secondary'"
+                />
+                <Button
+                  icon="pi pi-pencil"
+                  size="small"
+                  text
+                  severity="secondary"
+                  @click="openEditCf(field)"
+                />
+                <Button
+                  icon="pi pi-trash"
+                  size="small"
+                  text
+                  severity="danger"
+                  @click="deleteCf(field)"
+                />
+              </div>
+            </div>
+
+            <div class="flex gap-2">
+              <Button
+                :label="$t('extended_profile.add_custom_field')"
+                icon="pi pi-plus"
+                severity="secondary"
+                @click="openCreateCf"
+              />
+              <Button
+                :label="$t('extended_profile.save_order')"
+                icon="pi pi-sort"
+                :disabled="!cfOrderDirty"
+                @click="saveCfOrder"
+              />
+            </div>
+          </section>
+        </template>
+
+        <!-- 役員ダイアログ -->
+        <Dialog
+          v-model:visible="showOfficerDialog"
+          :header="editingOfficer ? $t('extended_profile.edit_officer') : $t('extended_profile.add_officer')"
+          :modal="true"
+          class="w-full max-w-md"
+        >
+          <div class="space-y-4">
+            <div>
+              <label class="mb-1 block text-sm font-medium">{{ $t('extended_profile.officer_name') }}</label>
+              <InputText v-model="officerForm.name" class="w-full" />
+            </div>
+            <div>
+              <label class="mb-1 block text-sm font-medium">{{ $t('extended_profile.officer_title') }}</label>
+              <InputText v-model="officerForm.title" class="w-full" />
+            </div>
+            <div class="flex items-center justify-between">
+              <label class="text-sm font-medium">{{ $t('extended_profile.officer_visible') }}</label>
+              <ToggleSwitch v-model="officerForm.is_visible" />
+            </div>
+          </div>
+          <template #footer>
+            <Button :label="$t('button.cancel')" severity="secondary" @click="showOfficerDialog = false" />
+            <Button
+              :label="editingOfficer ? $t('button.save') : $t('button.create')"
+              icon="pi pi-check"
+              :disabled="!officerForm.name || !officerForm.title"
+              @click="saveOfficer"
+            />
+          </template>
+        </Dialog>
+
+        <!-- カスタムフィールドダイアログ -->
+        <Dialog
+          v-model:visible="showCfDialog"
+          :header="editingCf ? $t('extended_profile.edit_custom_field') : $t('extended_profile.add_custom_field')"
+          :modal="true"
+          class="w-full max-w-md"
+        >
+          <div class="space-y-4">
+            <div>
+              <label class="mb-1 block text-sm font-medium">{{ $t('extended_profile.field_label') }}</label>
+              <InputText v-model="cfForm.label" class="w-full" />
+            </div>
+            <div>
+              <label class="mb-1 block text-sm font-medium">{{ $t('extended_profile.field_value') }}</label>
+              <InputText v-model="cfForm.value" class="w-full" />
+            </div>
+            <div class="flex items-center justify-between">
+              <label class="text-sm font-medium">{{ $t('extended_profile.officer_visible') }}</label>
+              <ToggleSwitch v-model="cfForm.is_visible" />
+            </div>
+          </div>
+          <template #footer>
+            <Button :label="$t('button.cancel')" severity="secondary" @click="showCfDialog = false" />
+            <Button
+              :label="editingCf ? $t('button.save') : $t('button.create')"
+              icon="pi pi-check"
+              :disabled="!cfForm.label || !cfForm.value"
+              @click="saveCf"
+            />
+          </template>
+        </Dialog>
+      </div>
     </template>
-
-    <!-- 役員ダイアログ -->
-    <Dialog
-      v-model:visible="showOfficerDialog"
-      :header="editingOfficer ? $t('extended_profile.edit_officer') : $t('extended_profile.add_officer')"
-      :modal="true"
-      class="w-full max-w-md"
-    >
-      <div class="space-y-4">
-        <div>
-          <label class="mb-1 block text-sm font-medium">{{ $t('extended_profile.officer_name') }}</label>
-          <InputText v-model="officerForm.name" class="w-full" />
-        </div>
-        <div>
-          <label class="mb-1 block text-sm font-medium">{{ $t('extended_profile.officer_title') }}</label>
-          <InputText v-model="officerForm.title" class="w-full" />
-        </div>
-        <div class="flex items-center justify-between">
-          <label class="text-sm font-medium">{{ $t('extended_profile.officer_visible') }}</label>
-          <ToggleSwitch v-model="officerForm.is_visible" />
-        </div>
-      </div>
-      <template #footer>
-        <Button :label="$t('button.cancel')" severity="secondary" @click="showOfficerDialog = false" />
-        <Button
-          :label="editingOfficer ? $t('button.save') : $t('button.create')"
-          icon="pi pi-check"
-          :disabled="!officerForm.name || !officerForm.title"
-          @click="saveOfficer"
-        />
-      </template>
-    </Dialog>
-
-    <!-- カスタムフィールドダイアログ -->
-    <Dialog
-      v-model:visible="showCfDialog"
-      :header="editingCf ? $t('extended_profile.edit_custom_field') : $t('extended_profile.add_custom_field')"
-      :modal="true"
-      class="w-full max-w-md"
-    >
-      <div class="space-y-4">
-        <div>
-          <label class="mb-1 block text-sm font-medium">{{ $t('extended_profile.field_label') }}</label>
-          <InputText v-model="cfForm.label" class="w-full" />
-        </div>
-        <div>
-          <label class="mb-1 block text-sm font-medium">{{ $t('extended_profile.field_value') }}</label>
-          <InputText v-model="cfForm.value" class="w-full" />
-        </div>
-        <div class="flex items-center justify-between">
-          <label class="text-sm font-medium">{{ $t('extended_profile.officer_visible') }}</label>
-          <ToggleSwitch v-model="cfForm.is_visible" />
-        </div>
-      </div>
-      <template #footer>
-        <Button :label="$t('button.cancel')" severity="secondary" @click="showCfDialog = false" />
-        <Button
-          :label="editingCf ? $t('button.save') : $t('button.create')"
-          icon="pi pi-check"
-          :disabled="!cfForm.label || !cfForm.value"
-          @click="saveCf"
-        />
-      </template>
-    </Dialog>
   </div>
 </template>

@@ -4,6 +4,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 const route = useRoute()
 const router = useRouter()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const { isAdminOrDeputy, loadPermissions } = useRoleAccess('team', teamSlug)
 const teamApi = useTeamApi()
 
@@ -54,68 +55,77 @@ async function onBack() {
   listRef.value?.refresh()
 }
 
-onMounted(async () => {
+onGateOk(async () => {
   await Promise.all([loadPermissions(), resolveScopeId()])
 })
 </script>
 
 <template>
   <div>
-    <div class="mb-4">
-      <PageHeader title="インシデント管理" />
-    </div>
-
-    <div v-if="scopeLoading" class="flex justify-center py-12">
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
       <LoadingBounce />
     </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+      <div>
+        <div class="mb-4">
+          <PageHeader title="インシデント管理" />
+        </div>
 
-    <div v-else-if="scopeLoadFailed" class="py-12 text-center text-surface-500">
-      <p class="mb-4">チーム情報の取得に失敗しました。</p>
-      <Button label="再試行" @click="resolveScopeId" />
-    </div>
+        <div v-if="scopeLoading" class="flex justify-center py-12">
+          <LoadingBounce />
+        </div>
 
-    <template v-else-if="scopeId">
-      <div v-if="selectedIncidentId" class="mx-auto max-w-3xl">
-        <IncidentDetail
-          :incident-id="selectedIncidentId"
-          :can-manage="isAdminOrDeputy"
-          @back="onBack"
-          @updated="onSaved"
-        />
+        <div v-else-if="scopeLoadFailed" class="py-12 text-center text-surface-500">
+          <p class="mb-4">チーム情報の取得に失敗しました。</p>
+          <Button label="再試行" @click="resolveScopeId" />
+        </div>
+
+        <template v-else-if="scopeId">
+          <div v-if="selectedIncidentId" class="mx-auto max-w-3xl">
+            <IncidentDetail
+              :incident-id="selectedIncidentId"
+              :can-manage="isAdminOrDeputy"
+              @back="onBack"
+              @updated="onSaved"
+            />
+          </div>
+
+          <div v-else>
+            <IncidentList
+              ref="listRef"
+              scope-type="TEAM"
+              :scope-id="scopeId"
+              :can-manage="isAdminOrDeputy"
+              @select="onSelect($event.id)"
+              @create="showCreateDialog = true"
+              @manage-categories="showCategoryManager = true"
+            />
+          </div>
+
+          <IncidentForm
+            v-model:visible="showCreateDialog"
+            scope-type="TEAM"
+            :scope-id="scopeId"
+            @saved="onSaved"
+          />
+
+          <IncidentForm
+            v-model:visible="showEditDialog"
+            scope-type="TEAM"
+            :scope-id="scopeId"
+            :edit-id="editId"
+            @saved="onSaved"
+          />
+
+          <IncidentCategoryManager
+            v-model:visible="showCategoryManager"
+            scope-type="TEAM"
+            :scope-id="scopeId"
+          />
+        </template>
       </div>
-
-      <div v-else>
-        <IncidentList
-          ref="listRef"
-          scope-type="TEAM"
-          :scope-id="scopeId"
-          :can-manage="isAdminOrDeputy"
-          @select="onSelect($event.id)"
-          @create="showCreateDialog = true"
-          @manage-categories="showCategoryManager = true"
-        />
-      </div>
-
-      <IncidentForm
-        v-model:visible="showCreateDialog"
-        scope-type="TEAM"
-        :scope-id="scopeId"
-        @saved="onSaved"
-      />
-
-      <IncidentForm
-        v-model:visible="showEditDialog"
-        scope-type="TEAM"
-        :scope-id="scopeId"
-        :edit-id="editId"
-        @saved="onSaved"
-      />
-
-      <IncidentCategoryManager
-        v-model:visible="showCategoryManager"
-        scope-type="TEAM"
-        :scope-id="scopeId"
-      />
     </template>
   </div>
 </template>

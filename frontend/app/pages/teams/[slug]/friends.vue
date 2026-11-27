@@ -7,9 +7,20 @@
 definePageMeta({ middleware: 'auth' })
 
 const route = useRoute()
-await navigateTo(`/teams/${String(route.params.slug)}/nav`, { replace: true })
+const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
+onGateOk(() => navigateTo(`/teams/${teamSlug}/nav`, { replace: true }))
 </script>
 
 <template>
-  <div />
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+      <div />
+    </template>
+  </div>
 </template>

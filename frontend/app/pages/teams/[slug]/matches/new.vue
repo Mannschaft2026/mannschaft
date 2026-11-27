@@ -11,6 +11,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 const route = useRoute()
 const router = useRouter()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const { t } = useI18n()
 
 const { createMatch } = useMatchApi()
@@ -139,117 +140,126 @@ function cancel(): void {
   void router.push({ path: `/teams/${teamSlug}/matches`, query: orgQuery.value })
 }
 
-onMounted(() => loadOrganizationId())
+onGateOk(() => loadOrganizationId())
 watch(
   () => route.query.org,
-  () => loadOrganizationId(),
+  () => (gateState.value === 'ok' ? loadOrganizationId() : undefined),
 )
 </script>
 
 <template>
-  <div class="mx-auto max-w-xl">
-    <div class="mb-1 flex items-center gap-3">
-      <PageHeader :title="$t('match.create.title')" size="sm" :back-to="orgQuery.org ? `/teams/${teamSlug}/matches?org=${orgQuery.org}` : `/teams/${teamSlug}/matches`" />
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
-    <p class="mb-6 text-sm text-surface-500">{{ $t('match.create.subtitle') }}</p>
-
-    <!-- 組織選択（親組織が複数のときだけ表示。作成先の組織になる） -->
-    <MatchOrgSelect :organizations="organizations" :org-id="orgId" :invalid="orgInvalid" />
-
-    <form @submit.prevent="submit">
-      <!-- 種別（必須・タップ選択） -->
-      <SectionCard :title="$t('match.create.kind_label')" class="mb-4">
-        <p class="mb-2 text-xs text-surface-400">{{ $t('match.create.kind_hint') }}</p>
-        <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <button
-            v-for="opt in kindOptions"
-            :key="opt.value"
-            type="button"
-            class="min-h-[2.75rem] rounded-lg border px-3 py-2 text-sm font-medium transition"
-            :class="
-              form.kind === opt.value
-                ? 'border-primary bg-primary-50 text-primary'
-                : 'border-surface-300 hover:border-primary-300'
-            "
-            @click="selectKind(opt.value)"
-          >
-            {{ opt.label }}
-          </button>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+      <div class="mx-auto max-w-xl">
+        <div class="mb-1 flex items-center gap-3">
+          <PageHeader :title="$t('match.create.title')" size="sm" :back-to="orgQuery.org ? `/teams/${teamSlug}/matches?org=${orgQuery.org}` : `/teams/${teamSlug}/matches`" />
         </div>
-        <small v-if="errors.kind" class="mt-1 block text-red-500">{{ errors.kind }}</small>
-      </SectionCard>
+        <p class="mb-6 text-sm text-surface-500">{{ $t('match.create.subtitle') }}</p>
 
-      <!-- 相手名（必須） -->
-      <SectionCard :title="$t('match.create.opponent_label')" class="mb-4">
-        <InputText
-          v-model="form.opponentName"
-          :placeholder="$t('match.create.opponent_placeholder')"
-          class="w-full"
-          :invalid="!!errors.opponentName"
-        />
-        <small v-if="errors.opponentName" class="mt-1 block text-red-500">
-          {{ errors.opponentName }}
-        </small>
-      </SectionCard>
+        <!-- 組織選択（親組織が複数のときだけ表示。作成先の組織になる） -->
+        <MatchOrgSelect :organizations="organizations" :org-id="orgId" :invalid="orgInvalid" />
 
-      <!-- 任意項目（後で設定可） -->
-      <SectionCard :title="$t('match.create.optional_section')" class="mb-6">
-        <p class="mb-3 text-xs text-surface-400">{{ $t('match.create.optional_hint') }}</p>
-        <div class="flex flex-col gap-4">
-          <div class="flex flex-col gap-1">
-            <label class="text-sm text-surface-600">{{ $t('match.create.home_away_label') }}</label>
-            <Select
-              v-model="form.homeAway"
-              :options="homeAwayOptions"
-              option-label="label"
-              option-value="value"
-              show-clear
-              :placeholder="$t('match.list.filter.all')"
-              class="w-full"
-            />
-          </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-sm text-surface-600">{{ $t('match.create.kickoff_label') }}</label>
-            <DatePicker
-              v-model="form.kickoffDate"
-              show-time
-              hour-format="24"
-              date-format="yy/mm/dd"
-              class="w-full"
-            />
-          </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-sm text-surface-600">{{ $t('match.create.venue_label') }}</label>
+        <form @submit.prevent="submit">
+          <!-- 種別（必須・タップ選択） -->
+          <SectionCard :title="$t('match.create.kind_label')" class="mb-4">
+            <p class="mb-2 text-xs text-surface-400">{{ $t('match.create.kind_hint') }}</p>
+            <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <button
+                v-for="opt in kindOptions"
+                :key="opt.value"
+                type="button"
+                class="min-h-[2.75rem] rounded-lg border px-3 py-2 text-sm font-medium transition"
+                :class="
+                  form.kind === opt.value
+                    ? 'border-primary bg-primary-50 text-primary'
+                    : 'border-surface-300 hover:border-primary-300'
+                "
+                @click="selectKind(opt.value)"
+              >
+                {{ opt.label }}
+              </button>
+            </div>
+            <small v-if="errors.kind" class="mt-1 block text-red-500">{{ errors.kind }}</small>
+          </SectionCard>
+
+          <!-- 相手名（必須） -->
+          <SectionCard :title="$t('match.create.opponent_label')" class="mb-4">
             <InputText
-              v-model="form.venue"
-              :placeholder="$t('match.create.venue_placeholder')"
+              v-model="form.opponentName"
+              :placeholder="$t('match.create.opponent_placeholder')"
               class="w-full"
+              :invalid="!!errors.opponentName"
             />
-          </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-sm text-surface-600">{{ $t('match.create.duration_label') }}</label>
-            <InputNumber
-              v-model="form.durationMinutes"
-              :min="1"
-              :max="240"
-              class="w-full"
-            />
-          </div>
-        </div>
-      </SectionCard>
+            <small v-if="errors.opponentName" class="mt-1 block text-red-500">
+              {{ errors.opponentName }}
+            </small>
+          </SectionCard>
 
-      <div class="flex justify-end gap-2">
-        <Button :label="$t('match.create.cancel')" text type="button" @click="cancel" />
-        <Button
-          :label="$t('match.create.submit')"
-          icon="pi pi-play"
-          type="submit"
-          :loading="submitting"
-        />
+          <!-- 任意項目（後で設定可） -->
+          <SectionCard :title="$t('match.create.optional_section')" class="mb-6">
+            <p class="mb-3 text-xs text-surface-400">{{ $t('match.create.optional_hint') }}</p>
+            <div class="flex flex-col gap-4">
+              <div class="flex flex-col gap-1">
+                <label class="text-sm text-surface-600">{{ $t('match.create.home_away_label') }}</label>
+                <Select
+                  v-model="form.homeAway"
+                  :options="homeAwayOptions"
+                  option-label="label"
+                  option-value="value"
+                  show-clear
+                  :placeholder="$t('match.list.filter.all')"
+                  class="w-full"
+                />
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-sm text-surface-600">{{ $t('match.create.kickoff_label') }}</label>
+                <DatePicker
+                  v-model="form.kickoffDate"
+                  show-time
+                  hour-format="24"
+                  date-format="yy/mm/dd"
+                  class="w-full"
+                />
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-sm text-surface-600">{{ $t('match.create.venue_label') }}</label>
+                <InputText
+                  v-model="form.venue"
+                  :placeholder="$t('match.create.venue_placeholder')"
+                  class="w-full"
+                />
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-sm text-surface-600">{{ $t('match.create.duration_label') }}</label>
+                <InputNumber
+                  v-model="form.durationMinutes"
+                  :min="1"
+                  :max="240"
+                  class="w-full"
+                />
+              </div>
+            </div>
+          </SectionCard>
+
+          <div class="flex justify-end gap-2">
+            <Button :label="$t('match.create.cancel')" text type="button" @click="cancel" />
+            <Button
+              :label="$t('match.create.submit')"
+              icon="pi pi-play"
+              type="submit"
+              :loading="submitting"
+            />
+          </div>
+          <p v-if="submitError" class="mt-3 text-right text-sm text-red-500" role="alert">
+            {{ submitError }}
+          </p>
+        </form>
       </div>
-      <p v-if="submitError" class="mt-3 text-right text-sm text-red-500" role="alert">
-        {{ submitError }}
-      </p>
-    </form>
+    </template>
   </div>
 </template>

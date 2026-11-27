@@ -27,6 +27,7 @@ const contractApi = useJobContractApi()
 const { success, error, warn } = useNotification()
 
 const teamSlug = computed(() => String(route.params.slug))
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const jobId = computed(() => Number(route.params.jobId))
 
 const job = ref<JobPostingResponse | null>(null)
@@ -252,223 +253,232 @@ async function loadPage() {
   }
 }
 
-onMounted(loadPage)
+onGateOk(loadPage)
 </script>
 
 <template>
-  <div class="container mx-auto max-w-4xl p-4">
-    <div
-      v-if="loading"
-      class="flex justify-center p-8"
-    >
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
       <LoadingBounce />
     </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+      <div class="container mx-auto max-w-4xl p-4">
+        <div
+          v-if="loading"
+          class="flex justify-center p-8"
+        >
+          <LoadingBounce />
+        </div>
 
-    <DashboardErrorState
-      v-else-if="jobLoadFailed"
-      testid="job-detail-error-state"
-      @retry="loadPage"
-    />
+        <DashboardErrorState
+          v-else-if="jobLoadFailed"
+          testid="job-detail-error-state"
+          @retry="loadPage"
+        />
 
-    <div
-      v-else-if="!job"
-      class="rounded border border-dashed border-surface-300 p-8 text-center text-surface-500 dark:border-surface-600"
-    >
-      {{ t('jobmatching.detail.notFound') }}
-    </div>
+        <div
+          v-else-if="!job"
+          class="rounded border border-dashed border-surface-300 p-8 text-center text-surface-500 dark:border-surface-600"
+        >
+          {{ t('jobmatching.detail.notFound') }}
+        </div>
 
-    <div v-else>
-      <!-- ヘッダ -->
-      <PageHeader :title="job.title" :back-to="`/teams/${teamSlug}/jobs`">
-        <JobStatusBadge
-          kind="posting"
-          :status="job.status"
-        />
-      </PageHeader>
-      <p
-        v-if="job.category"
-        class="mb-4 text-sm text-surface-500"
-      >
-        {{ job.category }}
-      </p>
+        <div v-else>
+          <!-- ヘッダ -->
+          <PageHeader :title="job.title" :back-to="`/teams/${teamSlug}/jobs`">
+            <JobStatusBadge
+              kind="posting"
+              :status="job.status"
+            />
+          </PageHeader>
+          <p
+            v-if="job.category"
+            class="mb-4 text-sm text-surface-500"
+          >
+            {{ job.category }}
+          </p>
 
-      <!-- アクションバー -->
-      <div
-        v-if="canEdit || canPublish || canClose || canCancel || canDelete"
-        class="mb-5 flex flex-wrap gap-2 rounded-lg bg-surface-100 p-3 dark:bg-surface-800"
-      >
-        <Button
-          v-if="canEdit"
-          :label="t('jobmatching.detail.edit')"
-          icon="pi pi-pencil"
-          severity="secondary"
-          @click="goToEdit"
-        />
-        <Button
-          v-if="canPublish"
-          :label="t('jobmatching.detail.publish')"
-          icon="pi pi-send"
-          :loading="busyAction === 'publish'"
-          :disabled="busyAction !== null"
-          @click="publish"
-        />
-        <Button
-          v-if="canClose"
-          :label="t('jobmatching.detail.close')"
-          icon="pi pi-lock"
-          severity="warn"
-          outlined
-          :loading="busyAction === 'close'"
-          :disabled="busyAction !== null"
-          @click="close"
-        />
-        <Button
-          v-if="canCancel"
-          :label="t('jobmatching.detail.cancel')"
-          icon="pi pi-times-circle"
-          severity="danger"
-          outlined
-          :loading="busyAction === 'cancel'"
-          :disabled="busyAction !== null"
-          @click="cancel"
-        />
-        <Button
-          v-if="canDelete"
-          :label="t('jobmatching.detail.delete')"
-          icon="pi pi-trash"
-          severity="danger"
-          text
-          :loading="busyAction === 'delete'"
-          :disabled="busyAction !== null"
-          @click="remove"
-        />
+          <!-- アクションバー -->
+          <div
+            v-if="canEdit || canPublish || canClose || canCancel || canDelete"
+            class="mb-5 flex flex-wrap gap-2 rounded-lg bg-surface-100 p-3 dark:bg-surface-800"
+          >
+            <Button
+              v-if="canEdit"
+              :label="t('jobmatching.detail.edit')"
+              icon="pi pi-pencil"
+              severity="secondary"
+              @click="goToEdit"
+            />
+            <Button
+              v-if="canPublish"
+              :label="t('jobmatching.detail.publish')"
+              icon="pi pi-send"
+              :loading="busyAction === 'publish'"
+              :disabled="busyAction !== null"
+              @click="publish"
+            />
+            <Button
+              v-if="canClose"
+              :label="t('jobmatching.detail.close')"
+              icon="pi pi-lock"
+              severity="warn"
+              outlined
+              :loading="busyAction === 'close'"
+              :disabled="busyAction !== null"
+              @click="close"
+            />
+            <Button
+              v-if="canCancel"
+              :label="t('jobmatching.detail.cancel')"
+              icon="pi pi-times-circle"
+              severity="danger"
+              outlined
+              :loading="busyAction === 'cancel'"
+              :disabled="busyAction !== null"
+              @click="cancel"
+            />
+            <Button
+              v-if="canDelete"
+              :label="t('jobmatching.detail.delete')"
+              icon="pi pi-trash"
+              severity="danger"
+              text
+              :loading="busyAction === 'delete'"
+              :disabled="busyAction !== null"
+              @click="remove"
+            />
+          </div>
+
+          <!-- 求人詳細 -->
+          <section class="mb-6 rounded-xl border border-surface-300 bg-surface-0 p-4 dark:border-surface-600 dark:bg-surface-800">
+            <h2 class="mb-2 text-base font-semibold">
+              {{ t('jobmatching.detail.sections.overview') }}
+            </h2>
+            <p class="mb-4 whitespace-pre-wrap text-sm text-surface-800 dark:text-surface-100">
+              {{ job.description }}
+            </p>
+
+            <dl class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+              <div>
+                <dt class="text-surface-500">
+                  {{ t('jobmatching.detail.fields.workLocationType') }}
+                </dt>
+                <dd>{{ t(`jobmatching.workLocationType.${job.workLocationType}`) }}</dd>
+              </div>
+              <div>
+                <dt class="text-surface-500">
+                  {{ t('jobmatching.detail.fields.workAddress') }}
+                </dt>
+                <dd>{{ job.workAddress || '-' }}</dd>
+              </div>
+              <div>
+                <dt class="text-surface-500">
+                  {{ t('jobmatching.detail.fields.workStartAt') }}
+                </dt>
+                <dd>{{ formatDateTime(job.workStartAt) }}</dd>
+              </div>
+              <div>
+                <dt class="text-surface-500">
+                  {{ t('jobmatching.detail.fields.workEndAt') }}
+                </dt>
+                <dd>{{ formatDateTime(job.workEndAt) }}</dd>
+              </div>
+              <div>
+                <dt class="text-surface-500">
+                  {{ t('jobmatching.detail.fields.rewardType') }}
+                </dt>
+                <dd>{{ t(`jobmatching.rewardType.${job.rewardType}`) }}</dd>
+              </div>
+              <div>
+                <dt class="text-surface-500">
+                  {{ t('jobmatching.detail.fields.baseRewardJpy') }}
+                </dt>
+                <dd class="font-semibold">
+                  {{ fmtJpy(job.baseRewardJpy) }}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-surface-500">
+                  {{ t('jobmatching.detail.fields.capacity') }}
+                </dt>
+                <dd>{{ t('jobmatching.card.capacityValue', { count: job.capacity }) }}</dd>
+              </div>
+              <div>
+                <dt class="text-surface-500">
+                  {{ t('jobmatching.detail.fields.applicationDeadlineAt') }}
+                </dt>
+                <dd>{{ formatDateTime(job.applicationDeadlineAt) }}</dd>
+              </div>
+              <div>
+                <dt class="text-surface-500">
+                  {{ t('jobmatching.detail.fields.visibilityScope') }}
+                </dt>
+                <dd>{{ t(`jobmatching.visibilityScope.${job.visibilityScope}`) }}</dd>
+              </div>
+              <div>
+                <dt class="text-surface-500">
+                  {{ t('jobmatching.detail.fields.publishAt') }}
+                </dt>
+                <dd>{{ formatDateTime(job.publishAt) }}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <!-- 応募者一覧 -->
+          <section>
+            <h2 class="mb-3 text-base font-semibold">
+              {{ t('jobmatching.detail.sections.applications', { count: applicationsMeta.total }) }}
+            </h2>
+            <ApplicationList
+              :applications="applications"
+              :loading="applicationsLoading"
+              :busy-application-id="busyApplicationId"
+              :contract-id-by-application-id="contractIdByApplicationId"
+              @accept="acceptApplication"
+              @reject="openRejectDialog"
+              @show-qr="showQrForContract"
+            />
+          </section>
+        </div>
+
+        <!-- 不採用理由ダイアログ -->
+        <Dialog
+          v-model:visible="rejectDialog"
+          :header="t('jobmatching.application.rejectDialog.title')"
+          modal
+          :style="{ width: '480px' }"
+        >
+          <p class="mb-3 text-sm text-surface-600 dark:text-surface-300">
+            {{ t('jobmatching.application.rejectDialog.description') }}
+          </p>
+          <Textarea
+            v-model="rejectReason"
+            :placeholder="t('jobmatching.application.rejectDialog.reasonPlaceholder')"
+            rows="4"
+            maxlength="500"
+            class="w-full"
+            auto-resize
+          />
+          <template #footer>
+            <Button
+              :label="t('jobmatching.application.rejectDialog.cancel')"
+              severity="secondary"
+              outlined
+              @click="rejectDialog = false"
+            />
+            <Button
+              :label="t('jobmatching.application.rejectDialog.confirm')"
+              severity="danger"
+              :loading="busyApplicationId !== null"
+              :disabled="busyApplicationId !== null"
+              @click="confirmReject"
+            />
+          </template>
+        </Dialog>
       </div>
-
-      <!-- 求人詳細 -->
-      <section class="mb-6 rounded-xl border border-surface-300 bg-surface-0 p-4 dark:border-surface-600 dark:bg-surface-800">
-        <h2 class="mb-2 text-base font-semibold">
-          {{ t('jobmatching.detail.sections.overview') }}
-        </h2>
-        <p class="mb-4 whitespace-pre-wrap text-sm text-surface-800 dark:text-surface-100">
-          {{ job.description }}
-        </p>
-
-        <dl class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-          <div>
-            <dt class="text-surface-500">
-              {{ t('jobmatching.detail.fields.workLocationType') }}
-            </dt>
-            <dd>{{ t(`jobmatching.workLocationType.${job.workLocationType}`) }}</dd>
-          </div>
-          <div>
-            <dt class="text-surface-500">
-              {{ t('jobmatching.detail.fields.workAddress') }}
-            </dt>
-            <dd>{{ job.workAddress || '-' }}</dd>
-          </div>
-          <div>
-            <dt class="text-surface-500">
-              {{ t('jobmatching.detail.fields.workStartAt') }}
-            </dt>
-            <dd>{{ formatDateTime(job.workStartAt) }}</dd>
-          </div>
-          <div>
-            <dt class="text-surface-500">
-              {{ t('jobmatching.detail.fields.workEndAt') }}
-            </dt>
-            <dd>{{ formatDateTime(job.workEndAt) }}</dd>
-          </div>
-          <div>
-            <dt class="text-surface-500">
-              {{ t('jobmatching.detail.fields.rewardType') }}
-            </dt>
-            <dd>{{ t(`jobmatching.rewardType.${job.rewardType}`) }}</dd>
-          </div>
-          <div>
-            <dt class="text-surface-500">
-              {{ t('jobmatching.detail.fields.baseRewardJpy') }}
-            </dt>
-            <dd class="font-semibold">
-              {{ fmtJpy(job.baseRewardJpy) }}
-            </dd>
-          </div>
-          <div>
-            <dt class="text-surface-500">
-              {{ t('jobmatching.detail.fields.capacity') }}
-            </dt>
-            <dd>{{ t('jobmatching.card.capacityValue', { count: job.capacity }) }}</dd>
-          </div>
-          <div>
-            <dt class="text-surface-500">
-              {{ t('jobmatching.detail.fields.applicationDeadlineAt') }}
-            </dt>
-            <dd>{{ formatDateTime(job.applicationDeadlineAt) }}</dd>
-          </div>
-          <div>
-            <dt class="text-surface-500">
-              {{ t('jobmatching.detail.fields.visibilityScope') }}
-            </dt>
-            <dd>{{ t(`jobmatching.visibilityScope.${job.visibilityScope}`) }}</dd>
-          </div>
-          <div>
-            <dt class="text-surface-500">
-              {{ t('jobmatching.detail.fields.publishAt') }}
-            </dt>
-            <dd>{{ formatDateTime(job.publishAt) }}</dd>
-          </div>
-        </dl>
-      </section>
-
-      <!-- 応募者一覧 -->
-      <section>
-        <h2 class="mb-3 text-base font-semibold">
-          {{ t('jobmatching.detail.sections.applications', { count: applicationsMeta.total }) }}
-        </h2>
-        <ApplicationList
-          :applications="applications"
-          :loading="applicationsLoading"
-          :busy-application-id="busyApplicationId"
-          :contract-id-by-application-id="contractIdByApplicationId"
-          @accept="acceptApplication"
-          @reject="openRejectDialog"
-          @show-qr="showQrForContract"
-        />
-      </section>
-    </div>
-
-    <!-- 不採用理由ダイアログ -->
-    <Dialog
-      v-model:visible="rejectDialog"
-      :header="t('jobmatching.application.rejectDialog.title')"
-      modal
-      :style="{ width: '480px' }"
-    >
-      <p class="mb-3 text-sm text-surface-600 dark:text-surface-300">
-        {{ t('jobmatching.application.rejectDialog.description') }}
-      </p>
-      <Textarea
-        v-model="rejectReason"
-        :placeholder="t('jobmatching.application.rejectDialog.reasonPlaceholder')"
-        rows="4"
-        maxlength="500"
-        class="w-full"
-        auto-resize
-      />
-      <template #footer>
-        <Button
-          :label="t('jobmatching.application.rejectDialog.cancel')"
-          severity="secondary"
-          outlined
-          @click="rejectDialog = false"
-        />
-        <Button
-          :label="t('jobmatching.application.rejectDialog.confirm')"
-          severity="danger"
-          :loading="busyApplicationId !== null"
-          :disabled="busyApplicationId !== null"
-          @click="confirmReject"
-        />
-      </template>
-    </Dialog>
+    </template>
   </div>
 </template>

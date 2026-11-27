@@ -15,6 +15,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 const route = useRoute()
 const router = useRouter()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const { t } = useI18n()
 
 const { listMatches } = useMatchApi()
@@ -107,7 +108,7 @@ function goToCreate(): void {
   void router.push({ path: `/teams/${teamSlug}/matches/new`, query: orgQuery.value })
 }
 
-onMounted(async () => {
+onGateOk(async () => {
   await loadOrganizationId()
   await load(true)
 })
@@ -116,6 +117,7 @@ onMounted(async () => {
 watch(
   () => route.query.org,
   async () => {
+    if (gateState.value !== 'ok') return
     await loadOrganizationId()
     await load(true)
   },
@@ -123,81 +125,90 @@ watch(
 </script>
 
 <template>
-  <div class="mx-auto max-w-3xl pb-24">
-    <div class="mb-1 flex items-center gap-3">
-      <PageHeader :title="$t('match.list.title')" size="sm" :back-to="`/teams/${teamSlug}`" />
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
-    <p class="mb-4 text-sm text-surface-500">{{ $t('match.list.subtitle') }}</p>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+      <div class="mx-auto max-w-3xl pb-24">
+        <div class="mb-1 flex items-center gap-3">
+          <PageHeader :title="$t('match.list.title')" size="sm" :back-to="`/teams/${teamSlug}`" />
+        </div>
+        <p class="mb-4 text-sm text-surface-500">{{ $t('match.list.subtitle') }}</p>
 
-    <!-- 組織選択（親組織が複数のときだけ表示） -->
-    <MatchOrgSelect :organizations="organizations" :org-id="orgId" :invalid="orgInvalid" />
+        <!-- 組織選択（親組織が複数のときだけ表示） -->
+        <MatchOrgSelect :organizations="organizations" :org-id="orgId" :invalid="orgInvalid" />
 
-    <!-- フィルタ -->
-    <div class="mb-4 flex flex-wrap items-center gap-3">
-      <div class="flex flex-col gap-1">
-        <label class="text-xs text-surface-500">{{ $t('match.list.filter.kind') }}</label>
-        <Select
-          v-model="kindFilter"
-          :options="kindOptions"
-          option-label="label"
-          option-value="value"
-          show-clear
-          :placeholder="$t('match.list.filter.all')"
-          class="w-40"
-        />
-      </div>
-      <div class="flex flex-col gap-1">
-        <label class="text-xs text-surface-500">{{ $t('match.list.filter.status') }}</label>
-        <Select
-          v-model="statusFilter"
-          :options="statusOptions"
-          option-label="label"
-          option-value="value"
-          show-clear
-          :placeholder="$t('match.list.filter.all')"
-          class="w-40"
-        />
-      </div>
-    </div>
+        <!-- フィルタ -->
+        <div class="mb-4 flex flex-wrap items-center gap-3">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-surface-500">{{ $t('match.list.filter.kind') }}</label>
+            <Select
+              v-model="kindFilter"
+              :options="kindOptions"
+              option-label="label"
+              option-value="value"
+              show-clear
+              :placeholder="$t('match.list.filter.all')"
+              class="w-40"
+            />
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-surface-500">{{ $t('match.list.filter.status') }}</label>
+            <Select
+              v-model="statusFilter"
+              :options="statusOptions"
+              option-label="label"
+              option-value="value"
+              show-clear
+              :placeholder="$t('match.list.filter.all')"
+              class="w-40"
+            />
+          </div>
+        </div>
 
-    <PageLoading v-if="loading && matches.length === 0" size="40px" />
+        <PageLoading v-if="loading && matches.length === 0" size="40px" />
 
-    <template v-else-if="!orgInvalid">
-      <div v-if="matches.length > 0" class="grid gap-3 sm:grid-cols-2">
-        <MatchCard
-          v-for="m in matches"
-          :key="m.id"
-          :match="m"
-          @select="onSelectMatch"
-        />
-      </div>
+        <template v-else-if="!orgInvalid">
+          <div v-if="matches.length > 0" class="grid gap-3 sm:grid-cols-2">
+            <MatchCard
+              v-for="m in matches"
+              :key="m.id"
+              :match="m"
+              @select="onSelectMatch"
+            />
+          </div>
 
-      <DashboardEmptyState
-        v-else
-        icon="pi pi-flag"
-        :message="$t('match.list.empty')"
-      />
+          <DashboardEmptyState
+            v-else
+            icon="pi pi-flag"
+            :message="$t('match.list.empty')"
+          />
 
-      <div v-if="hasMore" class="mt-4 flex justify-center">
-        <Button
-          :label="$t('match.list.load_more')"
-          :loading="loading"
-          text
-          @click="loadMore"
-        />
+          <div v-if="hasMore" class="mt-4 flex justify-center">
+            <Button
+              :label="$t('match.list.load_more')"
+              :loading="loading"
+              text
+              @click="loadMore"
+            />
+          </div>
+        </template>
+
+        <!-- FAB「＋試合を記録」（入口 2・§G.1a-2） -->
+        <button
+          type="button"
+          class="fixed bottom-6 right-6 flex min-h-[2.75rem] items-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-semibold text-primary-contrast shadow-lg transition hover:brightness-95"
+          :aria-label="$t('match.list.record_button')"
+          :disabled="orgInvalid"
+          @click="goToCreate"
+        >
+          <i class="pi pi-plus" />
+          <span>{{ $t('match.list.record_button') }}</span>
+        </button>
       </div>
     </template>
-
-    <!-- FAB「＋試合を記録」（入口 2・§G.1a-2） -->
-    <button
-      type="button"
-      class="fixed bottom-6 right-6 flex min-h-[2.75rem] items-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-semibold text-primary-contrast shadow-lg transition hover:brightness-95"
-      :aria-label="$t('match.list.record_button')"
-      :disabled="orgInvalid"
-      @click="goToCreate"
-    >
-      <i class="pi pi-plus" />
-      <span>{{ $t('match.list.record_button') }}</span>
-    </button>
   </div>
 </template>

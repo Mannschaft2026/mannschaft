@@ -8,6 +8,7 @@ definePageMeta({
 
 const route = useRoute()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const { loadPermissions } = useRoleAccess('team', teamSlug)
 
 const formApi = useFormApi()
@@ -44,7 +45,7 @@ function onSaved() {
   submissionListRef.value?.refresh()
 }
 
-onMounted(async () => {
+onGateOk(async () => {
   await loadPermissions()
   await loadPublishedTemplates()
 })
@@ -52,72 +53,81 @@ onMounted(async () => {
 
 <template>
   <div>
-    <div class="mb-4 flex items-center justify-between">
-      <PageHeader title="フォーム" />
-      <NuxtLink :to="`/teams/${teamSlug}/forms/templates`">
-        <Button label="テンプレート管理" icon="pi pi-cog" outlined />
-      </NuxtLink>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+      <div>
+        <div class="mb-4 flex items-center justify-between">
+          <PageHeader title="フォーム" />
+          <NuxtLink :to="`/teams/${teamSlug}/forms/templates`">
+            <Button label="テンプレート管理" icon="pi pi-cog" outlined />
+          </NuxtLink>
+        </div>
 
-    <!-- 公開中フォーム一覧 -->
-    <PageLoading v-if="loading" size="40px" />
+        <!-- 公開中フォーム一覧 -->
+        <PageLoading v-if="loading" size="40px" />
 
-    <div
-      v-else-if="templates.length > 0"
-      class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
-    >
-      <Card
-        v-for="tpl in templates"
-        :key="tpl.id"
-        class="cursor-pointer hover:shadow-lg"
-        @click="openSubmit(tpl.id)"
-      >
-        <template #title>
-          <div class="flex items-center gap-2">
-            <i v-if="tpl.content?.icon" :class="tpl.content.icon" :style="tpl.content?.color ? { color: tpl.content.color } : {}" />
-            <span>{{ tpl.content?.name }}</span>
-          </div>
-        </template>
-        <template #content>
-          <p v-if="tpl.content?.description" class="mb-2 text-sm text-surface-500">{{ tpl.content.description }}</p>
-          <div class="flex items-center justify-between text-xs text-surface-400">
-            <span
-              >提出数: {{ tpl.stats?.submissionCount
-              }}<span v-if="tpl.stats?.targetCount"> / {{ tpl.stats.targetCount }}</span></span
-            >
-            <span v-if="tpl.timeline?.deadline"
-              >期限: {{ formatDate(tpl.timeline.deadline) }}</span
-            >
-          </div>
-        </template>
-      </Card>
-    </div>
+        <div
+          v-else-if="templates.length > 0"
+          class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+        >
+          <Card
+            v-for="tpl in templates"
+            :key="tpl.id"
+            class="cursor-pointer hover:shadow-lg"
+            @click="openSubmit(tpl.id)"
+          >
+            <template #title>
+              <div class="flex items-center gap-2">
+                <i v-if="tpl.content?.icon" :class="tpl.content.icon" :style="tpl.content?.color ? { color: tpl.content.color } : {}" />
+                <span>{{ tpl.content?.name }}</span>
+              </div>
+            </template>
+            <template #content>
+              <p v-if="tpl.content?.description" class="mb-2 text-sm text-surface-500">{{ tpl.content.description }}</p>
+              <div class="flex items-center justify-between text-xs text-surface-400">
+                <span
+                  >提出数: {{ tpl.stats?.submissionCount
+                  }}<span v-if="tpl.stats?.targetCount"> / {{ tpl.stats.targetCount }}</span></span
+                >
+                <span v-if="tpl.timeline?.deadline"
+                  >期限: {{ formatDate(tpl.timeline.deadline) }}</span
+                >
+              </div>
+            </template>
+          </Card>
+        </div>
 
-    <DashboardErrorState
-      v-else-if="loadFailed"
-      testid="forms-list-error-state"
-      @retry="loadPublishedTemplates"
-    />
+        <DashboardErrorState
+          v-else-if="loadFailed"
+          testid="forms-list-error-state"
+          @retry="loadPublishedTemplates"
+        />
 
-    <DashboardEmptyState v-else icon="pi pi-file-edit" message="公開中のフォームはありません" />
+        <DashboardEmptyState v-else icon="pi pi-file-edit" message="公開中のフォームはありません" />
 
-    <!-- 自分の提出一覧 -->
-    <h2 class="mb-3 text-lg font-bold">自分の提出</h2>
-    <FormSubmissionList
-      ref="submissionListRef"
-      scope-type="team"
-      :scope-id="teamSlug"
-      :my-only="true"
-    />
+        <!-- 自分の提出一覧 -->
+        <h2 class="mb-3 text-lg font-bold">自分の提出</h2>
+        <FormSubmissionList
+          ref="submissionListRef"
+          scope-type="team"
+          :scope-id="teamSlug"
+          :my-only="true"
+        />
 
-    <!-- 回答ダイアログ -->
-    <FormSubmissionForm
-      v-if="selectedTemplateId"
-      v-model:visible="showSubmitDialog"
-      scope-type="team"
-      :scope-id="teamSlug"
-      :template-id="selectedTemplateId"
-      @saved="onSaved"
-    />
+        <!-- 回答ダイアログ -->
+        <FormSubmissionForm
+          v-if="selectedTemplateId"
+          v-model:visible="showSubmitDialog"
+          scope-type="team"
+          :scope-id="teamSlug"
+          :template-id="selectedTemplateId"
+          @saved="onSaved"
+        />
+      </div>
+    </template>
   </div>
 </template>

@@ -24,6 +24,7 @@ const FOLDER_MAX = 20
 
 const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const { t } = useI18n()
 const { isAdmin, isAdminOrDeputy, can, loadPermissions } = useRoleAccess('team', teamSlug)
 
@@ -109,7 +110,7 @@ async function onMembersUpdated() {
   await listRef.value?.refresh()
 }
 
-onMounted(async () => {
+onGateOk(async () => {
   const result = await loadPermissions()
   permissionsResolved.value = true
   if (!result.ok) {
@@ -125,51 +126,60 @@ onMounted(async () => {
 
 <template>
   <div>
-    <PageHeader
-      class="md:-mt-1.5"
-      :title="t('folders.title')"
-      :subtitle="canManage ? t('folders.list.remaining', { remaining }) : undefined"
-    >
-      <template #actions>
-        <Button
-          v-if="canManage"
-          :label="t('folders.create')"
-          icon="pi pi-plus"
-          :disabled="atLimit"
-          @click="openCreateDialog"
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+      <div>
+        <PageHeader
+          class="md:-mt-1.5"
+          :title="t('folders.title')"
+          :subtitle="canManage ? t('folders.list.remaining', { remaining }) : undefined"
+        >
+          <template #actions>
+            <Button
+              v-if="canManage"
+              :label="t('folders.create')"
+              icon="pi pi-plus"
+              :disabled="atLimit"
+              @click="openCreateDialog"
+            />
+          </template>
+        </PageHeader>
+
+        <!-- 権限取得中（権限なしは ScopeNotFound がシェルで本文を置き換える） -->
+        <PageLoading v-if="!permissionsResolved" />
+
+        <!-- フォルダ一覧 -->
+        <FriendFolderList
+          v-else-if="canManage"
+          ref="listRef"
+          scope-not-found-on-denied
+          :team-id="teamSlug"
+          :can-edit="canManage"
+          @edit="openEditDialog"
+          @delete="handleDelete"
+          @manage-members="openMembersPanel"
         />
-      </template>
-    </PageHeader>
 
-    <!-- 権限取得中（権限なしは ScopeNotFound がシェルで本文を置き換える） -->
-    <PageLoading v-if="!permissionsResolved" />
+        <!-- 作成・編集ダイアログ -->
+        <FriendFolderFormDialog
+          v-model="formDialogOpen"
+          :team-id="teamSlug"
+          :folder="editingFolder"
+          @saved="onFolderSaved"
+        />
 
-    <!-- フォルダ一覧 -->
-    <FriendFolderList
-      v-else-if="canManage"
-      ref="listRef"
-      scope-not-found-on-denied
-      :team-id="teamSlug"
-      :can-edit="canManage"
-      @edit="openEditDialog"
-      @delete="handleDelete"
-      @manage-members="openMembersPanel"
-    />
-
-    <!-- 作成・編集ダイアログ -->
-    <FriendFolderFormDialog
-      v-model="formDialogOpen"
-      :team-id="teamSlug"
-      :folder="editingFolder"
-      @saved="onFolderSaved"
-    />
-
-    <!-- メンバー管理パネル -->
-    <FriendFolderMembersPanel
-      v-model="membersPanelOpen"
-      :team-id="teamSlug"
-      :folder="membersPanelFolder"
-      @updated="onMembersUpdated"
-    />
+        <!-- メンバー管理パネル -->
+        <FriendFolderMembersPanel
+          v-model="membersPanelOpen"
+          :team-id="teamSlug"
+          :folder="membersPanelFolder"
+          @updated="onMembersUpdated"
+        />
+      </div>
+    </template>
   </div>
 </template>

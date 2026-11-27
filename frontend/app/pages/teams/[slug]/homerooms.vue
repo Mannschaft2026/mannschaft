@@ -9,6 +9,7 @@ definePageMeta({
 
 const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
+const { state: gateState, error: gateError, load: reloadGate } = useTeamAccessGate(teamSlug)
 const { userTimezone } = useDatetime()
 
 const currentYear = dayjs().tz(userTimezone.value).year()
@@ -21,33 +22,42 @@ const yearOptions = Array.from({ length: 5 }, (_, i) => ({
 </script>
 
 <template>
-  <div class="flex flex-col min-h-screen">
-    <header class="flex items-center gap-3 px-4 py-3 border-b border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900">
-      <BackButton :to="`/teams/${teamSlug}`" :label="$t('common.back')" />
-      <h1 class="text-lg font-bold m-0">
-        {{ $t('school.homeroom.title') }}
-      </h1>
-    </header>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+      <div class="flex flex-col min-h-screen">
+        <header class="flex items-center gap-3 px-4 py-3 border-b border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900">
+          <BackButton :to="`/teams/${teamSlug}`" :label="$t('common.back')" />
+          <h1 class="text-lg font-bold m-0">
+            {{ $t('school.homeroom.title') }}
+          </h1>
+        </header>
 
-    <main class="flex-1 p-4 max-w-2xl mx-auto w-full">
-      <!-- 年度選択 -->
-      <div class="mb-6">
-        <label class="text-sm text-surface-500 mb-1 block">
-          {{ $t('school.homeroom.academicYear') }}
-        </label>
-        <Select
-          v-model="selectedYear"
-          :options="yearOptions"
-          option-label="label"
-          option-value="value"
-          class="w-36"
-        />
+        <main class="flex-1 p-4 max-w-2xl mx-auto w-full">
+          <!-- 年度選択 -->
+          <div class="mb-6">
+            <label class="text-sm text-surface-500 mb-1 block">
+              {{ $t('school.homeroom.academicYear') }}
+            </label>
+            <Select
+              v-model="selectedYear"
+              :options="yearOptions"
+              option-label="label"
+              option-value="value"
+              class="w-36"
+            />
+          </div>
+
+          <HomeroomAssignmentPanel
+            :team-id="teamSlug"
+            :academic-year="selectedYear"
+          />
+        </main>
       </div>
-
-      <HomeroomAssignmentPanel
-        :team-id="teamSlug"
-        :academic-year="selectedYear"
-      />
-    </main>
+    </template>
   </div>
 </template>

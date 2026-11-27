@@ -22,6 +22,7 @@ const api = useJobPostingApi()
 const { error } = useNotification()
 
 const teamSlug = computed(() => String(route.params.slug))
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 
 const PAGE_SIZE = 20
 
@@ -88,86 +89,95 @@ function goToNew() {
   router.push(`/teams/${teamSlug.value}/jobs/new`)
 }
 
-onMounted(() => {
+onGateOk(() => {
   if (!teamSlug.value) return
   load(0)
 })
 </script>
 
 <template>
-  <div class="container mx-auto max-w-4xl p-4">
-    <PageHeader :title="t('jobmatching.list.teamTitle')">
-      <template #actions>
-        <Button
-          :label="t('jobmatching.list.createButton')"
-          icon="pi pi-plus"
-          @click="goToNew"
-        />
-      </template>
-    </PageHeader>
-
-    <!-- ステータスフィルタ -->
-    <div class="mb-4">
-      <SelectButton
-        v-model="statusFilter"
-        :options="statusOptions"
-        option-label="label"
-        option-value="value"
-        :allow-empty="false"
-        @change="onFilterChange"
-      />
-    </div>
-
-    <!-- ローディング -->
-    <div
-      v-if="loading"
-      class="flex justify-center p-8"
-    >
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
       <LoadingBounce />
     </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+      <div class="container mx-auto max-w-4xl p-4">
+        <PageHeader :title="t('jobmatching.list.teamTitle')">
+          <template #actions>
+            <Button
+              :label="t('jobmatching.list.createButton')"
+              icon="pi pi-plus"
+              @click="goToNew"
+            />
+          </template>
+        </PageHeader>
 
-    <!-- 取得失敗: 空状態とは別に描き分ける -->
-    <DashboardErrorState
-      v-else-if="loadFailed"
-      testid="team-jobs-list-error-state"
-      @retry="retryLoad"
-    />
+        <!-- ステータスフィルタ -->
+        <div class="mb-4">
+          <SelectButton
+            v-model="statusFilter"
+            :options="statusOptions"
+            option-label="label"
+            option-value="value"
+            :allow-empty="false"
+            @change="onFilterChange"
+          />
+        </div>
 
-    <!-- 空 -->
-    <div
-      v-else-if="jobs.length === 0"
-      class="rounded border border-dashed border-surface-300 p-8 text-center text-surface-500 dark:border-surface-600"
-    >
-      <i class="pi pi-briefcase mb-2 block text-3xl" />
-      <p>{{ t('jobmatching.list.empty') }}</p>
-    </div>
+        <!-- ローディング -->
+        <div
+          v-if="loading"
+          class="flex justify-center p-8"
+        >
+          <LoadingBounce />
+        </div>
 
-    <!-- 一覧 -->
-    <div
-      v-else
-      class="flex flex-col gap-3"
-    >
-      <div
-        v-for="job in jobs"
-        :key="job.id"
-        class="cursor-pointer"
-        @click="goToDetail(job.id)"
-      >
-        <JobPostingCard :job="job" />
+        <!-- 取得失敗: 空状態とは別に描き分ける -->
+        <DashboardErrorState
+          v-else-if="loadFailed"
+          testid="team-jobs-list-error-state"
+          @retry="retryLoad"
+        />
+
+        <!-- 空 -->
+        <div
+          v-else-if="jobs.length === 0"
+          class="rounded border border-dashed border-surface-300 p-8 text-center text-surface-500 dark:border-surface-600"
+        >
+          <i class="pi pi-briefcase mb-2 block text-3xl" />
+          <p>{{ t('jobmatching.list.empty') }}</p>
+        </div>
+
+        <!-- 一覧 -->
+        <div
+          v-else
+          class="flex flex-col gap-3"
+        >
+          <div
+            v-for="job in jobs"
+            :key="job.id"
+            class="cursor-pointer"
+            @click="goToDetail(job.id)"
+          >
+            <JobPostingCard :job="job" />
+          </div>
+        </div>
+
+        <!-- ページネーション -->
+        <div
+          v-if="meta.totalPages > 1"
+          class="mt-6 flex justify-center"
+        >
+          <Paginator
+            :rows="PAGE_SIZE"
+            :total-records="meta.total"
+            :first="currentPage * PAGE_SIZE"
+            @page="onPageChange"
+          />
+        </div>
       </div>
-    </div>
-
-    <!-- ページネーション -->
-    <div
-      v-if="meta.totalPages > 1"
-      class="mt-6 flex justify-center"
-    >
-      <Paginator
-        :rows="PAGE_SIZE"
-        :total-records="meta.total"
-        :first="currentPage * PAGE_SIZE"
-        @page="onPageChange"
-      />
-    </div>
+    </template>
   </div>
 </template>

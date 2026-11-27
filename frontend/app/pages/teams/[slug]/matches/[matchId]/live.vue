@@ -35,6 +35,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 const route = useRoute()
 const router = useRouter()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const matchId = String(route.params.matchId)
 const { t } = useI18n()
 const notification = useNotification()
@@ -199,7 +200,7 @@ function addManualPlayer(p: { name: string; jerseyNumber: number | null }): void
 }
 
 // === 初期ロード ===
-onMounted(async () => {
+onGateOk(async () => {
   // 試合は作成時の組織の下に保存されている。遷移元（一覧・作成・大会対戦表）が URL クエリ org で引き継ぐ
   const ctx = await resolveContext(teamSlug, { orgId: parseOrgQuery(route.query.org) })
   orgId.value = ctx?.orgId ?? null
@@ -557,287 +558,296 @@ function goOvertime(): void {
 </script>
 
 <template>
-  <div class="mx-auto max-w-2xl pb-28">
-    <div class="mb-2 flex items-center gap-2">
-      <PageHeader
-        :title="canRecord ? t('match.live.title') : t('match.live.spectator.title')"
-        size="sm"
-        :back-to="orgId !== null ? `/teams/${teamSlug}/matches?org=${orgId}` : `/teams/${teamSlug}/matches`"
-      />
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
-
-    <PageLoading v-if="loading" size="40px" />
-
-    <!-- org クエリが無効: 試合を読み込まず、組織を選び直させる（選択後は再読込して読み直す） -->
-    <MatchOrgSelect
-      v-else-if="orgInvalid"
-      :organizations="organizations"
-      :org-id="orgId"
-      invalid
-      @update:org-id="reloadNuxtApp()"
-    />
-
-    <!-- 観戦ビュー（記録権限なし＝read-only・STOMP 購読＋初期スナップショット差分追従・§G.17 / 07 §J） -->
-    <MatchSpectatorView
-      v-else-if="!canRecord"
-      :org-id="orgId"
-      :team-id="teamId"
-      :match-id="matchId"
-      :own-team-side="ownTeamSide"
-      :opponent-name="opponentName"
-    />
-
-    <template v-else-if="session">
-      <MatchScoreboard
-        :home-score="session.homeScore.value"
-        :away-score="session.awayScore.value"
-        :home-penalty-score="homePenaltyScore"
-        :away-penalty-score="awayPenaltyScore"
-        :opponent-name="opponentName"
-        :state="session.timer.state.value"
-        :clock="session.timer.displayClock.value"
-        :running="session.timer.isRunning.value"
-        class="mb-3"
-      />
-
-      <!-- タイマー操作（記録権限がある場合のみ）。競技で出し分け（前後半系 / クォーター系）。 -->
-      <!-- 採点制はタイマーを持たないため除外（07_scored.md §3）。 -->
-      <template v-if="canRecord && !isSetBased && !isScored">
-        <MatchTimerControlsBasketball
-          v-if="isBasketball"
-          class="mb-3"
-          :state="session.timer.state.value"
-          :current-minute="session.timer.currentMinute.value"
-          :running="session.timer.isRunning.value"
-          @advance="handleAdvance()"
-          @complete="complete()"
-          @overtime="goOvertime()"
-        />
-        <MatchTimerControls
-          v-else
-          class="mb-3"
-          :state="session.timer.state.value"
-          :current-minute="session.timer.currentMinute.value"
-          :running="session.timer.isRunning.value"
-          @advance="handleAdvance()"
-          @complete="complete()"
-          @extra="goExtra()"
-          @penalty="goPenalty()"
-        />
-      </template>
-
-      <!-- PK 戦スコア入力（前後半系・PENALTY_SHOOTOUT 中・記録権限あり時のみ）。 -->
-      <div
-        v-if="canRecord && !isBasketball && session.timer.state.value === 'PENALTY_SHOOTOUT'"
-        class="mb-3 rounded-lg border border-surface-200 bg-surface-50 p-3"
-      >
-        <p class="mb-2 text-sm font-medium">{{ t('match.live.penalty.title') }}</p>
-        <div class="flex items-center justify-center gap-4">
-          <div class="flex flex-col items-center gap-1">
-            <span class="text-xs text-surface-500">{{ t('match.live.scoreboard.home') }}</span>
-            <InputNumber
-              v-model="homePenaltyScore"
-              show-buttons
-              button-layout="horizontal"
-              :min="0"
-              :max="99"
-              :input-style="{ width: '3rem', textAlign: 'center' }"
-              :aria-label="t('match.live.penalty.home_label')"
-            />
-          </div>
-          <span class="text-lg font-bold text-surface-400">-</span>
-          <div class="flex flex-col items-center gap-1">
-            <span class="text-xs text-surface-500">{{ opponentName ?? t('match.live.scoreboard.away') }}</span>
-            <InputNumber
-              v-model="awayPenaltyScore"
-              show-buttons
-              button-layout="horizontal"
-              :min="0"
-              :max="99"
-              :input-style="{ width: '3rem', textAlign: 'center' }"
-              :aria-label="t('match.live.penalty.away_label')"
-            />
-          </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+      <div class="mx-auto max-w-2xl pb-28">
+        <div class="mb-2 flex items-center gap-2">
+          <PageHeader
+            :title="canRecord ? t('match.live.title') : t('match.live.spectator.title')"
+            size="sm"
+            :back-to="orgId !== null ? `/teams/${teamSlug}/matches?org=${orgId}` : `/teams/${teamSlug}/matches`"
+          />
         </div>
-        <p class="mt-2 text-center text-xs text-surface-500">{{ t('match.live.penalty.hint') }}</p>
+
+        <PageLoading v-if="loading" size="40px" />
+
+        <!-- org クエリが無効: 試合を読み込まず、組織を選び直させる（選択後は再読込して読み直す） -->
+        <MatchOrgSelect
+          v-else-if="orgInvalid"
+          :organizations="organizations"
+          :org-id="orgId"
+          invalid
+          @update:org-id="reloadNuxtApp()"
+        />
+
+        <!-- 観戦ビュー（記録権限なし＝read-only・STOMP 購読＋初期スナップショット差分追従・§G.17 / 07 §J） -->
+        <MatchSpectatorView
+          v-else-if="!canRecord"
+          :org-id="orgId"
+          :team-id="teamId"
+          :match-id="matchId"
+          :own-team-side="ownTeamSide"
+          :opponent-name="opponentName"
+        />
+
+        <template v-else-if="session">
+          <MatchScoreboard
+            :home-score="session.homeScore.value"
+            :away-score="session.awayScore.value"
+            :home-penalty-score="homePenaltyScore"
+            :away-penalty-score="awayPenaltyScore"
+            :opponent-name="opponentName"
+            :state="session.timer.state.value"
+            :clock="session.timer.displayClock.value"
+            :running="session.timer.isRunning.value"
+            class="mb-3"
+          />
+
+          <!-- タイマー操作（記録権限がある場合のみ）。競技で出し分け（前後半系 / クォーター系）。 -->
+          <!-- 採点制はタイマーを持たないため除外（07_scored.md §3）。 -->
+          <template v-if="canRecord && !isSetBased && !isScored">
+            <MatchTimerControlsBasketball
+              v-if="isBasketball"
+              class="mb-3"
+              :state="session.timer.state.value"
+              :current-minute="session.timer.currentMinute.value"
+              :running="session.timer.isRunning.value"
+              @advance="handleAdvance()"
+              @complete="complete()"
+              @overtime="goOvertime()"
+            />
+            <MatchTimerControls
+              v-else
+              class="mb-3"
+              :state="session.timer.state.value"
+              :current-minute="session.timer.currentMinute.value"
+              :running="session.timer.isRunning.value"
+              @advance="handleAdvance()"
+              @complete="complete()"
+              @extra="goExtra()"
+              @penalty="goPenalty()"
+            />
+          </template>
+
+          <!-- PK 戦スコア入力（前後半系・PENALTY_SHOOTOUT 中・記録権限あり時のみ）。 -->
+          <div
+            v-if="canRecord && !isBasketball && session.timer.state.value === 'PENALTY_SHOOTOUT'"
+            class="mb-3 rounded-lg border border-surface-200 bg-surface-50 p-3"
+          >
+            <p class="mb-2 text-sm font-medium">{{ t('match.live.penalty.title') }}</p>
+            <div class="flex items-center justify-center gap-4">
+              <div class="flex flex-col items-center gap-1">
+                <span class="text-xs text-surface-500">{{ t('match.live.scoreboard.home') }}</span>
+                <InputNumber
+                  v-model="homePenaltyScore"
+                  show-buttons
+                  button-layout="horizontal"
+                  :min="0"
+                  :max="99"
+                  :input-style="{ width: '3rem', textAlign: 'center' }"
+                  :aria-label="t('match.live.penalty.home_label')"
+                />
+              </div>
+              <span class="text-lg font-bold text-surface-400">-</span>
+              <div class="flex flex-col items-center gap-1">
+                <span class="text-xs text-surface-500">{{ opponentName ?? t('match.live.scoreboard.away') }}</span>
+                <InputNumber
+                  v-model="awayPenaltyScore"
+                  show-buttons
+                  button-layout="horizontal"
+                  :min="0"
+                  :max="99"
+                  :input-style="{ width: '3rem', textAlign: 'center' }"
+                  :aria-label="t('match.live.penalty.away_label')"
+                />
+              </div>
+            </div>
+            <p class="mt-2 text-center text-xs text-surface-500">{{ t('match.live.penalty.hint') }}</p>
+          </div>
+
+          <p v-if="isCompleted" class="mb-3 rounded bg-surface-100 p-2 text-xs text-surface-500">
+            {{ t('match.live.completed_notice') }}
+          </p>
+
+          <!--
+            大ボタン行（記録開始・スタメン設定）— 球技（連続時間制・セット制）のみ。
+            ターン制（SHOGI/GO）は結果入力シートが別途表示されるためタイムライン不要。
+          -->
+          <div v-if="canRecord && !isTurnBased && !isScored" class="mb-4 flex flex-col gap-2">
+            <Button
+              class="w-full !min-h-[3.5rem]"
+              :label="t('match.live.title')"
+              icon="pi pi-plus-circle"
+              @click="sheetVisible = true"
+            />
+            <Button
+              class="w-full"
+              severity="secondary"
+              outlined
+              icon="pi pi-users"
+              :label="t('match.live.grid.setup_button')"
+              @click="starterSetupVisible = true"
+            />
+          </div>
+
+          <!-- undo 帯（記録権限がある場合のみ・ターン制は不要） -->
+          <div v-if="canRecord && !isTurnBased && !isScored && session.recorder.canUndo.value" class="mb-3 flex justify-end">
+            <Button
+              text
+              severity="secondary"
+              icon="pi pi-undo"
+              :label="t('match.live.undo.button')"
+              @click="undo"
+            />
+          </div>
+
+          <!-- タイムライン（球技のみ・ターン制/採点制は不要） -->
+          <MatchTimeline
+            v-if="!isTurnBased && !isScored"
+            :events="session.recorder.events.value"
+            :own-team-side="ownTeamSide"
+            @select="onTimelineSelect"
+            @delete="onTimelineDelete"
+          />
+
+          <!-- 相手記録の編集案内 -->
+          <Dialog
+            v-model:visible="opponentNoticeVisible"
+            modal
+            :header="t('match.live.opponent_notice.title', { team: opponentName ?? t('match.live.scoreboard.away') })"
+            class="w-[90vw] max-w-md"
+          >
+            <MatchOpponentEventNotice
+              :team-name="opponentName ?? t('match.live.scoreboard.away')"
+              @close="opponentNoticeVisible = false"
+            />
+          </Dialog>
+
+          <!--
+            ボトムシート（記録 3 タップ）— 競技別シートを動的 import で出し分け（§G.16 完全準拠）。
+            静的 auto-import の直書きをやめ、解決済み競技モジュールの eventSheet
+            （defineAsyncComponent）を <component :is> で描画する。これによりサッカーユーザーは
+            バスケシート Vue を初期バンドルに同梱しない（Vite コード分割に乗る）。
+            emit はサッカー（goal/assist/card）とバスケ（score/stat/foul）で異なるが、各シートは
+            自分が emit するイベントだけを発火するため、両系統のハンドラを束ねて結線して問題ない。
+            記録権限がある場合のみマウント。ターン制・セット制は別パス（下記）なのでここは除外。
+          -->
+          <component
+            :is="sportModule.eventSheet"
+            v-if="canRecord && sportModule && !isSetBased && !isTurnBased && !isScored"
+            v-model:visible="sheetVisible"
+            :players="grid.players.value"
+            @goal="session.recordGoal"
+            @assist="session.recordAssist"
+            @card="session.recordCard"
+            @score="session.recordBasketScore"
+            @stat="session.recordBasketStat"
+            @foul="session.recordBasketFoul"
+            @substitution="session.recordSub"
+            @other="session.recordOther"
+          />
+
+          <!--
+            バレーボール セット入力シート（SET_BASED 競技のみ表示）（§G.16a）。
+            タイマーコントロールの代わりに常時表示され、セット進行・デュース判定・試合終了を制御する。
+            記録権限がある場合のみマウント。
+          -->
+          <MatchEventSheetVolleyball
+            v-if="canRecord && isSetBased && setTracker"
+            :tracker="setTracker!"
+            :own-team-side="ownTeamSide"
+            :opponent-name="opponentName"
+            :can-record="canRecord"
+            class="mb-4"
+            @complete-match="complete()"
+          />
+
+          <!--
+            団体戦ボード進捗（TURN_BASED かつ子ボードあり・6-④c）（§G.16a・§4.3）。
+            親 match を開いたとき、各ボードの確定状況（n/N）と記録導線を表示する。
+            個人戦（boards 空）では描画しない。
+          -->
+          <MatchBoardProgress
+            v-if="isTurnBased && isTeamMatch"
+            :boards="boards"
+            :sport="turnSport"
+            :can-record-all="canRecord"
+            class="mb-4"
+            @record-board="onRecordBoard"
+          />
+
+          <!--
+            ターン制 結果入力シート（TURN_BASED 競技のみ表示・6-④b/6-④c）（§G.16a）。
+            将棋/囲碁は「タイマー・タイムライン・選手グリッド」を使わず、
+            最小結果入力（勝者選択・勝ち方任意・手数任意・局面写真任意）UI で完結する。
+            記録権限の有無に関わらずマウント（canRecord prop で内部出し分け）。
+            完了は球技用 complete() ではなく completeTurnResult()（PUT /result + COMPLETED・6-④c 配線）。
+            局面写真は presign 方式で uploadPositionPhoto / deleteAttachment へ結線する。
+            団体戦の親（isTeamMatch）では結果入力シートは出さない（各ボード live で記録する）。
+          -->
+          <component
+            :is="sportModule.eventSheet"
+            v-if="isTurnBased && turnTracker && sportModule && !isTeamMatch"
+            :tracker="turnTracker!"
+            :own-team-side="ownTeamSide"
+            :opponent-name="opponentName"
+            :can-record="canRecord"
+            class="mb-4"
+            @complete-match="completeTurnResult()"
+            @upload-photo="onUploadPositionPhoto"
+            @remove-photo="onRemovePositionPhoto"
+          />
+
+          <!-- 既存採点の読み込み失敗警告（確定ブロック中・データ保護）。 -->
+          <p
+            v-if="isScored && scoreLoadFailed"
+            class="mb-3 rounded border border-red-300 bg-red-50 p-2 text-xs text-red-700"
+            role="alert"
+          >
+            {{ t('match.live.error.score_load_failed') }}
+          </p>
+
+          <!--
+            採点制 採点結果入力シート（SCORED 競技のみ表示・07_scored.md §9）。
+            フィギュア/体操は「タイマー・タイムライン・選手グリッド・セット」を使わず、
+            合計点入力（自/相手の Total Segment Score / 個人総合）UI で完結する（2 者対戦・MVP）。
+            記録権限の有無に関わらずマウント（canRecord prop で内部出し分け）。
+            完了は球技用 complete() ではなく completeScoredResult()（PUT /scored-result + COMPLETED）。
+            勝敗は合計点の大小で BE が導出する（FE は両合計点を送るだけ・§4.2）。
+          -->
+          <component
+            :is="sportModule.eventSheet"
+            v-if="isScored && scoreEntry && scoredComponents && scoredRanking && sportModule"
+            :tracker="scoreEntry!"
+            :component-tracker="scoredComponents!"
+            :ranking-tracker="scoredRanking!"
+            :own-team-side="ownTeamSide"
+            :opponent-name="opponentName"
+            :can-record="canRecord"
+            class="mb-4"
+            @complete-match="completeScoredResult()"
+            @complete-components="completeScoredComponents()"
+            @complete-ranking="completeScoredRanking()"
+          />
+
+          <!-- スタメン設定シート（記録権限がある場合のみマウント・ターン制/採点制は不要） -->
+          <MatchStarterSetup
+            v-if="canRecord && !isTurnBased && !isScored"
+            v-model:visible="starterSetupVisible"
+            :players="grid.players.value"
+            @toggle-starter="grid.toggleStarter($event)"
+            @all-starters="grid.setAllStarters()"
+            @clear-starters="grid.clearStarters()"
+            @copy-previous="copyPreviousStarters()"
+            @add-manual="addManualPlayer"
+          />
+        </template>
       </div>
-
-      <p v-if="isCompleted" class="mb-3 rounded bg-surface-100 p-2 text-xs text-surface-500">
-        {{ t('match.live.completed_notice') }}
-      </p>
-
-      <!--
-        大ボタン行（記録開始・スタメン設定）— 球技（連続時間制・セット制）のみ。
-        ターン制（SHOGI/GO）は結果入力シートが別途表示されるためタイムライン不要。
-      -->
-      <div v-if="canRecord && !isTurnBased && !isScored" class="mb-4 flex flex-col gap-2">
-        <Button
-          class="w-full !min-h-[3.5rem]"
-          :label="t('match.live.title')"
-          icon="pi pi-plus-circle"
-          @click="sheetVisible = true"
-        />
-        <Button
-          class="w-full"
-          severity="secondary"
-          outlined
-          icon="pi pi-users"
-          :label="t('match.live.grid.setup_button')"
-          @click="starterSetupVisible = true"
-        />
-      </div>
-
-      <!-- undo 帯（記録権限がある場合のみ・ターン制は不要） -->
-      <div v-if="canRecord && !isTurnBased && !isScored && session.recorder.canUndo.value" class="mb-3 flex justify-end">
-        <Button
-          text
-          severity="secondary"
-          icon="pi pi-undo"
-          :label="t('match.live.undo.button')"
-          @click="undo"
-        />
-      </div>
-
-      <!-- タイムライン（球技のみ・ターン制/採点制は不要） -->
-      <MatchTimeline
-        v-if="!isTurnBased && !isScored"
-        :events="session.recorder.events.value"
-        :own-team-side="ownTeamSide"
-        @select="onTimelineSelect"
-        @delete="onTimelineDelete"
-      />
-
-      <!-- 相手記録の編集案内 -->
-      <Dialog
-        v-model:visible="opponentNoticeVisible"
-        modal
-        :header="t('match.live.opponent_notice.title', { team: opponentName ?? t('match.live.scoreboard.away') })"
-        class="w-[90vw] max-w-md"
-      >
-        <MatchOpponentEventNotice
-          :team-name="opponentName ?? t('match.live.scoreboard.away')"
-          @close="opponentNoticeVisible = false"
-        />
-      </Dialog>
-
-      <!--
-        ボトムシート（記録 3 タップ）— 競技別シートを動的 import で出し分け（§G.16 完全準拠）。
-        静的 auto-import の直書きをやめ、解決済み競技モジュールの eventSheet
-        （defineAsyncComponent）を <component :is> で描画する。これによりサッカーユーザーは
-        バスケシート Vue を初期バンドルに同梱しない（Vite コード分割に乗る）。
-        emit はサッカー（goal/assist/card）とバスケ（score/stat/foul）で異なるが、各シートは
-        自分が emit するイベントだけを発火するため、両系統のハンドラを束ねて結線して問題ない。
-        記録権限がある場合のみマウント。ターン制・セット制は別パス（下記）なのでここは除外。
-      -->
-      <component
-        :is="sportModule.eventSheet"
-        v-if="canRecord && sportModule && !isSetBased && !isTurnBased && !isScored"
-        v-model:visible="sheetVisible"
-        :players="grid.players.value"
-        @goal="session.recordGoal"
-        @assist="session.recordAssist"
-        @card="session.recordCard"
-        @score="session.recordBasketScore"
-        @stat="session.recordBasketStat"
-        @foul="session.recordBasketFoul"
-        @substitution="session.recordSub"
-        @other="session.recordOther"
-      />
-
-      <!--
-        バレーボール セット入力シート（SET_BASED 競技のみ表示）（§G.16a）。
-        タイマーコントロールの代わりに常時表示され、セット進行・デュース判定・試合終了を制御する。
-        記録権限がある場合のみマウント。
-      -->
-      <MatchEventSheetVolleyball
-        v-if="canRecord && isSetBased && setTracker"
-        :tracker="setTracker!"
-        :own-team-side="ownTeamSide"
-        :opponent-name="opponentName"
-        :can-record="canRecord"
-        class="mb-4"
-        @complete-match="complete()"
-      />
-
-      <!--
-        団体戦ボード進捗（TURN_BASED かつ子ボードあり・6-④c）（§G.16a・§4.3）。
-        親 match を開いたとき、各ボードの確定状況（n/N）と記録導線を表示する。
-        個人戦（boards 空）では描画しない。
-      -->
-      <MatchBoardProgress
-        v-if="isTurnBased && isTeamMatch"
-        :boards="boards"
-        :sport="turnSport"
-        :can-record-all="canRecord"
-        class="mb-4"
-        @record-board="onRecordBoard"
-      />
-
-      <!--
-        ターン制 結果入力シート（TURN_BASED 競技のみ表示・6-④b/6-④c）（§G.16a）。
-        将棋/囲碁は「タイマー・タイムライン・選手グリッド」を使わず、
-        最小結果入力（勝者選択・勝ち方任意・手数任意・局面写真任意）UI で完結する。
-        記録権限の有無に関わらずマウント（canRecord prop で内部出し分け）。
-        完了は球技用 complete() ではなく completeTurnResult()（PUT /result + COMPLETED・6-④c 配線）。
-        局面写真は presign 方式で uploadPositionPhoto / deleteAttachment へ結線する。
-        団体戦の親（isTeamMatch）では結果入力シートは出さない（各ボード live で記録する）。
-      -->
-      <component
-        :is="sportModule.eventSheet"
-        v-if="isTurnBased && turnTracker && sportModule && !isTeamMatch"
-        :tracker="turnTracker!"
-        :own-team-side="ownTeamSide"
-        :opponent-name="opponentName"
-        :can-record="canRecord"
-        class="mb-4"
-        @complete-match="completeTurnResult()"
-        @upload-photo="onUploadPositionPhoto"
-        @remove-photo="onRemovePositionPhoto"
-      />
-
-      <!-- 既存採点の読み込み失敗警告（確定ブロック中・データ保護）。 -->
-      <p
-        v-if="isScored && scoreLoadFailed"
-        class="mb-3 rounded border border-red-300 bg-red-50 p-2 text-xs text-red-700"
-        role="alert"
-      >
-        {{ t('match.live.error.score_load_failed') }}
-      </p>
-
-      <!--
-        採点制 採点結果入力シート（SCORED 競技のみ表示・07_scored.md §9）。
-        フィギュア/体操は「タイマー・タイムライン・選手グリッド・セット」を使わず、
-        合計点入力（自/相手の Total Segment Score / 個人総合）UI で完結する（2 者対戦・MVP）。
-        記録権限の有無に関わらずマウント（canRecord prop で内部出し分け）。
-        完了は球技用 complete() ではなく completeScoredResult()（PUT /scored-result + COMPLETED）。
-        勝敗は合計点の大小で BE が導出する（FE は両合計点を送るだけ・§4.2）。
-      -->
-      <component
-        :is="sportModule.eventSheet"
-        v-if="isScored && scoreEntry && scoredComponents && scoredRanking && sportModule"
-        :tracker="scoreEntry!"
-        :component-tracker="scoredComponents!"
-        :ranking-tracker="scoredRanking!"
-        :own-team-side="ownTeamSide"
-        :opponent-name="opponentName"
-        :can-record="canRecord"
-        class="mb-4"
-        @complete-match="completeScoredResult()"
-        @complete-components="completeScoredComponents()"
-        @complete-ranking="completeScoredRanking()"
-      />
-
-      <!-- スタメン設定シート（記録権限がある場合のみマウント・ターン制/採点制は不要） -->
-      <MatchStarterSetup
-        v-if="canRecord && !isTurnBased && !isScored"
-        v-model:visible="starterSetupVisible"
-        :players="grid.players.value"
-        @toggle-starter="grid.toggleStarter($event)"
-        @all-starters="grid.setAllStarters()"
-        @clear-starters="grid.clearStarters()"
-        @copy-previous="copyPreviousStarters()"
-        @add-manual="addManualPlayer"
-      />
     </template>
   </div>
 </template>
