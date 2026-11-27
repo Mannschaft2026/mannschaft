@@ -90,6 +90,7 @@ class SupportAccessGrantServiceTest {
     private SupportAccessNoticeComposer composer;
     private SupportAccessNotificationOutboxStore notificationOutboxStore;
     private SupportAccessGrantService service;
+    private com.mannschaft.app.supportaccess.service.SupportAccessLockWaitScope lockWaitScope;
     /** 許可の時点の保護者の要否の再評価が返す値（既定は不要）。 */
     private SupportAccessGuardianRequirement currentGuardianRequirement = SupportAccessGuardianRequirement.notRequired();
 
@@ -109,10 +110,14 @@ class SupportAccessGrantServiceTest {
         composer = mock(SupportAccessNoticeComposer.class);
         notificationOutboxStore = mock(SupportAccessNotificationOutboxStore.class);
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+        // ロック待ちの区間（JDBC 接続へ直接 SET する）は単体では本体をそのまま実行する。区間自体は SupportAccessLockWaitScopeTest
+        lockWaitScope = mock(com.mannschaft.app.supportaccess.service.SupportAccessLockWaitScope.class);
+        lenient().when(lockWaitScope.call(any())).thenAnswer(inv ->
+                inv.<java.util.function.Supplier<?>>getArgument(0).get());
         // 書込トランザクション（Repository のみ）と、TX の外で動く入口（port・監査）に分けて組む
         service = new SupportAccessGrantService(
                 new SupportAccessGrantTransitionService(grantRepository, logRepository, outboxRepository,
-                        notificationOutboxRepository, emailOutboxService, eventPublisher, clock),
+                        notificationOutboxRepository, emailOutboxService, eventPublisher, clock, lockWaitScope),
                 userDirectory, affiliationPort, reauth, actingAs, auditRecorder, composer, notificationOutboxStore);
         lenient().when(notificationOutboxRepository.save(any(SupportAccessNotificationOutboxEntity.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
@@ -827,8 +832,7 @@ class SupportAccessGrantServiceTest {
             assertThat(count).isZero();
             assertThat(revokedMeanwhile.getStatus()).isEqualTo(SupportAccessStatus.REVOKED);
             verify(grantRepository).findByIdForUpdate(revokedMeanwhile.getId());
-            verify(grantRepository, org.mockito.Mockito.atLeastOnce()).shortenLockWait();
-            verify(grantRepository, org.mockito.Mockito.atLeastOnce()).restoreLockWait();
+            verify(lockWaitScope, org.mockito.Mockito.atLeastOnce()).call(any());
         }
 
         @Test
@@ -984,6 +988,67 @@ class SupportAccessGrantServiceTest {
             verify(composer).prepareEmail(GUARDIAN_ID,
                     com.mannschaft.app.supportaccess.SupportAccessNotificationKind.REQUESTED_TO_GUARDIAN,
                     OPERATOR_ID, TARGET_ID, REASON);
+        }
+    }
+
+    @Nested
+    @DisplayName("第3回検分対応: 失効バッチ・退会の照合は1件の失敗で残りを打ち切らない")
+    class ThirdReviewFixes {
+
+        @Test
+        @DisplayName("失効バッチ: ロック競合以外の失敗（DB の一時障害）の行があっても他の行は失効させ、失敗した行は開いたまま次の回に回る")
+        void 失効バッチは1件の失敗で打ち切らない() {
+            SupportAccessGrantEntity broken = pending().id(UUID.randomUUID())
+                    .requestExpiresAt(NOW.minus(java.time.Duration.ofMinutes(1))).build();
+            SupportAccessGrantEntity free = pending().id(UUID.randomUUID())
+                    .requestExpiresAt(NOW.minus(java.time.Duration.ofMinutes(1))).build();
+            given(grantRepository.findOverdueIds(NOW)).willReturn(List.of(broken.getId(), free.getId()));
+            given(grantRepository.findByIdForUpdate(broken.getId()))
+                    .willThrow(new org.springframework.dao.DataAccessResourceFailureException("Communications link failure"))
+                    .willReturn(Optional.of(broken));
+            givenGrant(free);
+
+            int count = service.expireOverdue();
+
+            assertThat(count).isEqualTo(1);
+            assertThat(free.getStatus()).isEqualTo(SupportAccessStatus.EXPIRED);
+            assertThat(broken.getStatus()).as("失敗した行は開いたまま（次の回が拾う）").isEqualTo(SupportAccessStatus.PENDING);
+
+            // 次の回: 同じ行がまた期限切れとして拾われ、今度は失効する（握りつぶしではなく再処理される）
+            given(grantRepository.findOverdueIds(NOW)).willReturn(List.of(broken.getId()));
+            assertThat(service.expireOverdue()).isEqualTo(1);
+            assertThat(broken.getStatus()).isEqualTo(SupportAccessStatus.EXPIRED);
+        }
+
+        @Test
+        @DisplayName("退会の照合: 1人の照会・取消の失敗で残りの本人の照合を打ち切らない（失敗した本人は次の回で再照合）")
+        void 退会の照合は1人の失敗で打ち切らない() {
+            Long otherTarget = 43L;
+            SupportAccessGrantEntity brokenTargetGrant = pending().id(UUID.randomUUID()).build();
+            SupportAccessGrantEntity otherGrant = pending().id(UUID.randomUUID()).targetUserId(otherTarget).build();
+            given(grantRepository.findByStatusIn(anyCollection())).willReturn(List.of(brokenTargetGrant, otherGrant));
+            given(userDirectory.findUser(TARGET_ID))
+                    .willThrow(new org.springframework.dao.DataAccessResourceFailureException("Communications link failure"))
+                    .willReturn(Optional.of(new SupportAccessUserSnapshot(TARGET_ID, "本人", "ACTIVE", true, false)));
+            given(userDirectory.findUser(otherTarget))
+                    .willReturn(Optional.of(new SupportAccessUserSnapshot(otherTarget, "別の本人", "ACTIVE", true, false)));
+            given(grantRepository.findOpenIdsByTargetUserId(eq(TARGET_ID), anyCollection()))
+                    .willReturn(List.of(brokenTargetGrant.getId()));
+            given(grantRepository.findOpenIdsByTargetUserId(eq(otherTarget), anyCollection()))
+                    .willReturn(List.of(otherGrant.getId()));
+            givenGrant(brokenTargetGrant);
+            givenGrant(otherGrant);
+
+            int revoked = service.reconcileWithdrawnTargets();
+
+            assertThat(revoked).isEqualTo(1);
+            assertThat(otherGrant.getEndedReason()).isEqualTo(SupportAccessEndedReason.WITHDRAWAL);
+            assertThat(brokenTargetGrant.isOpen()).as("失敗した本人の grant は開いたまま").isTrue();
+
+            // 次の回: 開いたままの grant の本人が再び照合され、取り消される
+            given(grantRepository.findByStatusIn(anyCollection())).willReturn(List.of(brokenTargetGrant));
+            assertThat(service.reconcileWithdrawnTargets()).isEqualTo(1);
+            assertThat(brokenTargetGrant.getEndedReason()).isEqualTo(SupportAccessEndedReason.WITHDRAWAL);
         }
     }
 }

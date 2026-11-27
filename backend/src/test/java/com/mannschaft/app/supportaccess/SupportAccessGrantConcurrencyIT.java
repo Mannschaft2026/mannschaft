@@ -349,6 +349,32 @@ class SupportAccessGrantConcurrencyIT extends AbstractMySqlIntegrationTest {
         assertThat(mailRows(grantId)).isEqualTo(1);
     }
 
+    @Autowired private com.mannschaft.app.supportaccess.service.SupportAccessLockWaitScope lockWaitScope;
+
+    @Test
+    @DisplayName("第3回検分 本体の書込が flush で制約違反になっても、同じ接続のロック待ちの上限は既定に戻っている")
+    void flushの失敗でもロック待ちは既定に戻る() {
+        long operator = IDS.incrementAndGet();
+        long target = IDS.incrementAndGet();
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
+        tx.executeWithoutResult(status -> {
+            Long globalDefault = jdbcTemplate.queryForObject("SELECT @@global.innodb_lock_wait_timeout", Long.class);
+            Long[] inside = new Long[1];
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> lockWaitScope.call(() -> {
+                inside[0] = jdbcTemplate.queryForObject("SELECT @@session.innodb_lock_wait_timeout", Long.class);
+                // 同じ運営者・本人の開いている依頼を2件（uq_support_access_grants_open に違反し、flush で初めて失敗する）
+                grantRepository.save(base(operator, target).status(SupportAccessStatus.PENDING).build());
+                grantRepository.save(base(operator, target).status(SupportAccessStatus.PENDING).build());
+                return null;
+            })).isInstanceOf(RuntimeException.class);
+            assertThat(inside[0]).as("区間の中は5秒").isEqualTo(5L);
+            // JPA の TX は同じ JDBC 接続を JdbcTemplate にも渡す: この接続がプールへ返る前に既定へ戻っている
+            assertThat(jdbcTemplate.queryForObject("SELECT @@session.innodb_lock_wait_timeout", Long.class))
+                    .as("flush の失敗後も既定に戻す").isEqualTo(globalDefault);
+            status.setRollbackOnly();
+        });
+    }
+
     @Autowired private com.mannschaft.app.mail.outbox.EmailOutboxService emailOutboxService;
 
     private static void await(CountDownLatch latch) {

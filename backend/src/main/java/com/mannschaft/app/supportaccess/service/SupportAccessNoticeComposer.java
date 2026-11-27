@@ -39,6 +39,15 @@ public class SupportAccessNoticeComposer {
     static final String SOURCE_TYPE = "SUPPORT_ACCESS_GRANT";
     public static final String TARGET_URL = "/settings/support-access";
     private static final String OPERATOR_URL = "/system-admin/support-access";
+    /**
+     * メール本文の HTML エスケープの文字コード（第3回検分）。UTF-8 を指定すると、HTML の特殊文字
+     * （{@code < > & " '}）だけを文字参照にし、それ以外（{@code ϑ}→{@code &thetasym;} のような HTML 4.01 の
+     * 名前付き参照）は UTF-8 のまま残す。指定しないと1文字が最大10バイトに膨らみ、理由1000字でメール outbox の
+     * payload 上限（8000 バイト）を超えて依頼自体が失敗した。指定後の最悪は1文字6バイト（{@code "}→{@code &quot;}）で、
+     * 理由1000字・表示名50字でも上限に収まる（SupportAccessNoticeComposerPayloadTest が6言語・全種別で確かめる）。
+     */
+    static final String HTML_ESCAPE_ENCODING = "UTF-8";
+
     /** メール outbox のテンプレート種別（スルー方式: subject / body を payload に詰める）。 */
     public static final String EMAIL_TEMPLATE = "SUPPORT_ACCESS_NOTICE";
     private static final String EMAIL_SOURCE_DOMAIN = "supportaccess";
@@ -114,9 +123,10 @@ public class SupportAccessNoticeComposer {
         String settingsUrl = baseUrl + TARGET_URL;
         String linkLabel = messageSource.getMessage("notification.supportaccess.email.link", null,
                 "許可・拒否・取消は設定画面で行えます（メールから直接許可することはできません）", locale);
-        String html = "<p>" + HtmlUtils.htmlEscape(body) + "</p>"
-                + "<p>" + HtmlUtils.htmlEscape(linkLabel) + "</p>"
-                + "<p><a href=\"" + HtmlUtils.htmlEscape(settingsUrl) + "\">" + HtmlUtils.htmlEscape(settingsUrl) + "</a></p>";
+        String html = "<p>" + HtmlUtils.htmlEscape(body, HTML_ESCAPE_ENCODING) + "</p>"
+                + "<p>" + HtmlUtils.htmlEscape(linkLabel, HTML_ESCAPE_ENCODING) + "</p>"
+                + "<p><a href=\"" + HtmlUtils.htmlEscape(settingsUrl, HTML_ESCAPE_ENCODING) + "\">"
+                + HtmlUtils.htmlEscape(settingsUrl, HTML_ESCAPE_ENCODING) + "</a></p>";
         return Optional.of(new PreparedEmail(recipientUserId, kind, emailLocale(locale), email,
                 "【Mannschaft】" + title, html));
     }

@@ -31,7 +31,7 @@ import java.util.UUID;
  * 状態を再検証して遷移する。順序は「運営者の依頼ロック（{@link #lockOperatorForRequest}）→ grant 行の主キー（id 昇順）
  * → 新しい行の INSERT（uq 索引）」に統一する。</p>
  *
- * <p>ロック待ちの上限は {@link #shortenLockWait}（{@code innodb_lock_wait_timeout} を5秒）で絞る。
+ * <p>ロック待ちの上限は {@code SupportAccessLockWaitScope}（{@code innodb_lock_wait_timeout} を5秒）で絞る。
  * {@code jakarta.persistence.lock.timeout} のミリ秒指定は Hibernate の MySQL 方言が解釈せず黙って無視するため
  * （{@code ConfirmableNotificationRepository} の経緯を参照）、接続のセッション変数で実効化する。</p>
  */
@@ -65,16 +65,6 @@ public interface SupportAccessGrantRepository extends JpaRepository<SupportAcces
             + "or (g.status = com.mannschaft.app.supportaccess.SupportAccessStatus.APPROVED "
             + "and g.expiresAt is not null and g.expiresAt <= :now) order by g.id")
     List<UUID> findOverdueIds(@Param("now") Instant now);
-
-    /** この接続のロック待ちの上限を5秒にする（遷移の TX の先頭で呼び、終わりに {@link #restoreLockWait} で戻す）。 */
-    @Modifying
-    @Query(value = "SET SESSION innodb_lock_wait_timeout = 5", nativeQuery = true)
-    int shortenLockWait();
-
-    /** ロック待ちの上限を既定に戻す（接続はプールで再利用されるため必ず戻す）。 */
-    @Modifying
-    @Query(value = "SET SESSION innodb_lock_wait_timeout = DEFAULT", nativeQuery = true)
-    int restoreLockWait();
 
     /**
      * 運営者単位の依頼の排他（1日20件の上限の count→insert を直列化する）。

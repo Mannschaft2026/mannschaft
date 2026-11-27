@@ -229,14 +229,29 @@ public class SupportAccessGrantService {
     /**
      * 退会リスナーの取りこぼしの照合（失効バッチから呼ぶ）。開いている grant の本人のうち、退会手続中・見つからない
      * 本人の grant を REVOKED(WITHDRAWAL) にする。リスナーが失敗・停止しても、次のバッチで必ず取り消される。
+     *
+     * <p>1人の失敗（ロック競合・DB の一時障害・本人の照会の失敗）で残りの本人の照合を打ち切らない（第3回検分）。
+     * 失敗した本人の grant は開いたまま残るため、次の回（5分後）の {@code findOpenTargetUserIds} が再び拾う
+     * （握りつぶしではなく次回へ回す）。失敗は1件ずつ記録し、最後に件数を ERROR で出して監視に載せる。
+     * その間も Validator が退会手続中の本人を毎リクエスト拒否するため、代理閲覧は成立しない。</p>
      */
     public int reconcileWithdrawnTargets() {
         int revoked = 0;
+        int failed = 0;
         for (Long targetUserId : transitions.findOpenTargetUserIds()) {
-            Optional<SupportAccessUserSnapshot> target = userDirectory.findUser(targetUserId);
-            if (target.isEmpty() || target.get().withdrawalPending()) {
-                revoked += revokeAllForWithdrawal(targetUserId);
+            try {
+                Optional<SupportAccessUserSnapshot> target = userDirectory.findUser(targetUserId);
+                if (target.isEmpty() || target.get().withdrawalPending()) {
+                    revoked += revokeAllForWithdrawal(targetUserId);
+                }
+            } catch (RuntimeException e) {
+                failed++;
+                log.warn("サポート閲覧: 退会の照合に失敗（次の回で再照合）targetUserId={}", targetUserId, e);
             }
+        }
+        if (failed > 0) {
+            log.error("サポート閲覧: 退会の照合で取り消せなかった本人がいる（次の回で再照合・要監視）失敗={}件, 取消={}件",
+                    failed, revoked);
         }
         return revoked;
     }
@@ -245,9 +260,14 @@ public class SupportAccessGrantService {
      * 5分ごとのバッチ: PENDING(依頼72h)・APPROVED(許可24h) の期限切れを EXPIRED にする。id をロックなしで集め、
      * 1件ずつ別 TX で主キーをロックして期限を再検証する。ロックが取れない行（本人が操作中など）は次の回に回す
      * （期限の判定自体は Validator が毎リクエスト時刻で行うため、失効の確定が5分遅れても延命されない）。
+     *
+     * <p>ロック競合以外の失敗（DB の一時障害・制約違反など）でも1件で残りを打ち切らない（第3回検分）。失敗した行は
+     * TX が巻き戻って開いたまま期限切れで残るため、次の回の {@code findOverdueIds} が再び拾う。失敗は1件ずつ記録し、
+     * 最後にロック競合以外の失敗件数を ERROR で出して監視に載せる（同じ行が毎回失敗し続ければ毎回出る）。</p>
      */
     public int expireOverdue() {
         int expired = 0;
+        int failed = 0;
         for (UUID grantId : transitions.findOverdueIds()) {
             try {
                 if (retryLockConflictOnce(() -> transitions.expireIfOverdue(grantId)).isPresent()) {
@@ -255,11 +275,17 @@ public class SupportAccessGrantService {
                     expired++;
                 }
             } catch (RuntimeException e) {
-                if (!isLockConflict(e)) {
-                    throw e;
+                if (isLockConflict(e)) {
+                    log.warn("サポート閲覧: 失効バッチでロックが取れない（次の回に回す）grantId={}, error={}", grantId, e.toString());
+                } else {
+                    failed++;
+                    log.warn("サポート閲覧: 失効バッチで失効できない（次の回に回す）grantId={}", grantId, e);
                 }
-                log.warn("サポート閲覧: 失効バッチでロックが取れない（次の回に回す）grantId={}, error={}", grantId, e.toString());
             }
+        }
+        if (failed > 0) {
+            log.error("サポート閲覧: 失効バッチで失効できなかった行がある（次の回で再処理・要監視）失敗={}件, 失効={}件",
+                    failed, expired);
         }
         return expired;
     }

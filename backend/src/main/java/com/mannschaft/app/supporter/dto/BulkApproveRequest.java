@@ -16,6 +16,6 @@ public class BulkApproveRequest {
 
     /** 承認する申請IDのリスト */
     @NotEmpty(message = "申請IDを1件以上指定してください")
-    @Size(max = 100, message = "一括承認は100件までです")
+    @Size(min = 1, max = 100, message = "一括承認は1件以上100件までです")
     private List<Long> applicationIds;
 }

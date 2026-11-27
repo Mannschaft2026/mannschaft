@@ -197748,7 +197748,7 @@
               "format": "int64"
             },
             "maxItems": 100,
-            "minItems": 0
+            "minItems": 1
           }
         }
       },

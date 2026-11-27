@@ -87,6 +87,7 @@ public class SupportAccessGrantTransitionService {
     private final EmailOutboxService emailOutboxService;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
+    private final SupportAccessLockWaitScope lockWaitScope;
 
     public SupportAccessGrantTransitionService(SupportAccessGrantRepository grantRepository,
                                                SupportAccessLogRepository logRepository,
@@ -94,7 +95,8 @@ public class SupportAccessGrantTransitionService {
                                                SupportAccessNotificationOutboxRepository notificationOutboxRepository,
                                                EmailOutboxService emailOutboxService,
                                                ApplicationEventPublisher eventPublisher,
-                                               Clock clock) {
+                                               Clock clock,
+                                               SupportAccessLockWaitScope lockWaitScope) {
         this.grantRepository = grantRepository;
         this.logRepository = logRepository;
         this.auditOutboxRepository = auditOutboxRepository;
@@ -102,6 +104,7 @@ public class SupportAccessGrantTransitionService {
         this.emailOutboxService = emailOutboxService;
         this.eventPublisher = eventPublisher;
         this.clock = clock;
+        this.lockWaitScope = lockWaitScope;
     }
 
     // ─── 運営側 ────────────────────────────────────────────
@@ -417,16 +420,12 @@ public class SupportAccessGrantTransitionService {
     }
 
     /**
-     * ロック待ちの上限を5秒にして本体を実行し、必ず既定に戻す（接続はプールで再利用される）。
+     * ロック待ちの上限を5秒にして本体を実行し、本体の書込を flush してから既定に戻す（{@link SupportAccessLockWaitScope}）。
+     * 戻しは Hibernate を通さず同じ JDBC 接続へ直接実行し、戻せなければ接続を破棄する（5秒のままプールへ返さない）。
      * 5秒を超える待ち・デッドロックは例外のまま呼び出し側へ返し、{@link SupportAccessGrantService} が1回だけ再試行する。
      */
     private <T> T withShortLockWait(Supplier<T> body) {
-        grantRepository.shortenLockWait();
-        try {
-            return body.get();
-        } finally {
-            grantRepository.restoreLockWait();
-        }
+        return lockWaitScope.call(body);
     }
 
     /** 遷移の監査 outbox と通知 outbox を書き、配送を起こすイベントを出す（どれもこのトランザクションに乗る）。 */
