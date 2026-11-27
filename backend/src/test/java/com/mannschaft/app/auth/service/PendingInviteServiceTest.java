@@ -201,6 +201,17 @@ class PendingInviteServiceTest {
         }
 
         @Test
+        @DisplayName("AC-0159-41: 非公開チームへのサポーター招待（TEAM_073）は UNAVAILABLE（在籍を作らない）")
+        void team073_unavailable() {
+            givenAcquired();
+            willThrow(new BusinessException(TeamErrorCode.TEAM_073)).given(facade).joinByInviteTokenHash(HASH, USER_ID);
+
+            assertThat(service.accept(USER_ID).status()).isEqualTo("UNAVAILABLE");
+            verify(store).completeAttempt(USER_ID, ATTEMPT, PendingInviteStatus.UNAVAILABLE, "TEAM_073");
+            verify(store, never()).revertAttempt(anyLong(), any());
+        }
+
+        @Test
         @DisplayName("AC7/§9-3: 原因不明の失敗は自分の attempt で PENDING に戻し、例外をそのまま返す（EXPIRED にしない）")
         void unknownFailure_revertsAndRethrows() {
             givenAcquired();
