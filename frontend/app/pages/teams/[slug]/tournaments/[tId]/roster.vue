@@ -30,6 +30,9 @@ onMounted(() => {
   }
 })
 
+// composable（内部で useToast を inject する）は setup で 1 回だけ取得し、試合 ID は実行時に ref から読む
+const rosterApi = useMatchRoster(tournamentId, selectedMatchId)
+
 const roster = ref<FixtureRosterResponse | null>(null)
 const loadingRoster = ref(false)
 
@@ -57,10 +60,10 @@ const { isAdminOrDeputy, loadPermissions } = useRoleAccess('team', teamSlug)
 // ===== メンバー表のロード =====
 
 async function loadRoster(matchId: number) {
-  const composable = useMatchRoster(tournamentId, matchId)
+  selectedMatchId.value = matchId
   loadingRoster.value = true
   try {
-    const data = await composable.getMyRoster()
+    const data = await rosterApi.getMyRoster()
     roster.value = data
     if (data) {
       playerRows.value = data.players.map(p => ({
@@ -115,13 +118,12 @@ async function loadTemplates() {
 
 async function applyTemplate() {
   if (!selectedMatchId.value || !selectedTemplateId.value) return
-  const composable = useMatchRoster(tournamentId, selectedMatchId.value)
   const req: ApplyRosterTemplateRequest = {
     templateId: selectedTemplateId.value,
     overwriteExisting: overwriteExisting.value,
   }
   try {
-    const data = await composable.applyTemplate(req)
+    const data = await rosterApi.applyTemplate(req)
     roster.value = data
     playerRows.value = data.players.map(p => ({
       userId: p.userId,
@@ -147,14 +149,13 @@ const submitting = ref(false)
 
 async function submitRoster() {
   if (!selectedMatchId.value) return
-  const composable = useMatchRoster(tournamentId, selectedMatchId.value)
   submitting.value = true
   const req: SubmitRosterRequest = {
     players: playerRows.value,
     staff: staffRows.value,
   }
   try {
-    const data = await composable.submitMyRoster(req)
+    const data = await rosterApi.submitMyRoster(req)
     roster.value = data
   } catch {
     // エラーはcomposable内で通知済み
