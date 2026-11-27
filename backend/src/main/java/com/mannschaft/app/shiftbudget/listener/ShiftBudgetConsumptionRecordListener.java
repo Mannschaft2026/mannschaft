@@ -121,12 +121,14 @@ public class ShiftBudgetConsumptionRecordListener {
                     slotRepository.findByScheduleIdOrderBySlotDateAscStartTimeAsc(scheduleId);
 
             for (ShiftSlotEntity slot : slots) {
+                // CMP-261115-1821: 枠の日付は一度だけ読む（他ドメイン Entity への参照箇所を増やさない。D-1 凍結）
+                java.time.LocalDate slotDate = slot.getSlotDate();
                 // 当日の allocation を解決（割当を持つ組織 → その組織の allocation）
-                Optional<ShiftBudgetAllocationEntity> allocOpt = resolveAllocationForSlot(teamId, slot.getSlotDate());
+                Optional<ShiftBudgetAllocationEntity> allocOpt = resolveAllocationForSlot(teamId, slotDate);
                 if (allocOpt.isEmpty()) {
                     log.warn("F08.7 hook: 該当 allocation 不在または計上先の組織を一意に決められない"
                                     + "（事前作成漏れの可能性）: teamId={}, slotDate={}, slotId={}",
-                            teamId, slot.getSlotDate(), slot.getId());
+                            teamId, slotDate, slot.getId());
                     unresolvedSkipped++;
                     outSkipped++;
                     continue;
@@ -149,9 +151,7 @@ public class ShiftBudgetConsumptionRecordListener {
                 BigDecimal slotHours = ShiftBudgetConsumptionService.calculateHours(
                         slot.getStartTime(), slot.getEndTime());
 
-                // CMP-261115-1821: 枠の値は一度だけ読む（他ドメイン Entity への参照箇所を増やさない。D-1 凍結）
                 Long slotId = slot.getId();
-                java.time.LocalDate slotDate = slot.getSlotDate();
                 for (Long userId : assignedUserIds) {
                     // CMP-261115-1821: 個別失敗の failed_event に実計上入力を残すため、採った時給を外で保持する
                     BigDecimal adoptedRate = null;
