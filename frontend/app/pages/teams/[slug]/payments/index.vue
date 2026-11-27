@@ -8,13 +8,14 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 const { t } = useI18n()
 const route = useRoute()
 const teamId = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamId)
 
 const { isAdmin, loadPermissions } = useRoleAccess('team', teamId)
 
 const loading = ref(true)
 const permissionDenied = ref(false)
 
-onMounted(async () => {
+onGateOk(async () => {
   try {
     await loadPermissions()
     if (!isAdmin.value) {
@@ -27,6 +28,13 @@ onMounted(async () => {
 </script>
 
 <template>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
   <div>
     <!--
       pageTransition(out-in) は単一要素ルートを要求する。ルート直下のコメント＋
@@ -47,5 +55,7 @@ onMounted(async () => {
       <div class="mb-4"><PageHeader :title="$t('payment.admin.pageTitle')" /></div>
       <PaymentAdminPanel scope-type="team" :scope-id="teamId" />
     </div>
+  </div>
+    </template>
   </div>
 </template>

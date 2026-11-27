@@ -14,7 +14,7 @@ const { handleApiError } = useErrorHandler()
 
 const teamSlug = computed(() => String(route.params.slug))
 const requestId = computed(() => String(route.params.id))
-const { data: request, teamId, loading, isAdminOrDeputy, state, loadError, load, fail } = useTeamPaymentPage(
+const { data: request, teamId, loading, isAdminOrDeputy, state, loadError, load, fail, gateState, gateError, reloadGate } = useTeamPaymentPage(
   teamSlug,
   async (id) => (await paymentRequestApi.getTeamPaymentRequest(id, requestId.value)).data,
   () => null as PaymentRequestResponse | null,
@@ -202,6 +202,13 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
   <div class="space-y-4 p-4 md:p-6">
     <PageHeader :title="request?.title || t('payment.membership.paymentRequest.title')" />
     <PageLoading v-if="loading" />
@@ -252,5 +259,7 @@ onUnmounted(() => {
       @update:visible="onPaymentDialogVisible"
       @confirmed="startPolling"
     />
+  </div>
+    </template>
   </div>
 </template>

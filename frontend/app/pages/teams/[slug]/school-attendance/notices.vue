@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import dayjs from 'dayjs'
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref } from 'vue'
 
 definePageMeta({
   layout: 'team',
@@ -9,6 +9,7 @@ definePageMeta({
 
 const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 
 const { noticeList, loading, processing, loadTeamNotices, acknowledge, apply } =
   useFamilyAttendanceNotice(teamSlug)
@@ -29,12 +30,19 @@ async function onApply(noticeId: number): Promise<void> {
   await apply(noticeId)
 }
 
-onMounted(async () => {
+onGateOk(async () => {
   await loadTeamNotices(selectedDate.value)
 })
 </script>
 
 <template>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
   <div class="flex flex-col min-h-screen">
     <header class="flex items-center gap-3 px-4 py-3 border-b border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900">
       <BackButton :to="`/teams/${teamSlug}/school-attendance`" :label="$t('common.back')" />
@@ -77,5 +85,7 @@ onMounted(async () => {
         />
       </template>
     </main>
+  </div>
+    </template>
   </div>
 </template>

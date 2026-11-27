@@ -8,7 +8,7 @@ const { t, locale } = useI18n()
 const paymentRequestApi = usePaymentRequestApi()
 
 const teamSlug = computed(() => String(route.params.slug))
-const { data: requests, loading, isAdminOrDeputy, state, loadError, load } = useTeamPaymentPage(
+const { data: requests, loading, isAdminOrDeputy, state, loadError, load, gateState, gateError, reloadGate } = useTeamPaymentPage(
   teamSlug,
   async (id) => (await paymentRequestApi.listTeamPaymentRequests(id)).data ?? [],
   () => [] as PaymentRequestResponse[],
@@ -43,6 +43,13 @@ function statusLabel(status: PaymentRequestStatus | undefined): string {
 </script>
 
 <template>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
   <div class="space-y-4 p-4 md:p-6">
     <PageHeader
       :title="t('payment.membership.paymentRequest.title')"
@@ -96,5 +103,7 @@ function statusLabel(status: PaymentRequestStatus | undefined): string {
         </SectionCard>
       </NuxtLink>
     </div>
+  </div>
+    </template>
   </div>
 </template>

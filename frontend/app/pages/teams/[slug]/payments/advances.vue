@@ -10,7 +10,7 @@ const notification = useNotification()
 const confirm = useConfirm()
 
 const teamSlug = computed(() => String(route.params.slug))
-const { data: advances, teamId, loading, state, loadError, load, fail } = useTeamPaymentPage(
+const { data: advances, teamId, loading, state, loadError, load, fail, gateState, gateError, reloadGate } = useTeamPaymentPage(
   teamSlug,
   async (id) => (await paymentRequestApi.listTeamPaymentAdvances(id)).data ?? [],
   () => [] as TeamPaymentAdvanceResponse[],
@@ -57,6 +57,13 @@ watch(teamSlug, () => { confirmingId.value = null }, { flush: 'sync' })
 </script>
 
 <template>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
   <div class="space-y-4 p-4 md:p-6">
     <ConfirmDialog />
     <PageHeader
@@ -102,5 +109,7 @@ watch(teamSlug, () => { confirmingId.value = null }, { flush: 'sync' })
         </div>
       </SectionCard>
     </div>
+  </div>
+    </template>
   </div>
 </template>

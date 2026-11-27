@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
 import { ref } from 'vue'
+import { flushPromises } from '@vue/test-utils'
 import SafetyTeamPage from '~/pages/teams/[slug]/safety.vue'
 
 /**
@@ -19,6 +20,7 @@ import SafetyTeamPage from '~/pages/teams/[slug]/safety.vue'
 
 const listSafetyChecks = vi.fn()
 
+mockNuxtImport('useTeamApi', () => () => ({ getTeam: vi.fn().mockResolvedValue({ data: { id: 'x', numericId: 1 } }) }))
 mockNuxtImport('useRoute', () => () => ({ params: { slug: 'team-1' } }))
 mockNuxtImport('useSafetyCheckApi', () => () => ({ listSafetyChecks }))
 mockNuxtImport('useNotification', () => () => ({ success: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() }))
@@ -69,7 +71,6 @@ describe('pages/teams/[slug]/safety.vue — 取得失敗時のエラー状態', 
 })
 
 async function flushMicrotasks() {
-  for (let i = 0; i < 5; i++) {
-    await Promise.resolve()
-  }
+  // チーム判定（useTeamAccessGate）の非同期を含めて流し切る
+  await flushPromises()
 }

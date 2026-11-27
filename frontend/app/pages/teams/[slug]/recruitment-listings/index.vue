@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import type { RecruitmentListingSummaryResponse } from '~/types/recruitment'
 
 definePageMeta({ layout: 'team', middleware: 'auth' })
@@ -11,6 +11,7 @@ const api = useRecruitmentApi()
 const { error } = useNotification()
 
 const teamSlug = computed(() => String(route.params.slug))
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const listings = ref<RecruitmentListingSummaryResponse[]>([])
 const loading = ref(false)
 const status = ref<string | undefined>(undefined)
@@ -35,10 +36,17 @@ function goToDetail(id: number) {
   router.push(`/recruitment-listings/${id}`)
 }
 
-onMounted(() => load())
+onGateOk(() => load())
 </script>
 
 <template>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
   <div class="container mx-auto max-w-4xl p-4">
     <div class="mb-4 flex items-center justify-between">
       <PageHeader :title="t('recruitment.page.teamRecruitmentListings')" />
@@ -65,5 +73,7 @@ onMounted(() => load())
         <RecruitmentListingCard :listing="listing" />
       </div>
     </div>
+  </div>
+    </template>
   </div>
 </template>

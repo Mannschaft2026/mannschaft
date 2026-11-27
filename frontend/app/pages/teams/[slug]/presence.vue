@@ -9,6 +9,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 
 const route = useRoute()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const { loadPermissions } = useRoleAccess('team', teamSlug)
 const presenceApi = usePresenceApi()
 const { showError } = useNotification()
@@ -112,7 +113,7 @@ function statusLabel(status: string): string {
   }
 }
 
-onMounted(async () => {
+onGateOk(async () => {
   await loadPermissions()
   await loadStatus()
 })
@@ -124,6 +125,13 @@ watch(activeTab, (tab) => {
 </script>
 
 <template>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
   <div>
     <div class="mb-4 flex items-center justify-between">
       <PageHeader title="在席管理" />
@@ -265,5 +273,7 @@ watch(activeTab, (tab) => {
         <Button label="外出する" severity="warn" @click="submitGoingOut" />
       </template>
     </Dialog>
+  </div>
+    </template>
   </div>
 </template>

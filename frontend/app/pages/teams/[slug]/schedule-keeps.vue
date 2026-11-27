@@ -16,6 +16,7 @@ definePageMeta({ middleware: 'auth' })
 
 const route = useRoute()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const { t } = useI18n()
 const api = useScheduleKeepApi()
 const { isMember, isAdminOrDeputy, loadPermissions } = useRoleAccess('team', teamSlug)
@@ -200,7 +201,7 @@ watch(statusFilter, () => {
   fetchKeeps()
 })
 
-onMounted(async () => {
+onGateOk(async () => {
   const result = await loadPermissions()
   permissionsLoaded.value = result.ok
   await fetchKeeps()
@@ -208,6 +209,13 @@ onMounted(async () => {
 </script>
 
 <template>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
   <div class="mx-auto max-w-3xl p-6">
     <PageHeader :title="t('scheduleKeep.title')" size="sm" help @help="showGuide = true" />
     <p class="mb-4 text-sm text-surface-600 dark:text-surface-300">
@@ -354,5 +362,7 @@ onMounted(async () => {
     </Dialog>
 
     <ScheduleKeepGuideModal v-model:visible="showGuide" />
+  </div>
+    </template>
   </div>
 </template>

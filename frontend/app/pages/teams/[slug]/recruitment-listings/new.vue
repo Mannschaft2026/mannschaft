@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import type {
   CreateRecruitmentListingRequest,
   RecruitmentCategoryResponse,
@@ -15,6 +15,7 @@ const api = useRecruitmentApi()
 const { success, error } = useNotification()
 
 const teamSlug = computed(() => String(route.params.slug))
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const categories = ref<RecruitmentCategoryResponse[]>([])
 const loading = ref(false)
 
@@ -87,10 +88,17 @@ async function onSubmit(body: CreateRecruitmentListingRequest) {
   }
 }
 
-onMounted(() => loadCategories())
+onGateOk(() => loadCategories())
 </script>
 
 <template>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
   <div class="container mx-auto max-w-2xl p-4">
     <PageHeader :title="t('market.page.newListing')" class="mb-4" />
     <!-- 市拡張: 地域・公開範囲・フレンド宛先 -->
@@ -114,5 +122,7 @@ onMounted(() => loadCategories())
       :scope-id="teamSlug"
       @submit="onSubmit"
     />
+  </div>
+    </template>
   </div>
 </template>
