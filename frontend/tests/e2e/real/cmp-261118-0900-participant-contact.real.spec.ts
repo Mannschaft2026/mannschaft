@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs'
 import path from 'node:path'
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Browser, type Page } from '@playwright/test'
 import {
-  API, FE, createActor, createOrg, createTeam, joinAsMember, recordAsset, must, apiAs, openAs, gotoAndHydrate, RUN,
+  API, FE, createActor, createOrg, createTeam, joinAsMember, recordAsset, ROLE_ID, must, apiAs, openAs, gotoAndHydrate, RUN,
   type Actor, type Scope,
 } from './helpers/n1p1-world'
 import { OWN_LEDGER, WORLD_FILE } from './helpers/cmp0900-global-teardown'
@@ -27,7 +27,7 @@ mkdirSync(EVID, { recursive: true })
 const LOG = path.join(EVID, 'responses.jsonl')
 
 interface World {
-  orgAdmin: Actor; a1: Actor; a3: Actor; c1: Actor; z: Actor; w1: Actor
+  orgAdmin: Actor; a1: Actor; a3: Actor; a4: Actor; c1: Actor; z: Actor; w1: Actor
   orgO: Scope; teamA: Scope; teamC: Scope; teamW: Scope
   tId: number; d1: number; pW: number
   tName: string
@@ -81,12 +81,16 @@ async function buildWorld() {
   const orgAdmin = await createActor('og')
   const a1 = await createActor('a1')
   const a3 = await createActor('a3')
+  const a4 = await createActor('a4')
   const c1 = await createActor('c1')
   const z = await createActor('zz')
   const w1 = await createActor('w1')
   const orgO = await createOrg(orgAdmin, `0900主催${RUN}`, 'PUBLIC', OWN_LEDGER)
   const teamA = await createTeam(a1, `0900参加A${RUN}`, 'PUBLIC', OWN_LEDGER)
   await joinAsMember('teams', a1, teamA.slug, a3)
+  // a4 は参加チーム A の SUPPORTER（招待トークンの roleId で付与）
+  const supporterToken = await must(a1, 'POST', `/api/v1/teams/${teamA.slug}/invite-tokens`, { roleId: ROLE_ID.SUPPORTER })
+  await must(a4, 'POST', `/api/v1/invite/${supporterToken.data.token}/join`)
   const teamC = await createTeam(c1, `0900非参加C${RUN}`, 'PUBLIC', OWN_LEDGER)
   const teamW = await createTeam(w1, `0900辞退W${RUN}`, 'PUBLIC', OWN_LEDGER)
   for (const [t, admin] of [[teamA, a1], [teamC, c1], [teamW, w1]] as const) {
@@ -113,7 +117,7 @@ async function buildWorld() {
   const msg = await must(a1, 'POST', `/api/v1/chat/channels/${chat.refId}/messages`, { body: chatSeed })
   await must(a1, 'POST', `/api/v1/chat/channels/${chat.refId}/messages`, { body: `seedChatReply-${RUN}`, parentId: msg.data.id })
   W = {
-    orgAdmin, a1, a3, c1, z, w1, orgO, teamA, teamC, teamW, tId, d1, pW, tName, run: RUN,
+    orgAdmin, a1, a3, a4, c1, z, w1, orgO, teamA, teamC, teamW, tId, d1, pW, tName, run: RUN,
     bulletinRef: bull.refId, chatRef: chat.refId,
     thSeed, thSeedId: Number(th.data.id), chatSeed, chatSeedId: Number(msg.data.id),
   }
@@ -193,8 +197,8 @@ test('10 [AC-P01/P23/P24/P25/P28] 参加チーム ADMIN: カード→連絡ス�
 })
 
 // ============================================================ 2. 参加チーム MEMBER（VIEW）
-test('11 [AC-P03/P24/P25/P28] 参加チーム MEMBER: 閲覧のみ（新規作成・返信・送信・スレッド返信の UI が出ない）', async ({ browser }) => {
-  const { context, page } = await openAs(browser, W.a3)
+async function expectViewOnly(browser: Browser, actor: Actor, who: string) {
+  const { context, page } = await openAs(browser, actor)
   const sent: string[] = []
   page.on('request', (r) => { if (r.method() === 'POST' && /\/(replies|messages)$/.test(new URL(r.url()).pathname)) sent.push(new URL(r.url()).pathname) })
   await gotoAndHydrate(page, `/teams/${W.teamA.slug}/tournaments`)
@@ -204,22 +208,22 @@ test('11 [AC-P03/P24/P25/P28] 参加チーム MEMBER: 閲覧のみ（新規作�
   const res = await list
   expect(res.status()).toBe(200)
   const body = await res.json()
-  log({ step: 'a3 list', levels: body.data.spaces.map((s: { scopeType: string; spaceKind: string; accessLevel: string }) => `${s.scopeType}/${s.spaceKind}=${s.accessLevel}`) })
+  log({ step: `${who} list`, levels: body.data.spaces.map((s: { scopeType: string; spaceKind: string; accessLevel: string }) => `${s.scopeType}/${s.spaceKind}=${s.accessLevel}`) })
   expect(body.data.spaces.length).toBe(4)
   expect(body.data.spaces.every((s: { accessLevel: string }) => s.accessLevel === 'VIEW')).toBe(true)
   await expect(page.getByText(W.thSeed).first()).toBeVisible()
   await expect(page.getByText('閲覧のみです。投稿できるのはチームの代表・副代表と主催者です')).toBeVisible()
   expect(await page.getByRole('button', { name: '新規スレッド' }).count()).toBe(0)
-  await shot(page, '11-a3-bulletin-viewonly')
+  await shot(page, `11-${who}-bulletin-viewonly`)
   // スレッドを開く: 返信欄もロック表示も出ない
   await page.getByText(W.thSeed).first().click()
   await expect(page.getByText(`${W.thSeed} の本文`).first()).toBeVisible()
   await expect(page.getByPlaceholder('返信を入力...')).toHaveCount(0)
   await expect(page.getByText('このスレッドはロックされています')).toHaveCount(0)
-  await shot(page, '11-a3-thread-no-reply')
+  await shot(page, `11-${who}-thread-no-reply`)
   // API 直呼びの返信は 403 TOUR_031
-  const direct = await apiAs(W.a3, 'POST', `/api/v1/bulletin/threads/${W.thSeedId}/replies`, { body: 'a3 直呼び' })
-  log({ step: 'a3 direct reply', status: direct.status, body: JSON.stringify(direct.body).slice(0, 300) })
+  const direct = await apiAs(actor, 'POST', `/api/v1/bulletin/threads/${W.thSeedId}/replies`, { body: `${who} 直呼び` })
+  log({ step: `${who} direct reply`, status: direct.status, body: JSON.stringify(direct.body).slice(0, 300) })
   expect(direct.status).toBe(403)
   expect(JSON.stringify(direct.body)).toContain('TOUR_031')
   // チャット: 送信入力は無効、スレッドを開いても返信入力が無い
@@ -228,19 +232,28 @@ test('11 [AC-P03/P24/P25/P28] 参加チーム MEMBER: 閲覧のみ（新規作�
   await expect(input).toBeVisible({ timeout: 60_000 })
   await expect(input).toBeDisabled()
   await expect(page.getByText(W.chatSeed).first()).toBeVisible()
-  await shot(page, '11-a3-chat-disabled')
+  await shot(page, `11-${who}-chat-disabled`)
   await page.getByTestId('thread-reply-btn').first().click()
   await expect(page.getByText(`seedChatReply-${W.run}`).first()).toBeVisible()
   await expect(page.getByTestId('thread-reply-input')).toHaveCount(0)
   await page.keyboard.press('Enter')
-  await shot(page, '11-a3-chat-thread-no-reply')
-  expect(sent, 'a3 の画面操作で投稿系リクエストが出ていない').toEqual([])
+  await shot(page, `11-${who}-chat-thread-no-reply`)
+  expect(sent, `${who} の画面操作で投稿系リクエストが出ていない`).toEqual([])
   // 送信 API 直呼びも 403
-  const directChat = await apiAs(W.a3, 'POST', `/api/v1/chat/channels/${W.chatRef}/messages`, { body: 'a3 直呼びチャット' })
-  log({ step: 'a3 direct chat', status: directChat.status, body: JSON.stringify(directChat.body).slice(0, 300) })
+  const directChat = await apiAs(actor, 'POST', `/api/v1/chat/channels/${W.chatRef}/messages`, { body: `${who} 直呼びチャット` })
+  log({ step: `${who} direct chat`, status: directChat.status, body: JSON.stringify(directChat.body).slice(0, 300) })
   expect(directChat.status).toBe(403)
   expect(JSON.stringify(directChat.body)).toContain('TOUR_031')
   await context.close()
+}
+
+test('11 [AC-P03/P24/P25/P28] 参加チーム MEMBER: 閲覧のみ（新規作成・返信・送信・スレッド返信の UI が出ない）', async ({ browser }) => {
+  await expectViewOnly(browser, W.a3, 'a3')
+})
+
+// AC-P04: SUPPORTER は MEMBER と同じ（設計書 01_communication.md §10.4。BE は memberships の有効行で参加チーム会員を判定し、投稿者は ADMIN/DEPUTY_ADMIN のみ）
+test('11b [AC-P04] 参加チーム SUPPORTER: MEMBER と同じ閲覧のみ（4 件すべて VIEW・投稿 UI なし・直呼びは 403 TOUR_031）', async ({ browser }) => {
+  await expectViewOnly(browser, W.a4, 'a4')
 })
 
 // ============================================================ 3. 非参加・部外者・未ログイン
