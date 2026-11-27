@@ -232,7 +232,7 @@ const ButtonStub = defineComponent({
   emits: ['click'],
   template: '<button :disabled="disabled" @click="$emit(\'click\', $event)">{{ label }}<slot /></button>',
 })
-const SectionCardStub = defineComponent({ template: '<section><slot name="header-actions" /><slot /></section>' })
+const SectionCardStub = defineComponent({ props: { title: { type: String, default: '' } }, template: '<section><slot name="header" /><slot /></section>' })
 const MessageStub = defineComponent({ template: '<div class="message-stub" v-bind="$attrs"><slot /></div>' })
 
 const mountOpts = {
@@ -1500,5 +1500,12 @@ describe('ConfirmableNotificationSender 送信前提と未確認者表示の記�
     for (const call of [...mocks.createDraft.mock.calls, ...mocks.updateDraft.mock.calls]) {
       expect(call.at(-1)).not.toHaveProperty('unconfirmedVisibility')
     }
+  })
+
+  it('見出し横の「?」ボタンが表示され、押すと使い方ダイアログが開く（SectionCard の実スロットは header のみ）', async () => {
+    const wrapper = await mountSender()
+    expect(wrapper.find('dialog-stub').attributes('visible')).not.toBe('true')
+    await wrapper.find('[data-testid="confirmable-help-open"]').trigger('click')
+    expect(wrapper.find('dialog-stub').attributes('visible')).toBe('true')
   })
 })

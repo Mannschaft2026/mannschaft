@@ -151,8 +151,13 @@ onMounted(async () => {
 </script>
 
 <template>
-  <SectionCard :title="$t('confirmable.send')">
-    <template #header-actions><Button icon="pi pi-question-circle" text rounded :aria-label="$t('button.help')" @click="showHelp = true" /></template>
+  <SectionCard>
+    <template #header>
+      <div class="flex items-center justify-between gap-2">
+        <h2 class="text-lg font-semibold tracking-tight">{{ $t('confirmable.send') }}</h2>
+        <Button icon="pi pi-question-circle" text rounded :aria-label="$t('button.help')" data-testid="confirmable-help-open" @click="showHelp = true" />
+      </div>
+    </template>
     <div class="flex flex-col gap-4">
       <section class="flex flex-col gap-2" :aria-label="$t('confirmable.draft.list_title')">
         <div class="flex flex-wrap items-center justify-between gap-2">
