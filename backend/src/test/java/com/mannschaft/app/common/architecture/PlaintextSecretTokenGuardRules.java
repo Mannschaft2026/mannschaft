@@ -312,6 +312,40 @@ final class PlaintextSecretTokenGuardRules {
         return type.isInterface() && type.isAssignableTo(Repository.class) && !type.isEquivalentTo(Repository.class);
     }
 
+    // ---------------------------------------------------------------- 戦役の債務ゼロ（W3）
+
+    /**
+     * 指定した戦役の {@code @PlaintextTokenDebt} が付いたフィールド・メソッドを列挙する（債務の残高）。
+     * 免除が有効かどうかは問わない（付いていること自体を数える）。
+     *
+     * @param classes 走査するクラス
+     * @param cmp     戦役 ID
+     * @return {@code cmp} が一致する債務注釈の付いた要素の識別子（フィールドは「クラス.名前」、メソッドは「クラス#名前」）
+     */
+    static List<String> debtsOf(JavaClasses classes, String cmp) {
+        List<String> debts = new ArrayList<>();
+        for (JavaClass type : classes) {
+            for (JavaField field : type.getFields()) {
+                if (hasDebtOf(field, cmp)) {
+                    debts.add(fieldId(field));
+                }
+            }
+            for (JavaMethod method : type.getMethods()) {
+                if (hasDebtOf(method, cmp)) {
+                    debts.add(methodId(method));
+                }
+            }
+        }
+        return debts;
+    }
+
+    private static boolean hasDebtOf(HasAnnotations<?> element, String cmp) {
+        return element.tryGetAnnotationOfType(PlaintextTokenDebt.class.getName())
+                .flatMap(annotation -> annotation.get(EXEMPTION_CMP_PROP))
+                .map(cmp::equals)
+                .orElse(false);
+    }
+
     // ---------------------------------------------------------------- 番人1
 
     /** 番人1: 平文の token 系列。 */

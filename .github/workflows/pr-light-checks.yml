@@ -98,6 +98,7 @@ jobs:
           scripts/ci-change-detection-steps.test.mjs
           scripts/task-list-conflict-autofix.test.mjs
           scripts/task-list-ledger.test.mjs
+          scripts/task-list-ledger-cli.test.mjs
           scripts/task-list-ledger-consumers.test.mjs
           scripts/completion-evidence-ledger.test.mjs
 
