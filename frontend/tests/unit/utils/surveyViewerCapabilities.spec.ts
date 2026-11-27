@@ -5,7 +5,6 @@
 import { describe, it, expect } from 'vitest'
 import {
   canManageSurvey,
-  canRemindSurvey,
   canViewSurveyTeamBreakdown,
   type SurveyViewerCapabilityInput,
 } from '~/utils/surveyViewerCapabilities'
@@ -42,20 +41,15 @@ describe('surveyViewerCapabilities（CMP-041 管理導線の出し分け）', ()
       expect(canManageSurvey(deputyWithoutPermission)).toBe(false)
     })
 
-    it('督促送信を出さない（公開中であっても）', () => {
-      expect(canRemindSurvey(deputyWithoutPermission, 'PUBLISHED')).toBe(false)
-    })
-
     it('チーム別内訳を出さない', () => {
       expect(canViewSurveyTeamBreakdown(deputyWithoutPermission)).toBe(false)
     })
   })
 
   describe('非回帰: 管理者・権限保有副管理者・作成者', () => {
-    it('管理者には管理操作・内訳・督促がすべて出る', () => {
+    it('管理者には管理操作・内訳がすべて出る', () => {
       expect(canManageSurvey(admin)).toBe(true)
       expect(canViewSurveyTeamBreakdown(admin)).toBe(true)
-      expect(canRemindSurvey(admin, 'PUBLISHED')).toBe(true)
     })
 
     it('作成者には管理操作が出るが、内訳は BE の EP に合わせて出さない', () => {
@@ -64,12 +58,6 @@ describe('surveyViewerCapabilities（CMP-041 管理導線の出し分け）', ()
       // ここで true にすると「押すと 403」の導線が復活する。
       expect(canViewSurveyTeamBreakdown(creatorOnly)).toBe(false)
     })
-
-    it('督促は公開中のみ（DRAFT / CLOSED では管理者でも出さない）', () => {
-      expect(canRemindSurvey(admin, 'DRAFT')).toBe(false)
-      expect(canRemindSurvey(admin, 'CLOSED')).toBe(false)
-      expect(canRemindSurvey(admin, undefined)).toBe(false)
-    })
   })
 
   describe('fail-closed: フラグが欠けた応答', () => {
@@ -77,7 +65,6 @@ describe('surveyViewerCapabilities（CMP-041 管理導線の出し分け）', ()
       expect(canManageSurvey(null)).toBe(false)
       expect(canManageSurvey(undefined)).toBe(false)
       expect(canViewSurveyTeamBreakdown(null)).toBe(false)
-      expect(canRemindSurvey(null, 'PUBLISHED')).toBe(false)
     })
 
     it('フラグ欠落（undefined）は許可へ倒さない', () => {
@@ -87,7 +74,6 @@ describe('surveyViewerCapabilities（CMP-041 管理導線の出し分け）', ()
       } as SurveyViewerCapabilityInput
       expect(canManageSurvey(missing)).toBe(false)
       expect(canViewSurveyTeamBreakdown(missing)).toBe(false)
-      expect(canRemindSurvey(missing, 'PUBLISHED')).toBe(false)
     })
   })
 })

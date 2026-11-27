@@ -123,6 +123,19 @@ class GlobalExceptionHandlerTest {
         }
 
         @Test
+        @DisplayName("正常系: CMS_028（記事保存のデッドロック再試行超過）で503 Service Unavailableが返り、CMS_027は409のまま")
+        void handleBusinessException_CMS028_503ServiceUnavailable() {
+            ResponseEntity<ErrorResponse> deadlock = globalExceptionHandler.handleBusinessException(
+                    new BusinessException(com.mannschaft.app.cms.CmsErrorCode.POST_WRITE_DEADLOCK));
+            ResponseEntity<ErrorResponse> slug = globalExceptionHandler.handleBusinessException(
+                    new BusinessException(com.mannschaft.app.cms.CmsErrorCode.SLUG_AUTO_ASSIGN_CONFLICT));
+
+            assertThat(deadlock.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+            assertThat(deadlock.getBody().getError().getCode()).isEqualTo("CMS_028");
+            assertThat(slug.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        }
+
+        @Test
         @DisplayName("正常系: COMMON_003エラーコードで409 Conflictが返る")
         void handleBusinessException_COMMON003_409Conflict() {
             // Given

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { parseOrgQuery } from '~/composables/match/useMatchOrgContext'
 import type {
   FixtureRosterResponse,
   RosterPlayerEntry,
@@ -29,6 +30,9 @@ onMounted(() => {
   }
 })
 
+// composable（内部で useToast を inject する）は setup で 1 回だけ取得し、試合 ID は実行時に ref から読む
+const rosterApi = useMatchRoster(tournamentId, selectedMatchId)
+
 const roster = ref<FixtureRosterResponse | null>(null)
 const loadingRoster = ref(false)
 
@@ -36,6 +40,10 @@ const loadingRoster = ref(false)
 const { getEntryTemplates } = useTournamentApi()
 const templates = ref<EntryTemplate[]>([])
 const loadingTemplates = ref(false)
+const templatesError = ref(false)
+const templatesUnavailable = ref(false)
+const { resolveContext } = useMatchOrgContext()
+const { handleApiError } = useErrorHandler()
 
 // 選手フォーム状態
 const playerRows = ref<RosterPlayerEntry[]>([])
@@ -52,10 +60,10 @@ const { isAdminOrDeputy, loadPermissions } = useRoleAccess('team', teamSlug)
 // ===== メンバー表のロード =====
 
 async function loadRoster(matchId: number) {
-  const composable = useMatchRoster(tournamentId, matchId)
+  selectedMatchId.value = matchId
   loadingRoster.value = true
   try {
-    const data = await composable.getMyRoster()
+    const data = await rosterApi.getMyRoster()
     roster.value = data
     if (data) {
       playerRows.value = data.players.map(p => ({
@@ -83,15 +91,24 @@ async function loadRoster(matchId: number) {
 
 async function loadTemplates() {
   loadingTemplates.value = true
+  templatesError.value = false
+  templatesUnavailable.value = false
   try {
-    const orgId = '0' // NOTE: チームスコープでは organization_id は不要（BE API は orgId ベースだが team スコープ用 API に変更）
-    // チームのエントリーテンプレ一覧を取得
-    // useTournamentParticipants.getEntryTemplates は orgId/teamSlug が必要
-    // ここでは teamSlug を使用してロード
-    const { data } = await getEntryTemplates(orgId, teamSlug)
+    // BE は /organizations/{orgId}/teams/{teamId}/entry-templates（teamId は数値）。
+    // orgId は「チームの親組織」（大会主催組織ではない）。URL クエリ org で選択できる。
+    const ctx = await resolveContext(teamSlug, { orgId: parseOrgQuery(route.query.org) })
+    if (ctx === null || ctx.orgId === null) {
+      // 組織を解決できない場合はテンプレ機能のみ無効（手動入力は可能）
+      templates.value = []
+      templatesUnavailable.value = true
+      return
+    }
+    const { data } = await getEntryTemplates(String(ctx.orgId), String(ctx.teamId))
     templates.value = data
-  } catch {
-    // テンプレ取得失敗はサイレント（テンプレなしで手動入力可）
+  } catch (err) {
+    templates.value = []
+    templatesError.value = true
+    handleApiError(err, 'tournament.roster.loadTemplates')
   } finally {
     loadingTemplates.value = false
   }
@@ -101,13 +118,12 @@ async function loadTemplates() {
 
 async function applyTemplate() {
   if (!selectedMatchId.value || !selectedTemplateId.value) return
-  const composable = useMatchRoster(tournamentId, selectedMatchId.value)
   const req: ApplyRosterTemplateRequest = {
     templateId: selectedTemplateId.value,
     overwriteExisting: overwriteExisting.value,
   }
   try {
-    const data = await composable.applyTemplate(req)
+    const data = await rosterApi.applyTemplate(req)
     roster.value = data
     playerRows.value = data.players.map(p => ({
       userId: p.userId,
@@ -133,14 +149,13 @@ const submitting = ref(false)
 
 async function submitRoster() {
   if (!selectedMatchId.value) return
-  const composable = useMatchRoster(tournamentId, selectedMatchId.value)
   submitting.value = true
   const req: SubmitRosterRequest = {
     players: playerRows.value,
     staff: staffRows.value,
   }
   try {
-    const data = await composable.submitMyRoster(req)
+    const data = await rosterApi.submitMyRoster(req)
     roster.value = data
   } catch {
     // エラーはcomposable内で通知済み
@@ -185,7 +200,8 @@ const deadlineLabel = computed(() => {
 
 onMounted(async () => {
   await loadPermissions()
-  await loadTemplates()
+  // テンプレ適用は ADMIN/DEPUTY のみ。一般メンバーには取得もエラー表示もしない
+  if (isAdminOrDeputy.value) await loadTemplates()
 })
 </script>
 
@@ -194,6 +210,23 @@ onMounted(async () => {
     <div class="mb-4 flex items-center gap-3">
       <PageHeader :title="$t('tournament.roster.title')" :back-to="`/teams/${teamSlug}/tournaments`" :back-label="$t('tournament.roster.title')" />
     </div>
+
+    <!-- テンプレ機能が使えない理由（手動入力は可能） -->
+    <p
+      v-if="templatesUnavailable"
+      class="mb-4 text-sm text-surface-500"
+      data-testid="roster-templates-unavailable"
+    >
+      {{ $t('tournament.roster.templates_unavailable') }}
+    </p>
+    <p
+      v-else-if="templatesError"
+      class="mb-4 text-sm text-red-600"
+      role="alert"
+      data-testid="roster-templates-error"
+    >
+      {{ $t('tournament.roster.templates_load_failed') }}
+    </p>
 
     <!-- 試合未選択の場合 -->
     <DashboardEmptyState

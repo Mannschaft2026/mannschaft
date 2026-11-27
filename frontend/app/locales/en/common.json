@@ -426,6 +426,7 @@
   "error": {
     "server": "A server error occurred",
     "server_retry": "Please try again later.",
+    "server_multiple": "{count} server errors occurred",
     "rate_limited": "Too many requests",
     "rate_limited_detail": "You made too many requests in a short time. Please wait a moment and try again.",
     "rate_limited_retry_after": "You made too many requests in a short time. Please try again in about {seconds} seconds.",
@@ -459,6 +460,10 @@
     "AUTH_010": "Your current password is incorrect",
     "AUTH_011": "No password has been set yet",
     "AUTH_044": "Too many requests. Please wait a moment and try again",
+    "SURVEY_014": "You do not have permission to send reminders",
+    "SURVEY_015": "A reminder was sent recently, so you cannot send another yet",
+    "SURVEY_016": "The reminder limit has been reached",
+    "INVALID_SURVEY_STATUS": "Reminders cannot be sent in the current survey status",
     "SURVEY_023": "Team breakdown cannot be enabled for anonymous surveys",
     "SCHEDULE_KEEP_001": "Keep not found",
     "SCHEDULE_KEEP_002": "Please enter a title",
@@ -3354,6 +3359,27 @@
       "created_at": "Issued at",
       "expires_at": "Expires at",
       "used_count": "Times used"
+    },
+    "signage": {
+      "section": "Display device tokens",
+      "issue": "Issue token",
+      "device_name": "Device name",
+      "device_placeholder": "e.g. Entrance monitor",
+      "empty": "No tokens yet",
+      "issued_title": "Display device token issued",
+      "no_expiry": "No expiry",
+      "inactive": "Revoked",
+      "reissue_confirm": "This issues a new link and revokes this token. Continue?",
+      "revoke_confirm": "Revoke this token?",
+      "issue_success": "Token issued",
+      "issue_failed": "Failed to issue the token",
+      "reissue_success": "Token reissued",
+      "reissue_failed": "Failed to reissue the token",
+      "revoke_success": "Token revoked",
+      "revoke_failed": "Failed to revoke the token",
+      "name_required": "Enter a device name",
+      "token_label": "Token to set on the device",
+      "reissue_revoke_failed": "The new token was issued, but revoking the old token failed. Please revoke the old token manually"
     }
   },
   "globalSearch": {

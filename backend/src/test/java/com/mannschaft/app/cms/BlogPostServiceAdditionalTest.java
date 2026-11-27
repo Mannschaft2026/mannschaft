@@ -349,8 +349,8 @@ class BlogPostServiceAdditionalTest {
         }
 
         @Test
-        @DisplayName("異常系: ContentVisibilityChecker が NOT_FOUND を投げると VISIBILITY_004")
-        void IDで記事取得_不在_VISIBILITY004() {
+        @DisplayName("異常系: ContentVisibilityChecker が NOT_FOUND（VISIBILITY_004）を投げると 404 CMS_001 に畳む（存在オラクル対策）")
+        void IDで記事取得_不在_CMS001() {
             // F00 Phase B: 実存確認は ContentVisibilityChecker が担う。
             //   不在 → assertCanView 内で VisibilityErrorCode.VISIBILITY_004 (404) をスロー。
             Mockito.doThrow(new BusinessException(VisibilityErrorCode.VISIBILITY_004))
@@ -362,12 +362,12 @@ class BlogPostServiceAdditionalTest {
             assertThatThrownBy(() -> service.getById(POST_ID))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
-                            .isEqualTo("VISIBILITY_004"));
+                            .isEqualTo("CMS_001"));
         }
 
         @Test
-        @DisplayName("異常系: ContentVisibilityChecker が権限不足を投げると VISIBILITY_001")
-        void IDで記事取得_権限不足_VISIBILITY001() {
+        @DisplayName("異常系: ContentVisibilityChecker が権限不足（VISIBILITY_001）を投げると不存在と同一の 404 CMS_001 に畳む（存在オラクル対策）")
+        void IDで記事取得_権限不足_CMS001() {
             Mockito.doThrow(new BusinessException(VisibilityErrorCode.VISIBILITY_001))
                     .when(contentVisibilityChecker).assertCanView(
                             org.mockito.ArgumentMatchers.eq(ReferenceType.BLOG_POST),
@@ -377,7 +377,7 @@ class BlogPostServiceAdditionalTest {
             assertThatThrownBy(() -> service.getById(POST_ID))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
-                            .isEqualTo("VISIBILITY_001"));
+                            .isEqualTo("CMS_001"));
         }
     }
 

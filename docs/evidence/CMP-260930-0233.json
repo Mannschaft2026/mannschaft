@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-260930-0233",
+  "scope": "app",
+  "implementation": {
+    "pr": 4856,
+    "sha": "a45d66cce1a220322a96070a8d735533786e41f6"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "チームの駐車場申請一覧は、管理権限（ADMIN・MANAGE_PARKING 付与の DEPUTY_ADMIN）以外には本人の申請だけを返す（件数も絞り込み後）。承認・却下・抽選は MANAGE_PARKING で判定する",
+      "tests": [
+        {
+          "name": "ParkingApplicationVisibilityContractIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/parking/ParkingApplicationVisibilityContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "組織スコープでも申請一覧の閲覧範囲・他人／不存在の vehicleId の 404・取消の本人限定が同じ規則で成り立つ",
+      "tests": [
+        {
+          "name": "ParkingOrgApplicationVisibilityContractIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/parking/ParkingOrgApplicationVisibilityContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-21",
+      "description": "MANAGE_PARKING 権限が migration V268 で導入され、権限カタログに死んだ権限が残らない",
+      "tests": [
+        {
+          "name": "DeadPermissionCatalogFlywayIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/role/DeadPermissionCatalogFlywayIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-UI",
+      "description": "画面から駐車場の申請ができ、自分の申請の一覧・取消ができる。権限あり／なし／他チームの横断と URL・API 直打ちで閲覧範囲が設計どおりである",
+      "tests": [
+        {
+          "name": "parking-application.spec.ts（実機E2E 11シナリオ）",
+          "evidence": "frontend/tests/e2e/real/parking-application.spec.ts"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 45753929941 },
+    { "runId": 45753930138 },
+    { "runId": 45753929994 },
+    { "runId": 45753929979 },
+    { "runId": 45753930093 },
+    { "runId": 45753930252 },
+    { "runId": 45753929944 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4856"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-260930-0233-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-260930-0233-exploratory.md"
+    }
+  },
+  "regressions": []
+}

@@ -148,7 +148,7 @@ export interface PageResponse<T> {
 /**
  * 一時トークン resolve レスポンス（Phase 3 第二陣 2A）。
  *
- * <p>顧客側で発行された 5 分 TTL の UUID トークンを店主側で resolve した結果。
+ * <p>顧客側で発行された 5 分 TTL の 共有トークン（Base64URL 43字）を店主側で resolve した結果。
  * GETDEL による 1 回限り消費。プライバシー方針 §11 により、暗号化対象
  * （barcodeValue / displayName / nickname / memo）は一切含まない。
  * {@code last4} のみ「どのカードか」の最小確認情報として返る。

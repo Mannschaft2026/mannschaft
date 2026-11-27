@@ -43,7 +43,10 @@ public enum SignageErrorCode implements ErrorCode {
     SIGNAGE_007("SIGNAGE_007", "アクティブな緊急メッセージが既に存在します", Severity.WARN),
 
     /** slot_orderの重複があります（throw元なし・未使用） */
-    SIGNAGE_008("SIGNAGE_008", "slot_orderの重複があります", Severity.WARN);
+    SIGNAGE_008("SIGNAGE_008", "slot_orderの重複があります", Severity.WARN),
+
+    /** メンバー限定のチームの画面にはアクセストークンを発行できません（403。CMP-261124-0159 F00 §20.5.3） */
+    SIGNAGE_009("SIGNAGE_009", "メンバー限定のチームの画面にはアクセストークンを発行できません", Severity.WARN);
 
     private final String code;
     private final String message;

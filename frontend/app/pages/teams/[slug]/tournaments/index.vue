@@ -8,6 +8,8 @@ import type {
 
 definePageMeta({ middleware: 'auth' })
 const route = useRoute()
+// <component :is> に文字列 'NuxtLink' を渡すとリンクにならないため、コンポーネント実体を解決して使う
+const NuxtLink = resolveComponent('NuxtLink')
 const teamSlug = String(route.params.slug)
 
 const {
@@ -145,8 +147,10 @@ onMounted(() => load())
             :key="`${t.identifiers?.tournamentId}-${t.meta?.divisionName}`"
             class="flex flex-col rounded-xl border border-surface-300 bg-surface-0 transition hover:border-primary-400 hover:shadow-sm"
           >
-            <NuxtLink
-              :to="`/organizations/${t.organizationId}/tournaments/${t.identifiers?.tournamentId}`"
+            <!-- 組織ページ URL は slug が正準。slug が無い（削除済み組織など）カードは行き止まりを避けリンクにしない -->
+            <component
+              :is="t.organizationSlug ? NuxtLink : 'div'"
+              v-bind="t.organizationSlug ? { to: `/organizations/${t.organizationSlug}/tournaments/${t.identifiers?.tournamentId}` } : {}"
               class="block flex-1 p-4"
             >
               <div class="mb-2 flex items-center justify-between gap-2">
@@ -166,7 +170,7 @@ onMounted(() => load())
                 <span class="text-red-500">{{ t.record?.losses }}敗</span>
                 <span class="ml-auto font-medium">{{ t.record?.points }}pt</span>
               </div>
-            </NuxtLink>
+            </component>
             <div
               v-if="t.identifiers?.tournamentId != null"
               class="flex justify-end border-t border-surface-200 px-4 py-2 dark:border-surface-700"
