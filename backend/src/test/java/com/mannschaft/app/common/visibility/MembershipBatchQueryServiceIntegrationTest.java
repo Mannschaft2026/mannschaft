@@ -272,6 +272,37 @@ class MembershipBatchQueryServiceIntegrationTest extends AbstractMySqlIntegratio
     }
 
     @Test
+    @DisplayName("Z-A PR4 AC5: 所属の無い SYSTEM_ADMIN も通常どおり SQL を発行し（7 本以下）、全判定が false")
+    void ZaPr4_所属の無いSystemAdminは通常判定_SQL7本以下() {
+        insertUserRole(userId, systemAdminRoleId, null, null);
+        em.flush();
+        em.clear();
+
+        Statistics stats = statisticsCleared();
+
+        UserScopeRoleSnapshot snapshot = service.snapshotForUser(
+                userId,
+                Set.of(new ScopeKey("TEAM", teamId1), new ScopeKey("ORGANIZATION", orgId1)),
+                Set.of(new ScopeKey("TEAM", teamId1)),
+                Set.of(new ScopeKey("ORGANIZATION", orgId1)));
+
+        assertThat(stats.getPrepareStatementCount())
+                .as("SYSTEM_ADMIN も一般利用者と同じ経路。SQL 本数の上限は最大 7 のまま")
+                .isGreaterThan(1L)
+                .isLessThanOrEqualTo(7L);
+
+        assertThat(snapshot.isSystemAdmin()).as("値は正しく計算し続ける").isTrue();
+        ScopeKey team1 = new ScopeKey("TEAM", teamId1);
+        ScopeKey org1 = new ScopeKey("ORGANIZATION", orgId1);
+        assertThat(snapshot.isMemberOf(team1)).isFalse();
+        assertThat(snapshot.hasRoleOrAbove(team1, "SUPPORTER")).isFalse();
+        assertThat(snapshot.isMemberOfParentOrg(team1)).isFalse();
+        assertThat(snapshot.hasParentOrgRoleOrAbove(team1, "SUPPORTER")).isFalse();
+        assertThat(snapshot.isDescendantMemberOf(org1)).isFalse();
+        assertThat(snapshot.hasDescendantRoleOrAbove(org1, "SUPPORTER")).isFalse();
+    }
+
+    @Test
     @DisplayName("orgWideScopes 経由で親 ORG メンバーシップが取得できる")
     void orgWideScopes_親ORGメンバーシップ() {
         // ユーザーは ORG1 直下 MEMBER だが TEAM1 にはいない
