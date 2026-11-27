@@ -12,6 +12,7 @@ import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.signage.entity.SignageAccessTokenEntity;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
 import com.mannschaft.app.support.test.MembershipTestHelper;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.BeforeEach;
@@ -76,7 +77,7 @@ class SignageAccessTokenHashStorageIT extends AbstractMySqlIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        insertRoleIfAbsent("ADMIN", "管理者", 2);
+        RoleSeedSupport.ensureCanonical(em, "ADMIN");
         teamAId = insertTeam("SIGNAGE-HASHチームA");
         teamBId = insertTeam("SIGNAGE-HASHチームB");
         adminAId = insertUser("signage-hash-admin-a@example.com");
@@ -264,22 +265,6 @@ class SignageAccessTokenHashStorageIT extends AbstractMySqlIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(resp).path("data").path("id").asLong();
-    }
-
-    private void insertRoleIfAbsent(String name, String displayName, int priority) {
-        Number count = (Number) em.createNativeQuery("SELECT COUNT(*) FROM roles WHERE name = :name")
-                .setParameter("name", name)
-                .getSingleResult();
-        if (count.longValue() > 0) {
-            return;
-        }
-        em.createNativeQuery(
-                        "INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                                + "VALUES (:name, :dn, :priority, 0, NOW(), NOW())")
-                .setParameter("name", name)
-                .setParameter("dn", displayName)
-                .setParameter("priority", priority)
-                .executeUpdate();
     }
 
     private Long insertUser(String email) {
