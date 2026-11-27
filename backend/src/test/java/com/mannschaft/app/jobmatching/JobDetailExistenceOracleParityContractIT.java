@@ -67,6 +67,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * 一致だけでは両方壊れたとき偽 green になるため、絶対値（404 / {@code JOB_NOT_FOUND} / 本文言）も固定する。
  * 可視範囲の正当な閲覧者は従来どおり 200。</p>
  *
+ * <p>fixture のチーム: 求人の可視範囲（visibility_scope × status）の契約を見るため、求人を置くチームは公開チーム
+ * （{@code teams.visibility = PUBLIC}）にする。非公開チーム（{@code MEMBERS_AND_ABOVE}）では親チーム上限
+ * （CMP-261124-0159・F00 §20.2）により、JOBBER_PUBLIC_BOARD でもそのチームの MEMBER 未満には見えないため、
+ * 「PUBLIC 相当は誰でも」は公開チームでしか成り立たない。非公開チームの上限で見えない求人も不在 ID と同じ 404 になることは
+ * AC-1118-1 の「非公開チーム」の組で固定する。</p>
+ *
  * <p>注: DRAFT の閲覧範囲は 2026-11-27 マスター裁定（作成者のみ、SYSTEM_ADMIN も不可）で別行の戦役にしたため、本クラスでは SYSTEM_ADMIN の DRAFT 閲覧を固定しない。</p>
  *
  * <p>金型: {@link JobPostingApplicationWriteBodyParityContractIT}（実 DB・実フィルタ・実トークン、spy なし）。</p>
@@ -107,6 +113,7 @@ class JobDetailExistenceOracleParityContractIT extends AbstractMySqlIntegrationT
     private Long draft;           // DRAFT・TEAM_MEMBERS（作成者本人のみ可視）
     private Long publicBoard;     // OPEN・JOBBER_PUBLIC_BOARD（PUBLIC 相当）
     private Long cancelled;       // CANCELLED・TEAM_MEMBERS（F00 上 ARCHIVED。SYSTEM_ADMIN のみ可視）
+    private Long privateTeamBoard; // 非公開チームの OPEN・JOBBER_PUBLIC_BOARD（親チーム上限で非メンバーには不可視）
 
     @BeforeEach
     void Repositoryで自所有fixtureを確定する() {
@@ -120,8 +127,9 @@ class JobDetailExistenceOracleParityContractIT extends AbstractMySqlIntegrationT
         when(values.get(anyString())).thenReturn(null);
         when(redisTemplate.hasKey(anyString())).thenReturn(false);
         tx(() -> {
-            Long team = team();
-            Long foreignTeam = team();
+            Long team = team(TeamEntity.Visibility.PUBLIC);
+            Long foreignTeam = team(TeamEntity.Visibility.PUBLIC);
+            Long privateTeam = team(TeamEntity.Visibility.MEMBERS_AND_ABOVE);
             requester = user();
             member(requester, team);
             assignRole(requester, "ADMIN", team);
@@ -139,6 +147,7 @@ class JobDetailExistenceOracleParityContractIT extends AbstractMySqlIntegrationT
             draft = posting(team, VisibilityScope.TEAM_MEMBERS, JobPostingStatus.DRAFT);
             publicBoard = posting(team, VisibilityScope.JOBBER_PUBLIC_BOARD, JobPostingStatus.OPEN);
             cancelled = posting(team, VisibilityScope.TEAM_MEMBERS, JobPostingStatus.CANCELLED);
+            privateTeamBoard = posting(privateTeam, VisibilityScope.JOBBER_PUBLIC_BOARD, JobPostingStatus.OPEN);
             assertThat(postings.existsById(MISSING)).isFalse();
             em.flush();
             return null;
@@ -184,7 +193,9 @@ class JobDetailExistenceOracleParityContractIT extends AbstractMySqlIntegrationT
                 new Case("所属なし", outsider, "DRAFT", draft),
                 new Case("同TEAMの一般（可視範囲外）", plainMember, "DRAFT", draft),
                 new Case("他TEAMのADMIN", foreignAdmin, "CANCELLED", cancelled),
-                new Case("他TEAMの一般", foreignMember, "CANCELLED", cancelled));
+                new Case("他TEAMの一般", foreignMember, "CANCELLED", cancelled),
+                new Case("所属なし", outsider, "非公開チームのJOBBER_PUBLIC_BOARD", privateTeamBoard),
+                new Case("他TEAMのADMIN", foreignAdmin, "非公開チームのJOBBER_PUBLIC_BOARD", privateTeamBoard));
         List<String> diffs = new ArrayList<>();
         for (Case c : cases) {
             String token = tokens.issueAccessToken(c.actor(), List.of("USER"));
@@ -212,7 +223,7 @@ class JobDetailExistenceOracleParityContractIT extends AbstractMySqlIntegrationT
     void AC_1118_2_未ログインは実在不在とも同一() throws Exception {
         MvcResult missing = call(null, MISSING);
         assertThat(missing.getResponse().getStatus()).isEqualTo(401);
-        for (Long posting : List.of(openTeamMembers, draft, publicBoard, cancelled)) {
+        for (Long posting : List.of(openTeamMembers, draft, publicBoard, cancelled, privateTeamBoard)) {
             MvcResult existing = call(null, posting);
             assertThat(existing.getResponse().getStatus()).as("posting=%s", posting).isEqualTo(401);
             assertThat(json(existing)).as("posting=%s", posting).isEqualTo(json(missing));
@@ -281,9 +292,9 @@ class JobDetailExistenceOracleParityContractIT extends AbstractMySqlIntegrationT
         return id;
     }
 
-    private Long team() {
+    private Long team(TeamEntity.Visibility visibility) {
         Long id = teams.save(TeamEntity.builder().slug("jd-" + UUID.randomUUID().toString().substring(0, 8))
-                .name("求人詳細").visibility(TeamEntity.Visibility.MEMBERS_AND_ABOVE).supporterEnabled(false)
+                .name("求人詳細").visibility(visibility).supporterEnabled(false)
                 .build()).getId();
         teamIds.add(id);
         return id;
