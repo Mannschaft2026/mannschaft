@@ -214,6 +214,50 @@ test('処理: push 後に head が動いて expectedHeadOid が不一致 → 再
   assert.match(env.comments[0].body, /予約し直していません/);
 });
 
+// CMP-261124-1222 AC-11: push 直後の head 取り直しは反映前の古い head（push 前の headRefOid）を返すことがある。
+function sequencedAutoMerge(env, results) {
+  let i = 0;
+  env.deps.ghOps.enableAutoMerge = (p, expectedHeadOid) => { env.calls.push('enableAutoMerge'); env.autoMergeCalls.push(expectedHeadOid); return results[Math.min(i++, results.length - 1)]; };
+}
+
+test('処理 AC-11: head の反映遅れ（current が push 前 head）は待って再試行し、反映後に予約できる', async () => {
+  const env = mockEnv();
+  const target = pr();
+  const stale = { ok: false, headMismatch: true, current: target.headRefOid, error: 'stale' };
+  sequencedAutoMerge(env, [stale, stale, { ok: true }]);
+  const sleeps = [];
+  env.deps.sleep = async (ms) => { sleeps.push(ms); };
+  const result = await processPullRequest(target, env.deps);
+  assert.equal(result.outcome, 'fixed');
+  assert.deepEqual(env.autoMergeCalls, ['merge0001', 'merge0001', 'merge0001']);
+  assert.deepEqual(sleeps, [10_000, 10_000]);
+});
+
+test('処理 AC-11: 反映遅れが続いて6回待っても上限に達したら、第三の commit とは別の分類・別メッセージで失敗にする', async () => {
+  const env = mockEnv();
+  const target = pr();
+  sequencedAutoMerge(env, [{ ok: false, headMismatch: true, current: target.headRefOid, error: 'stale' }]);
+  const sleeps = [];
+  env.deps.sleep = async (ms) => { sleeps.push(ms); };
+  const result = await processPullRequest(target, env.deps);
+  assert.equal(result.outcome, 'fixed-head-not-reflected');
+  assert.equal(sleeps.length, 6);
+  assert.equal(env.autoMergeCalls.length, 7);
+  assert.match(env.comments[0].body, /反映を確認できず/);
+  assert.doesNotMatch(env.comments[0].body, /別の commit へ進んだため/);
+});
+
+test('処理 AC-11: push 前 head でも作った commit でもない第三の commit は待たず headMismatch', async () => {
+  const env = mockEnv();
+  sequencedAutoMerge(env, [{ ok: false, headMismatch: true, current: 'third0001', error: 'third' }]);
+  const sleeps = [];
+  env.deps.sleep = async (ms) => { sleeps.push(ms); };
+  const result = await processPullRequest(pr(), env.deps);
+  assert.equal(result.outcome, 'fixed-head-moved');
+  assert.equal(env.autoMergeCalls.length, 1);
+  assert.deepEqual(sleeps, []);
+});
+
 test('処理: push 後のコメント投稿失敗は結果に載せて返す（握りつぶさない）', async () => {
   const env = mockEnv({ commentResult: { ok: false, error: 'HTTP 403' } });
   const result = await processPullRequest(pr(), env.deps);
@@ -334,11 +378,12 @@ function sh(cwd, ...args) {
 }
 
 function makeRealGit(cwd) {
-  return (args) => {
+  return (args, { input, env: extraEnv } = {}) => {
     const r = spawnSync('git', args, {
       cwd,
       encoding: 'utf8',
-      env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.com' },
+      input,
+      env: { ...process.env, ...extraEnv, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.com' },
     });
     return { code: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
   };
@@ -701,4 +746,160 @@ test('AC-7: リポジトリの .gitattributes も両配置に union を指定す
   const attrs = readRepo('.gitattributes');
   assert.match(attrs, /^docs\/task-list\.md merge=union$/m);
   assert.match(attrs, /^docs\/task-list\/\*\.md text eol=lf merge=union$/m);
+});
+
+
+// ---------------------------------------------------------------------------
+// 旧配置の PR の新配置への自動移植（CMP-261124-1222 段B）
+// ---------------------------------------------------------------------------
+
+const oldBase = ledger(row('CMP-261124-0001', '完了'), row('CMP-261124-0002', 'P3 未着手'));
+const mainSplit = {
+  [LEDGER_PATH]: splitIndex,
+  'docs/task-list/2026-11.md': month(row('CMP-261124-0001', '完了'), row('CMP-261124-0002', 'P3 未着手'), row('CMP-261124-2002', 'P2 未着手')),
+};
+
+function portEnv(repos, comments = []) {
+  const git = makeRealGit(repos.runner);
+  const ops = createGitOps({ git });
+  return {
+    ops,
+    comments,
+    deps: {
+      gitOps: ops,
+      ghOps: { listComments: () => comments.map((body) => ({ body })), comment: (n, body) => { comments.push(body); return { ok: true }; }, enableAutoMerge: () => ({ ok: true }) },
+      now: NOW, log: () => {}, sleep: async () => {}, checkStructure: checkTaskListStructure,
+    },
+  };
+}
+
+test('統合 移植: 旧配置の PR の行追加が、新配置の main の月別ファイルへ移り、両方の行が残って push される', async () => {
+  const repos = setupReposFiles({
+    base: { [LEDGER_PATH]: oldBase, 'README.md': 'base\n' },
+    feature: { [LEDGER_PATH]: ledger(row('CMP-261124-0001', '完了'), row('CMP-261124-0002', 'P3 未着手'), row('CMP-261124-1001', 'P3 未着手'), row('CMP-261201-0100', 'P4 未着手')) },
+    main: mainSplit,
+  });
+  try {
+    const env = portEnv(repos);
+    ensureUnionAttribute(makeRealGit(repos.runner));
+    const result = await processPullRequest(pr({ headRefName: 'feature/1-x', headRefOid: repos.featureOid }), env.deps);
+    assert.equal(result.outcome, 'fixed', JSON.stringify(result));
+    assert.equal(sh(repos.origin, 'rev-parse', 'refs/heads/feature/1-x'), result.mergeCommit);
+    const after = await readTreeLedger(env.ops, result.mergeCommit);
+    assert.equal(after.layout, 'split');
+    assert.deepEqual(after.rows.map((r) => [r.id, r.file]).sort(), [
+      ['CMP-261124-0001', 'docs/task-list/2026-11.md'], ['CMP-261124-0002', 'docs/task-list/2026-11.md'],
+      ['CMP-261124-1001', 'docs/task-list/2026-11.md'], ['CMP-261124-2002', 'docs/task-list/2026-11.md'],
+      ['CMP-261201-0100', 'docs/task-list/2026-12.md'],
+    ]);
+    assert.equal(after.files[0].content, splitIndex, '索引は main のまま（CMP 行を足さない）');
+    assert.equal(checkTaskListStructure(after).ok, true);
+    assert.match(sh(repos.runner, 'log', '-1', '--format=%B', result.mergeCommit), /自動移植/);
+    assert.ok(env.comments.some((b) => b.includes(FIX_MARKER) && b.includes('自動移植')));
+  } finally { repos.cleanup(); }
+});
+
+test('統合 移植: 旧配置の PR の行更新が、新配置の該当行へ移る', async () => {
+  const repos = setupReposFiles({
+    base: { [LEDGER_PATH]: oldBase },
+    feature: { [LEDGER_PATH]: ledger(row('CMP-261124-0001', '完了'), row('CMP-261124-0002', 'P2 実装中')) },
+    main: mainSplit,
+  });
+  try {
+    const env = portEnv(repos);
+    const result = await processPullRequest(pr({ headRefName: 'feature/1-x', headRefOid: repos.featureOid }), env.deps);
+    assert.equal(result.outcome, 'fixed', JSON.stringify(result));
+    const after = await readTreeLedger(env.ops, result.mergeCommit);
+    assert.equal(after.rows.find((r) => r.id === 'CMP-261124-0002').line, row('CMP-261124-0002', 'P2 実装中'));
+    assert.ok(after.rows.some((r) => r.id === 'CMP-261124-2002'), 'main 側の行も残る');
+    assert.equal(after.rows.length, 3);
+  } finally { repos.cleanup(); }
+});
+
+test('統合 移植: 行削除は変換できない → push せず port-diff を促すコメントを同じ head に1回だけ', async () => {
+  const repos = setupReposFiles({
+    base: { [LEDGER_PATH]: oldBase },
+    feature: { [LEDGER_PATH]: ledger(row('CMP-261124-0001', '完了')) },
+    main: mainSplit,
+  });
+  try {
+    const env = portEnv(repos);
+    const before = sh(repos.origin, 'rev-parse', 'refs/heads/feature/1-x');
+    const p = pr({ headRefName: 'feature/1-x', headRefOid: repos.featureOid });
+    const result = await processPullRequest(p, env.deps);
+    assert.equal(result.outcome, 'skip-port-unportable');
+    assert.match(result.reason, /削除/);
+    assert.equal(env.comments.length, 1);
+    assert.match(env.comments[0], /port-diff/);
+    await processPullRequest(p, env.deps);
+    assert.equal(env.comments.length, 1, '同じ head には2回コメントしない');
+    assert.equal(sh(repos.origin, 'rev-parse', 'refs/heads/feature/1-x'), before);
+  } finally { repos.cleanup(); }
+});
+
+test('統合 移植: 前置きの変更は変換できない（判別不能としてコメント）', async () => {
+  const repos = setupReposFiles({
+    base: { [LEDGER_PATH]: oldBase },
+    feature: { [LEDGER_PATH]: oldBase.replace('# 台帳', '# 台帳（改）') + row('CMP-261124-1001') + '\n' },
+    main: mainSplit,
+  });
+  try {
+    const env = portEnv(repos);
+    const result = await processPullRequest(pr({ headRefName: 'feature/1-x', headRefOid: repos.featureOid }), env.deps);
+    assert.equal(result.outcome, 'skip-port-unportable');
+    assert.match(result.reason, /前置き/);
+  } finally { repos.cleanup(); }
+});
+
+test('統合 移植: 台帳以外のファイルも衝突していれば移植せずスキップ（コメントもしない）', async () => {
+  const repos = setupReposFiles({
+    base: { [LEDGER_PATH]: oldBase, 'README.md': 'base\n' },
+    feature: { [LEDGER_PATH]: ledger(row('CMP-261124-0001', '完了'), row('CMP-261124-0002', 'P3 未着手'), row('CMP-261124-1001')), 'README.md': 'feature\n' },
+    main: { ...mainSplit, 'README.md': 'main\n' },
+  });
+  try {
+    const env = portEnv(repos);
+    const result = await processPullRequest(pr({ headRefName: 'feature/1-x', headRefOid: repos.featureOid }), env.deps);
+    assert.equal(result.outcome, 'skip-conflict-outside-ledger');
+    assert.match(result.reason, /README\.md/);
+    assert.equal(env.comments.length, 0);
+  } finally { repos.cleanup(); }
+});
+
+test('移植: mock の gitOps（listDir 等なし）では従来どおり（旧配置どうしの衝突は移植を試みない）', async () => {
+  const env = mockEnv({ merge: { ok: false, tree: 'tree0001', conflicts: [LEDGER_PATH] } });
+  const result = await processPullRequest(pr(), env.deps);
+  assert.equal(result.outcome, 'skip-conflict-outside-ledger');
+});
+
+test('統合 移植: 行更新で main 側も更新済み（3者が異なる）なら自動移植せず、コメントして push しない（P1）', async () => {
+  const repos = setupReposFiles({
+    base: { [LEDGER_PATH]: oldBase },
+    feature: { [LEDGER_PATH]: ledger(row('CMP-261124-0001', '完了'), row('CMP-261124-0002', 'P2 実装中')) },
+    main: { ...mainSplit, 'docs/task-list/2026-11.md': month(row('CMP-261124-0001', '完了'), row('CMP-261124-0002', '完了（main で更新）')) },
+  });
+  try {
+    const env = portEnv(repos);
+    const before = sh(repos.origin, 'rev-parse', 'refs/heads/feature/1-x');
+    const result = await processPullRequest(pr({ headRefName: 'feature/1-x', headRefOid: repos.featureOid }), env.deps);
+    assert.equal(result.outcome, 'skip-port-unportable');
+    assert.match(result.reason, /競合/);
+    assert.equal(env.comments.length, 1);
+    assert.equal(sh(repos.origin, 'rev-parse', 'refs/heads/feature/1-x'), before);
+  } finally { repos.cleanup(); }
+});
+
+test('統合 移植: 旧配置に重複 ID があれば自動移植せずコメントする（P2）', async () => {
+  const repos = setupReposFiles({
+    base: { [LEDGER_PATH]: oldBase },
+    feature: { [LEDGER_PATH]: oldBase + row('CMP-261124-0002', 'P2 実装中') + '\n' },
+    main: mainSplit,
+  });
+  try {
+    const env = portEnv(repos);
+    const result = await processPullRequest(pr({ headRefName: 'feature/1-x', headRefOid: repos.featureOid }), env.deps);
+    assert.equal(result.outcome, 'skip-port-unportable');
+    assert.match(result.reason, /重複 ID/);
+    assert.equal(env.comments.length, 1);
+  } finally { repos.cleanup(); }
 });

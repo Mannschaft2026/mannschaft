@@ -78,14 +78,14 @@ worktree 隔離の原則（ここが唯一の正本）: `main` への直接コ�
 
 ### 台帳 `docs/task-list.md` の扱い
 
-戦役をまたぐ課題の正本（git追跡・永続、行の粒度は戦役単位）。1戦役内の進捗地図は `.claude/campaigns/*.md`（`.gitignore` 済・揮発、完了後削除）。
+戦役をまたぐ課題の正本（git追跡・永続、行の粒度は戦役単位）。`docs/task-list.md` は索引（前置き・規約のみ。表の行は持たない）、行は ID の月の月別ファイル `docs/task-list/YYYY-MM.md`（旧形式 ID は `docs/task-list/legacy.md`）にある。全体の表は `node scripts/task-list-ledger.mjs render [--open] [--priority P1] [--month YYYY-MM]`。1戦役内の進捗地図は `.claude/campaigns/*.md`（`.gitignore` 済・揮発、完了後削除）。
 
 - **コードと同じく worktree + PR で扱う。本陣の作業木で直接編集してはならない**（下記「例外」節の対象外。別セッションの commit で、競合すら起こさず編集が消える）
 - 新しい行の ID は **`CMP-YYMMDD-HHMM`（JST）**。`date '+%y%m%d-%H%M'` で生成してそのまま使う（最大番号を調べる手順は不要）。既存行の ID は書き換えない
-- **新規行は必ず表の末尾に追加**する（途中挿入は重複が静かに main へ入る）
+- **新規行は、ID の月のファイル `docs/task-list/YYYY-MM.md` の表の末尾に追加し、無ければ作る**（途中挿入は重複が静かに main へ入る。索引 `docs/task-list.md` に CMP 行を置くと構造検査が赤になる。旧配置で書いた行は `node scripts/task-list-ledger.mjs port-diff <base> <head>` で移せる）
 - **表の列は必ず7つ**（ID / 戦役 / 状態 / 依存 / 完了条件 / 証拠(PR/テスト) / 台帳）。補足は列を増やさず既存列へ畳む。セル内の本物の `|` は（コードスパン内でも）`\|`
 - **未完の行は状態セルの先頭に優先度 `P1`〜`P5` を必須**とする（例: `P1 未着手`。完了・取り下げは不要）。**P1 から順に片付ける**。基準は `docs/task-list.md` 冒頭「優先度」節
-- 番人 `TaskListCmpIdDuplicateGuardTest`（新旧両形式対応）が重複・列数・優先度漏れを CI で検出する。重複が検出された場合は、後から merge された側が採番し直す。細目・経緯は詳細文書
+- 番人 `TaskListCmpIdDuplicateGuardTest`（新旧両形式・全ファイル横断）が重複・列数・優先度漏れを CI で検出する。重複が検出された場合は、後から merge された側が採番し直す。細目・経緯は詳細文書
 
 ### 文脈を短く保つ（トークン費用の本丸）
 
@@ -104,7 +104,7 @@ worktree 隔離の原則（ここが唯一の正本）: `main` への直接コ�
 
 - ユーザーとの軽い対話・質問への回答
 - 1〜2ファイル限定の即時的な修正で、コミットせず確認だけする場合
-- ドキュメントの軽微な追記（**ただし `docs/task-list.md` は対象外**。軽微に見えてもコミットする場合は必ず worktree + PR）
+- ドキュメントの軽微な追記（**ただし `docs/task-list.md` と `docs/task-list/` 配下は対象外**。軽微に見えてもコミットする場合は必ず worktree + PR）
 - worktree のクリーンアップなど git 管理操作そのもの（`git worktree add/remove/prune` と、**マージ済みローカルブランチの削除** `git branch -d/-D`。後者は本陣保護フックでも明示的に許可している。作成・改名・upstream 設定は本陣では拒否されるため worktree で行うこと）
 
 ### WSL検証資産の完了ゲート
