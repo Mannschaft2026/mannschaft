@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.experimental.SuperBuilder;
@@ -19,7 +20,10 @@ import java.util.UUID;
  * 試合出場メンバー登録エンティティ。
  */
 @Entity
-@Table(name = "tournament_match_rosters")
+// 実 DB の UNIQUE(match_id, user_id)（V8.046 uq_tmr_match_user）を Entity にも宣言し、ddl-auto で作る
+// テストスキーマでも同じ一意制約を効かせる（CMP-261127-2135: 再提出の一意制約衝突がテストで見えなかった）。
+@Table(name = "tournament_match_rosters",
+        uniqueConstraints = @UniqueConstraint(name = "uq_tmr_match_user", columnNames = {"match_id", "user_id"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @SuperBuilder
