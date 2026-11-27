@@ -209,8 +209,8 @@ class SharedFileLinkServiceAdditionalTest {
             given(passwordEncoder.matches("correct", "$2a$hashed")).willReturn(true);
             given(fileService.getFileForSharedLink(FILE_ID)).willReturn(fileResponse);
 
-            com.mannschaft.app.filesharing.dto.FileResponse result =
-                    service.accessLink("pw-token",
+            com.mannschaft.app.filesharing.dto.PublicFileLinkResponse result =
+                    service.accessLinkPublic("pw-token",
                             new com.mannschaft.app.filesharing.dto.AccessLinkRequest("correct"));
 
             assertThat(result.getName()).isEqualTo("secure.pdf");

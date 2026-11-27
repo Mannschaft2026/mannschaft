@@ -5,6 +5,7 @@ import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.filesharing.dto.AccessLinkRequest;
 import com.mannschaft.app.filesharing.dto.CreateLinkRequest;
 import com.mannschaft.app.filesharing.dto.FileResponse;
+import com.mannschaft.app.filesharing.dto.PublicFileLinkResponse;
 import com.mannschaft.app.filesharing.dto.LinkResponse;
 import com.mannschaft.app.filesharing.dto.SharedFileDownloadUrlResponse;
 import com.mannschaft.app.filesharing.entity.SharedFileLinkEntity;
@@ -102,7 +103,7 @@ class SharedFileLinkPublicSharingTest {
             given(linkRepository.findByTokenHash(HASHER.hash("tok"))).willReturn(Optional.of(link));
             given(fileService.getFileForSharedLink(FILE_ID)).willReturn(fileResponse());
 
-            FileResponse result = service.accessLinkPublic("tok", null);
+            PublicFileLinkResponse result = service.accessLinkPublic("tok", null);
 
             assertThat(result.getName()).isEqualTo("test.pdf");
         }
@@ -174,7 +175,7 @@ class SharedFileLinkPublicSharingTest {
 
             given(passwordEncoder.matches("right", "hash")).willReturn(true);
             given(fileService.getFileForSharedLink(FILE_ID)).willReturn(fileResponse());
-            FileResponse ok = service.accessLinkPublic("tok", new AccessLinkRequest("right"));
+            PublicFileLinkResponse ok = service.accessLinkPublic("tok", new AccessLinkRequest("right"));
             assertThat(ok.getName()).isEqualTo("test.pdf");
         }
 

@@ -61712,7 +61712,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseFileResponse"
+                  "$ref": "#/components/schemas/ApiResponsePublicFileLinkResponse"
                 }
               }
             }
@@ -63425,7 +63425,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseFileResponse"
+                  "$ref": "#/components/schemas/ApiResponsePublicFileLinkResponse"
                 }
               }
             }
@@ -202658,31 +202658,19 @@
           }
         }
       },
-      "ApiResponseFileResponse": {
+      "ApiResponsePublicFileLinkResponse": {
         "type": "object",
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/FileResponse"
+            "$ref": "#/components/schemas/PublicFileLinkResponse"
           }
         }
       },
-      "FileResponse": {
+      "PublicFileLinkResponse": {
         "type": "object",
         "properties": {
           "contentType": {
             "type": "string"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "createdBy": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "currentVersion": {
-            "type": "integer",
-            "format": "int32"
           },
           "description": {
             "type": "string"
@@ -202690,28 +202678,9 @@
           "downloadDisabled": {
             "type": "boolean"
           },
-          "fileKey": {
-            "type": "string"
-          },
           "fileSize": {
             "type": "integer",
             "format": "int64"
-          },
-          "folderId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "minVisibleRole": {
-            "type": "string",
-            "enum": [
-              "SUPPORTERS_AND_ABOVE",
-              "MEMBERS_AND_ABOVE",
-              "ADMINS_AND_ABOVE"
-            ]
           },
           "name": {
             "type": "string"
@@ -212569,6 +212538,70 @@
           "fileSize",
           "folderId"
         ]
+      },
+      "ApiResponseFileResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/FileResponse"
+          }
+        }
+      },
+      "FileResponse": {
+        "type": "object",
+        "properties": {
+          "contentType": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdBy": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "currentVersion": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "description": {
+            "type": "string"
+          },
+          "downloadDisabled": {
+            "type": "boolean"
+          },
+          "fileKey": {
+            "type": "string"
+          },
+          "fileSize": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "folderId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "minVisibleRole": {
+            "type": "string",
+            "enum": [
+              "SUPPORTERS_AND_ABOVE",
+              "MEMBERS_AND_ABOVE",
+              "ADMINS_AND_ABOVE"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
       },
       "CreateVersionRequest": {
         "type": "object",
