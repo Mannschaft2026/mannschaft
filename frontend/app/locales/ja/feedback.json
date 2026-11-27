@@ -56,7 +56,7 @@
         "success": "ステータスを更新しました",
         "error": "ステータスの更新に失敗しました"
       },
-      "viewAsUser": "ユーザー視点で確認",
+      "requestSupportAccess": "閲覧許可を依頼",
       "anonymous": "匿名"
     }
   }

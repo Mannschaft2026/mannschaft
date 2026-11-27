@@ -36,7 +36,7 @@ mockNuxtImport('useErrorReport', () => () => ({
 }))
 mockNuxtImport('useProxyDeskStore', () => () => ({ isPinned: false }))
 mockNuxtImport('useGuardianshipSwitchStore', () => () => ({ isActingAs: false }))
-mockNuxtImport('useAdminImpersonationStore', () => () => ({ isImpersonating: false }))
+mockNuxtImport('useSupportAccessStore', () => () => ({ isActive: false }))
 
 const alpha: DeletedTeamSummary = {
   name: 'Alpha',

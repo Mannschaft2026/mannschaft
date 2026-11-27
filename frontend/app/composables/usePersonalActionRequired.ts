@@ -42,8 +42,8 @@ export function provideInitialPersonalActionRequired() {
   const auth = useAuthStore()
   const proxy = useProxyDeskStore()
   const guardian = useGuardianshipSwitchStore()
-  const impersonation = useAdminImpersonationStore()
-  const normalMode = () => !proxy.isPinned && !guardian.isActingAs && !impersonation.isImpersonating
+  const support = useSupportAccessStore()
+  const normalMode = () => !proxy.isPinned && !guardian.isActingAs && !support.isActive
   if (!auth.user || !normalMode()) return
   const session = getAuthSessionContext(auth)
   const owner = session.capture()
@@ -53,7 +53,7 @@ export function provideInitialPersonalActionRequired() {
   const current = () => !disposed && session.current(owner) && normalMode()
   const stopJoining = () => { joinable = false }
   const dispose = () => { disposed = true; stopJoining(); flight = null }
-  watch([() => proxy.isPinned, () => guardian.isActingAs, () => impersonation.isImpersonating], dispose, { flush: 'sync' })
+  watch([() => proxy.isPinned, () => guardian.isActingAs, () => support.isActive], dispose, { flush: 'sync' })
   onScopeDispose(dispose)
   provide(INITIAL_ACTION_READ_KEY, {
     stopJoining,

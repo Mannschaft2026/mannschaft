@@ -20,7 +20,7 @@ vi.mock('~/composables/useApiBaseUrl', () => ({ resolveApiBaseUrl: () => 'http:/
 mockNuxtImport('useErrorReport', () => () => ({ capture: external.report, captureQuiet: external.report }))
 mockNuxtImport('useProxyDeskStore', () => () => ({ isPinned: false }))
 mockNuxtImport('useGuardianshipSwitchStore', () => () => ({ isActingAs: false }))
-mockNuxtImport('useAdminImpersonationStore', () => () => ({ isImpersonating: false }))
+mockNuxtImport('useSupportAccessStore', () => () => ({ isActive: false }))
 const wrappers: { unmount: () => void }[] = []
 const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } })
 const empty = { data: [], meta: { hasNext: false, nextCursor: null, limit: 20 } }

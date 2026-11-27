@@ -2173,10 +2173,6 @@
       "pointCardSynonyms": "Point Card Synonyms",
       "appeals": "Appeals"
     },
-    "impersonation": {
-      "banner": "Impersonating: {label}",
-      "exit": "Exit"
-    },
     "businessAlert": {
       "title": "Business Alerts",
       "viewAll": "View all",
@@ -3408,5 +3404,160 @@
     "load_more": "Show more",
     "reissue_context": "re-inviting",
     "decline_context": "declining the re-invitation request"
+  },
+  "supportAccess": {
+    "banner": {
+      "viewing": "Viewing the screen of {name}",
+      "readOnly": "View only (no changes possible)",
+      "remaining": "{hours}h {minutes}m left",
+      "end": "End viewing",
+      "endError": "Could not record the end of viewing. Returning to your own operator view",
+      "expired": "Support viewing has ended (expired or revoked)"
+    },
+    "status": {
+      "PENDING": "Requested",
+      "APPROVED": "Approved",
+      "DENIED": "Denied",
+      "REVOKED": "Revoked by the user",
+      "EXPIRED": "Expired",
+      "CANCELLED": "Withdrawn by operator"
+    },
+    "endedReason": {
+      "USER_REVOKED": "The user revoked the permission",
+      "OPERATOR_CANCELLED": "The operator withdrew the request",
+      "EXPIRED": "The permission expired",
+      "WITHDRAWAL": "Ended because the user left the service",
+      "OPERATOR_INELIGIBLE": "Ended because the operator account changed"
+    },
+    "eventKind": {
+      "SESSION_START": "Viewing started",
+      "VIEW": "Viewed",
+      "DENIED": "Blocked action",
+      "SESSION_END": "Viewing ended"
+    },
+    "scopeType": {
+      "TEAM": "Team",
+      "ORGANIZATION": "Organization",
+      "PERSONAL": "Personal"
+    },
+    "reference": {
+      "FEEDBACK": "Feedback box"
+    },
+    "error": {
+      "notActive": "The support-viewing permission is no longer valid. Viewing will end",
+      "readOnly": "Support viewing is view-only. You cannot change, post, delete, or send anything",
+      "forbidden": "This action is not available during support viewing",
+      "legacyHeader": "The retired impersonation method was used. Please request support-viewing permission instead",
+      "unavailable": "Support viewing is currently unavailable (the access log could not be saved). Please try again later"
+    },
+    "guardianWaiting": "Waiting for guardian approval",
+    "logs": {
+      "when": "Date and time",
+      "operator": "Operator",
+      "kind": "Type",
+      "path": "Screen (path)",
+      "scope": "Scope"
+    },
+    "admin": {
+      "title": "Support viewing",
+      "description": "With the user's permission, check their screen in view-only mode",
+      "notice": "Viewing is read-only. A permission expires 24 hours after approval and the user can revoke it at any time. Your request reason and the viewing log are shown to the user.",
+      "request": "Request viewing permission",
+      "tabAll": "All",
+      "createDescription": "The user will be notified. Once they approve after re-authenticating, you can view their screen in view-only mode for 24 hours.",
+      "targetUserId": "Target user ID",
+      "reason": "Reason for the request",
+      "reasonHint": "Shown to the user. Write {min} to {max} characters explaining specifically why viewing is needed",
+      "reference": "Reference (optional)",
+      "referenceNone": "None",
+      "referenceId": "Reference ID",
+      "submit": "Send request",
+      "requested": "Request sent. Please wait for the user to approve",
+      "requestError": "Could not send the request",
+      "start": "Start viewing",
+      "started": "Started viewing the screen of {name} (view only)",
+      "startError": "Could not start viewing",
+      "cancel": "Withdraw",
+      "cancelled": "The request or permission was withdrawn",
+      "cancelError": "Could not withdraw",
+      "cancelConfirm": "Withdraw the request or permission for {name}? Viewing stops from the next request.",
+      "detail": "Details",
+      "logs": "Viewing log",
+      "noLogs": "No viewing records yet",
+      "loadError": "Could not load",
+      "retry": "Reload",
+      "empty": "No requests",
+      "loadMore": "Load more",
+      "viewingNow": "Viewing now",
+      "requestUntil": "Awaiting reply until {date}",
+      "columns": {
+        "target": "Target user",
+        "status": "Status",
+        "requestedAt": "Requested at",
+        "expiresAt": "Expires"
+      }
+    },
+    "settings": {
+      "title": "Support viewing permissions",
+      "description": "When the operators ask to look at your screen, you decide whether to allow or deny it. Without your permission, they cannot see your screen.",
+      "hubDescription": "Approve or deny operator viewing requests, revoke permissions, and review the viewing log",
+      "hubKeywords": "support impersonation viewing operator permission revoke log",
+      "pending": "Pending requests",
+      "active": "Active permissions",
+      "logs": "Viewing log",
+      "logsDescription": "Shows when the operators viewed your screen, which screen and scope, newest first",
+      "noPending": "You have no pending requests",
+      "noActive": "You have no active permissions",
+      "noLogs": "No viewing records",
+      "loadError": "Could not load",
+      "requestedBy": "Requested by",
+      "requestReason": "Reason",
+      "reference": "Related to",
+      "requestedAt": "Requested at",
+      "requestUntil": "Reply by",
+      "validUntil": "Permission valid until",
+      "approve": "Allow",
+      "deny": "Deny",
+      "revoke": "Revoke permission",
+      "revokeConfirm": "Revoke this permission? The operator can no longer see your screen from their next request.",
+      "denyComment": "Reason for denying (optional)",
+      "denyConfirm": "Confirm denial",
+      "approved": "Allowed. The operator can view in read-only mode for 24 hours",
+      "denied": "Denied",
+      "revoked": "Permission revoked",
+      "actionError": "The action failed. Please try again later",
+      "reauthRequired": "Allowing requires identity confirmation. Confirm with your password or a passkey.",
+      "approveNotice": "Once allowed, the operator can view your screen in read-only mode for 24 hours. They cannot change, post, delete, or send anything.",
+      "password": "Password",
+      "approveWithPassword": "Confirm with password and allow",
+      "approveWithPasskey": "Confirm with passkey and allow",
+      "passkeyUnsupported": "Passkeys are not available on this device or browser. Confirm with your password",
+      "guardianRole": "This is a request to view the screen of {name}. A decision from you as guardian is needed",
+      "guardianToo": "Because the account is for a minor or under guardianship, a guardian must also approve in addition to you."
+    },
+    "help": {
+      "title": "How support viewing permissions work",
+      "description": "To investigate a problem, the operators may want to check your screen. They always ask for your permission first and only look, never change anything.",
+      "what": {
+        "title": "When does a request arrive?",
+        "body": "Operators send a request, for example after you post to the feedback box. The request includes a reason and you are notified in the app and by email."
+      },
+      "allow": {
+        "title": "How to allow",
+        "body": "Read the reason, press \"Allow\", and confirm with your password or a passkey. A link in an email alone cannot grant permission. If you do not recognize a request, choose \"Deny\"."
+      },
+      "limits": {
+        "title": "What operators can and cannot do",
+        "body": "For 24 hours after you allow it, the operator can only look at your screen. They cannot change, post, delete or send anything, touch passwords or payments, or export data. Minors and people under guardianship also need a guardian's approval."
+      },
+      "revoke": {
+        "title": "How to revoke",
+        "body": "Use \"Revoke permission\" under \"Active permissions\" at any time. From the next request, the operator can no longer see your screen."
+      },
+      "logs": {
+        "title": "Checking the viewing log",
+        "body": "When, which screen and which scope the operator viewed are all recorded in the viewing log, and you can check it here."
+      }
+    }
   }
 }

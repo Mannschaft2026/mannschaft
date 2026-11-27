@@ -272,3 +272,10 @@ body {
 .dark .article-body code,
 .dark .article-body pre { background: var(--p-surface-800, #27272a); }
 .dark .article-body a { color: var(--p-primary-400, #60a5fa); }
+
+/* F10.9 サポート閲覧中（閲覧のみ）: 保存・送信ボタンを無効に見せる。書込は BE が SUPPORT_ACCESS_003 で必ず拒否する。 */
+html.support-access-readonly :is(button, .p-button)[type="submit"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}

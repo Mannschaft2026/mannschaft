@@ -18,7 +18,7 @@ vi.mock('~/composables/useApiBaseUrl', () => ({ resolveApiBaseUrl: () => 'http:/
 mockNuxtImport('useErrorReport', () => () => ({ capture: external.report }))
 mockNuxtImport('useProxyDeskStore', () => () => ({ isPinned: false }))
 mockNuxtImport('useGuardianshipSwitchStore', () => () => ({ isActingAs: false }))
-mockNuxtImport('useAdminImpersonationStore', () => () => ({ isImpersonating: false }))
+mockNuxtImport('useSupportAccessStore', () => () => ({ isActive: false }))
 const wrappers: { unmount: () => void }[] = []
 const user = (id: number) => ({ id, email: 'synthetic@example.invalid', fullName: 'Synthetic', profileImageUrl: null })
 const json = (data: unknown) => new Response(JSON.stringify({ data }), { headers: { 'Content-Type': 'application/json' } })

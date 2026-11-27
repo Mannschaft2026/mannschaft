@@ -1,11 +1,13 @@
 // @vitest-environment nuxt
 // 戦役Z-B 試練 S16: サポート閲覧中バナー（対象者・残り時間・「閲覧のみ」・終了ボタン）。
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive } from 'vue'
 import { mountSuspended, mockNuxtImport } from '@nuxt/test-utils/runtime'
+import { useNuxtApp } from '#app'
 import type { VueWrapper } from '@vue/test-utils'
 import SupportAccessBanner from '~/components/admin/SupportAccessBanner.vue'
-import jaCommon from '~/locales/ja/common.json'
+// JSON をそのまま import すると i18n プラグインが文言をコンパイル済みの形（オブジェクト）に変換するため、?raw で原文を読む
+import jaCommonRaw from '~/locales/ja/common.json?raw'
 
 const state = vi.hoisted(() => ({
   store: null as null | {
@@ -18,6 +20,7 @@ const state = vi.hoisted(() => ({
 mockNuxtImport('useSupportAccessStore', () => () => state.store)
 
 type Dict = Record<string, unknown>
+const jaCommon = JSON.parse(jaCommonRaw) as Dict
 function ja(path: string): string {
   const value = path.split('.').reduce<unknown>((acc, key) => (acc as Dict | undefined)?.[key], jaCommon as Dict)
   expect(typeof value, `ja/common.json に ${path} が無い`).toBe('string')
@@ -25,7 +28,15 @@ function ja(path: string): string {
 }
 
 const wrappers: VueWrapper[] = []
-afterEach(() => {
+let originalLocale = 'ja'
+// 期待値は ja/common.json の原文なので、テスト中は ja ロケールに固定する（nuxt テスト環境の既定は en）
+beforeEach(async () => {
+  const i18n = useNuxtApp().$i18n
+  originalLocale = i18n.locale.value
+  await i18n.setLocale('ja')
+})
+afterEach(async () => {
+  await useNuxtApp().$i18n.setLocale(originalLocale as 'ja' | 'en' | 'zh' | 'ko' | 'es' | 'de')
   wrappers.splice(0).forEach(w => w.unmount())
   document.body.innerHTML = ''
 })

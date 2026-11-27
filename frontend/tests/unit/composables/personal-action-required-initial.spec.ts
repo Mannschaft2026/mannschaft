@@ -12,13 +12,13 @@ const fixture = vi.hoisted(() => ({
   auth: { user: null, loadFromStorage: vi.fn() } as { user: { id: number } | null; loadFromStorage: () => void },
   proxy: { isPinned: false },
   guardian: { isActingAs: false },
-  impersonation: { isImpersonating: false },
+  support: { isActive: false },
 }))
 mockNuxtImport('useApi', () => () => fixture.api)
 mockNuxtImport('useAuthStore', () => () => fixture.auth)
 mockNuxtImport('useProxyDeskStore', () => () => fixture.proxy)
 mockNuxtImport('useGuardianshipSwitchStore', () => () => fixture.guardian)
-mockNuxtImport('useAdminImpersonationStore', () => () => fixture.impersonation)
+mockNuxtImport('useSupportAccessStore', () => () => fixture.support)
 
 type Read = (options?: { shareInitial?: boolean }) => ReturnType<ReturnType<typeof actions.usePersonalActionRequired>['fetchActionRequired']>
 type Response = { data: { items: { item_type: string; scope_type: string; scope_id: number; scope_slug: string; scope_name: string; item_id: string; title: string; circulated_at: null; deadline: null; starts_at: null }[]; total_count: number } }
@@ -51,7 +51,7 @@ beforeEach(() => {
   fixture.auth = reactive({ user: { id: 101 } as { id: number } | null, loadFromStorage: vi.fn() })
   fixture.proxy = reactive({ isPinned: false })
   fixture.guardian = reactive({ isActingAs: false })
-  fixture.impersonation = reactive({ isImpersonating: false })
+  fixture.support = reactive({ isActive: false })
   clients = []; wrappers = []; pending = []; stopInitialSharing = undefined
   fixture.api.mockReset().mockImplementation(() => new Promise<Response>((resolve, reject) => { pending.push({ resolve, reject }) }))
 })
@@ -153,22 +153,22 @@ describe('個人パネル初回の要対応GETだけを実行中共有する', (
       expect((await fresh).every(result => result.items[0]!.title === '新本人')).toBe(true)
     }
   })
-  it.each(['proxy', 'guardian', 'impersonation'] as const)('%s中は共有しない', async mode => {
+  it.each(['proxy', 'guardian', 'supportAccess'] as const)('%s中は共有しない', async mode => {
     if (mode === 'proxy') fixture.proxy.isPinned = true
     if (mode === 'guardian') fixture.guardian.isActingAs = true
-    if (mode === 'impersonation') fixture.impersonation.isImpersonating = true
+    if (mode === 'supportAccess') fixture.support.isActive = true
     const [first, second] = await mount()
     const reads = Promise.all([first!(initial), second!(initial)])
     expect(fixture.api).toHaveBeenCalledTimes(2)
     pending[0]!.resolve(response()); pending[1]!.resolve(response())
     await reads
   })
-  it.each(['proxy', 'guardian', 'impersonation'] as const)('%s開始後に通常モードへ戻っても旧pending成功を採用しない', async mode => {
+  it.each(['proxy', 'guardian', 'supportAccess'] as const)('%s開始後に通常モードへ戻っても旧pending成功を採用しない', async mode => {
     const [first, second] = await mount()
     const reads = Promise.allSettled([first!(initial), second!(initial)])
     if (mode === 'proxy') { fixture.proxy.isPinned = true; fixture.proxy.isPinned = false }
     if (mode === 'guardian') { fixture.guardian.isActingAs = true; fixture.guardian.isActingAs = false }
-    if (mode === 'impersonation') { fixture.impersonation.isImpersonating = true; fixture.impersonation.isImpersonating = false }
+    if (mode === 'supportAccess') { fixture.support.isActive = true; fixture.support.isActive = false }
     pending[0]!.resolve(response())
     expect((await reads).every(result => result.status === 'rejected')).toBe(true)
   })

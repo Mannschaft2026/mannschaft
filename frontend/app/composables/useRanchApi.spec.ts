@@ -21,7 +21,7 @@ vi.mock('~/composables/useApiBaseUrl', () => ({ resolveApiBaseUrl: () => 'http:/
 mockNuxtImport('useErrorReport', () => () => ({ capture: external.report, captureQuiet: external.report }))
 mockNuxtImport('useProxyDeskStore', () => () => ({ isPinned: false }))
 mockNuxtImport('useGuardianshipSwitchStore', () => () => ({ isActingAs: false }))
-mockNuxtImport('useAdminImpersonationStore', () => () => ({ isImpersonating: false }))
+mockNuxtImport('useSupportAccessStore', () => () => ({ isActive: false }))
 
 const assignmentPath = '/api/v1/me/ranch/assignment' satisfies keyof paths
 const dinosaurId = '33333333-3333-4333-8333-333333333333'

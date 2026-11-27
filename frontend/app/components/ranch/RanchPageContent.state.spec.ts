@@ -22,7 +22,7 @@ vi.mock('~/composables/useApiBaseUrl', () => ({ resolveApiBaseUrl: () => 'http:/
 mockNuxtImport('useErrorReport', () => () => ({ capture: external.report, captureQuiet: external.report }))
 mockNuxtImport('useProxyDeskStore', () => () => ({ isPinned: false }))
 mockNuxtImport('useGuardianshipSwitchStore', () => () => ({ isActingAs: false }))
-mockNuxtImport('useAdminImpersonationStore', () => () => ({ isImpersonating: false }))
+mockNuxtImport('useSupportAccessStore', () => () => ({ isActive: false }))
 // Sceneの描画・音は対象外。Widgetが利用するrefの公開契約は維持する。
 const SceneStub = defineComponent({
   name: 'DinosaurScene',

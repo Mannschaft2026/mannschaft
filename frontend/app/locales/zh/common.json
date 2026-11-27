@@ -2173,10 +2173,6 @@
       "pointCardSynonyms": "积分卡同义词",
       "appeals": "申诉"
     },
-    "impersonation": {
-      "banner": "管理员伪装中: {label}",
-      "exit": "退出伪装"
-    },
     "businessAlert": {
       "title": "业务提醒",
       "viewAll": "查看全部",
@@ -3408,5 +3404,160 @@
     "load_more": "查看更多",
     "reissue_context": "重新邀请",
     "decline_context": "拒绝重新邀请请求"
+  },
+  "supportAccess": {
+    "banner": {
+      "viewing": "正在查看 {name} 的画面",
+      "readOnly": "仅查看（无法进行更改）",
+      "remaining": "剩余 {hours} 小时 {minutes} 分钟",
+      "end": "结束查看",
+      "endError": "未能记录查看的结束。即将切换回运营者本人的画面",
+      "expired": "支持查看已结束（已过期或被撤销）"
+    },
+    "status": {
+      "PENDING": "请求中",
+      "APPROVED": "已允许",
+      "DENIED": "已拒绝",
+      "REVOKED": "本人已撤销",
+      "EXPIRED": "已过期",
+      "CANCELLED": "运营已撤回"
+    },
+    "endedReason": {
+      "USER_REVOKED": "本人撤销了许可",
+      "OPERATOR_CANCELLED": "运营撤回了请求",
+      "EXPIRED": "许可已过期",
+      "WITHDRAWAL": "因本人退出而结束",
+      "OPERATOR_INELIGIBLE": "因运营账号状态变更而结束"
+    },
+    "eventKind": {
+      "SESSION_START": "开始查看",
+      "VIEW": "查看",
+      "DENIED": "被拒绝的操作",
+      "SESSION_END": "结束查看"
+    },
+    "scopeType": {
+      "TEAM": "团队",
+      "ORGANIZATION": "组织",
+      "PERSONAL": "个人"
+    },
+    "reference": {
+      "FEEDBACK": "意见箱"
+    },
+    "error": {
+      "notActive": "支持查看的许可已失效，查看将结束",
+      "readOnly": "支持查看期间仅可查看，无法更改、发布、删除或发送",
+      "forbidden": "支持查看期间无法执行此操作",
+      "legacyHeader": "使用了已废弃的旧版代理登录。请改为申请支持查看许可",
+      "unavailable": "支持查看目前不可用（无法保存查看记录）。请稍后重试"
+    },
+    "guardianWaiting": "等待监护人批准",
+    "logs": {
+      "when": "日期时间",
+      "operator": "运营者",
+      "kind": "类型",
+      "path": "页面（路径）",
+      "scope": "对象范围"
+    },
+    "admin": {
+      "title": "支持查看",
+      "description": "在获得用户本人许可后，以仅查看方式确认其画面",
+      "notice": "代理查看仅可查看。许可在批准后 24 小时失效，本人可随时撤销。请求理由和查看记录会向本人显示。",
+      "request": "申请查看许可",
+      "tabAll": "全部",
+      "createDescription": "将通知对象用户。本人重新验证并许可后，可在 24 小时内以仅查看方式确认。",
+      "targetUserId": "对象用户 ID",
+      "reason": "请求理由",
+      "reasonHint": "将向本人显示。请用 {min}～{max} 个字符具体说明需要查看的理由",
+      "reference": "关联对象（可选）",
+      "referenceNone": "无",
+      "referenceId": "关联 ID",
+      "submit": "提交请求",
+      "requested": "已提交查看许可请求，请等待本人许可",
+      "requestError": "无法提交请求",
+      "start": "开始代理查看",
+      "started": "已开始查看 {name} 的画面（仅查看）",
+      "startError": "无法开始查看",
+      "cancel": "撤回",
+      "cancelled": "已撤回请求或许可",
+      "cancelError": "无法撤回",
+      "cancelConfirm": "要撤回对 {name} 的请求或许可吗？撤回后，从下一次请求起将无法查看。",
+      "detail": "详情",
+      "logs": "查看记录",
+      "noLogs": "暂无查看记录",
+      "loadError": "加载失败",
+      "retry": "重新加载",
+      "empty": "没有请求",
+      "loadMore": "加载更多",
+      "viewingNow": "查看中",
+      "requestUntil": "等待回复至 {date}",
+      "columns": {
+        "target": "对象用户",
+        "status": "状态",
+        "requestedAt": "请求时间",
+        "expiresAt": "期限"
+      }
+    },
+    "settings": {
+      "title": "支持查看许可",
+      "description": "当运营方请求查看您的画面时，由您决定允许或拒绝。未经您的许可，运营方无法查看您的画面。",
+      "hubDescription": "处理运营方的查看请求（允许或拒绝）、撤销许可并查看查看记录",
+      "hubKeywords": "支持 代理登录 查看 运营 许可 撤销 记录",
+      "pending": "待处理的请求",
+      "active": "有效的许可",
+      "logs": "查看记录",
+      "logsDescription": "按时间倒序显示运营方查看您画面的时间、页面和对象",
+      "noPending": "没有待处理的请求",
+      "noActive": "没有有效的许可",
+      "noLogs": "没有查看记录",
+      "loadError": "加载失败",
+      "requestedBy": "请求的运营者",
+      "requestReason": "请求理由",
+      "reference": "关联",
+      "requestedAt": "请求时间",
+      "requestUntil": "回复期限",
+      "validUntil": "许可有效期至",
+      "approve": "允许",
+      "deny": "拒绝",
+      "revoke": "撤销许可",
+      "revokeConfirm": "要撤销此许可吗？撤销后，运营方从下一次请求起将无法查看您的画面。",
+      "denyComment": "拒绝理由（可选）",
+      "denyConfirm": "确认拒绝",
+      "approved": "已允许。运营方可在 24 小时内以仅查看方式确认",
+      "denied": "已拒绝",
+      "revoked": "已撤销许可",
+      "actionError": "操作失败，请稍后重试",
+      "reauthRequired": "许可需要进行本人确认。请使用密码或通行密钥确认。",
+      "approveNotice": "许可后，运营方可在 24 小时内以仅查看方式确认您的画面，无法更改、发布、删除或发送。",
+      "password": "密码",
+      "approveWithPassword": "用密码确认并允许",
+      "approveWithPasskey": "用通行密钥确认并允许",
+      "passkeyUnsupported": "此设备或浏览器无法使用通行密钥，请使用密码确认",
+      "guardianRole": "这是查看 {name} 画面的请求，需要您作为监护人做出判断",
+      "guardianToo": "由于是未成年人或处于监护下的用户，除您的许可外还需要监护人的许可。"
+    },
+    "help": {
+      "title": "支持查看许可的使用方法",
+      "description": "为了调查故障等，运营方有时需要确认您的画面。必须先获得您的许可，并且仅查看。",
+      "what": {
+        "title": "什么时候会收到请求？",
+        "body": "例如在您向意见箱投稿后，运营方会发来查看请求。请求中写明了理由，并会通过通知和邮件告知您。"
+      },
+      "allow": {
+        "title": "如何允许",
+        "body": "阅读请求理由，点击“允许”，并用密码或通行密钥进行本人确认。仅凭邮件中的链接无法允许。对于不认识的请求，请选择“拒绝”。"
+      },
+      "limits": {
+        "title": "运营方能做什么、不能做什么",
+        "body": "许可后的 24 小时内，运营方只能查看您的画面，不能更改、发布、删除或发送，也不能操作密码、支付或导出数据。未成年人和处于监护下的用户还需要监护人的许可。"
+      },
+      "revoke": {
+        "title": "如何撤销",
+        "body": "可随时在“有效的许可”中点击“撤销许可”。撤销后，运营方从下一次请求起将无法查看您的画面。"
+      },
+      "logs": {
+        "title": "查看记录的确认",
+        "body": "运营方查看的时间、页面和对象都会保留在“查看记录”中，您也可以在此确认。"
+      }
+    }
   }
 }

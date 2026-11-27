@@ -19,7 +19,7 @@ mockNuxtImport('useRoute', () => () => ({ params: { resultId: 'saved-result' } }
 mockNuxtImport('useErrorReport', () => () => ({ capture: external.report, captureQuiet: external.report }))
 mockNuxtImport('useProxyDeskStore', () => () => ({ isPinned: false }))
 mockNuxtImport('useGuardianshipSwitchStore', () => () => ({ isActingAs: false }))
-mockNuxtImport('useAdminImpersonationStore', () => () => ({ isImpersonating: false }))
+mockNuxtImport('useSupportAccessStore', () => () => ({ isActive: false }))
 const wrappers: VueWrapper[] = []
 let result: DiagnosisResult, state: RanchState, failState: boolean
 const json = (data: unknown, status = 200) => new Response(JSON.stringify({ data }), { status, headers: { 'Content-Type': 'application/json' } })
