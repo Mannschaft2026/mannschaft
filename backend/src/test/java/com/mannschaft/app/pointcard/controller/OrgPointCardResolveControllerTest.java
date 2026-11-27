@@ -47,7 +47,7 @@ import com.mannschaft.app.common.security.AccessGuard;
  *   <li>POST /resolve-by-token 不存在トークン → 404 POINT_CARD_019</li>
  *   <li>POST /resolve-by-token 他組織カード → 404 POINT_CARD_011</li>
  *   <li>POST /resolve-by-token 認可違反 → 403</li>
- *   <li>POST /resolve-by-token Bean Validation（token 必須 / 36 文字）</li>
+ *   <li>POST /resolve-by-token Bean Validation（token 必須 / 43 文字）</li>
  *   <li>レスポンスに暗号化対象が含まれない（barcodeValue / nickname / memo）</li>
  * </ul>
  */
@@ -60,7 +60,7 @@ class OrgPointCardResolveControllerTest {
     private static final Long ORG_ID = 10L;
     private static final UUID CARD_ID = UUID.fromString("01956c00-0000-7000-8000-000000000eee");
     private static final UUID PROVIDER_ID = UUID.fromString("01956c00-0000-7000-8000-000000000fff");
-    private static final String TOKEN = "01234567-89ab-4cde-8fed-cba987654321";
+    private static final String TOKEN = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-AbCde";
 
     @Autowired
     private MockMvc mockMvc;
@@ -211,11 +211,20 @@ class OrgPointCardResolveControllerTest {
     }
 
     @Test
-    @DisplayName("POST /resolve-by-token: token 長さ違反（36 文字以外） → 400")
+    @DisplayName("POST /resolve-by-token: token 長さ違反（43 文字以外。旧 UUID 36 字も弾く） → 400")
     void resolve_invalidTokenLength_400() throws Exception {
         mockMvc.perform(post("/api/v1/organizations/{orgId}/point-cards/resolve-by-token", ORG_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody("too-short")))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("POST /resolve-by-token: 旧形式 UUID（36 文字）は 400（発行形式は Base64URL 43 字のみ）")
+    void resolve_legacyUuidToken_400() throws Exception {
+        mockMvc.perform(post("/api/v1/organizations/{orgId}/point-cards/resolve-by-token", ORG_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody("01234567-89ab-4cde-8fed-cba987654321")))
                 .andExpect(status().isBadRequest());
     }
 }
