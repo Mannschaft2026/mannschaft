@@ -1,19 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkTaskListStructure, splitTableRow } from './task-list-structure-check.mjs';
+import { fsLedgerReader, readLedger } from './task-list-ledger.mjs';
 
 // CMP-261121-1114: merge queue（merge_group）経路の台帳構造検査器の単体テスト。
 // 判定規則は backend/src/test/java/com/mannschaft/app/common/architecture/TaskListCmpIdDuplicateGuardTest.java
 // （Java 番人）から移植した。下の共通 fixture は、Java 番人に同じ台帳を与えた場合の判定（expectOk）を期待値にしている。
 
 const scriptPath = fileURLToPath(new URL('./task-list-structure-check.mjs', import.meta.url));
-const repoTaskList = fileURLToPath(new URL('../docs/task-list.md', import.meta.url));
 const header = '| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|';
 const row = (id, state, rest = '— | 条件 | 証拠 | ledger') => '| ' + id + ' | 戦役 | ' + state + ' | ' + rest + ' |';
 const doc = (...rows) => '# 台帳\n\n' + header + '\n' + rows.join('\n') + '\n';
@@ -71,8 +70,8 @@ test('splitTableRow は \\| だけを区切りにせず、コードスパン内�
   assert.deepEqual(splitTableRow('| `a | b` |'), ['', ' `a ', ' b` ', '']);
 });
 
-test('現行の docs/task-list.md は success（Java 番人が main で緑であることと一致）', () => {
-  const result = checkTaskListStructure(readFileSync(repoTaskList, 'utf8'));
+test('現行の台帳（旧配置・新配置のどちらでも）は success（Java 番人が main で緑であることと一致）', async () => {
+  const result = checkTaskListStructure(await readLedger(fsLedgerReader(fileURLToPath(new URL('../', import.meta.url)))));
   assert.deepEqual(result.errors, []);
   assert.equal(result.ok, true);
   assert.ok(result.stats.rows > 0);
