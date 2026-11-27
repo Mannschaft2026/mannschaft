@@ -196,6 +196,21 @@ test('AC-1: 申告0件（changes/ 無し・空）では node を呼ばず、Pyth
   }
 });
 
+test('docs/task-list/changes は 不在・空ディレクトリ（0件）と、存在するがディレクトリでない（エラー）を区別する', { skip: python ? false : 'python が無い' }, () => {
+  const absent = writeTree(splitBase);
+  const empty = writeTree(splitBase);
+  mkdirSync(join(empty, 'docs', 'task-list', 'changes'));
+  const notDir = writeTree({ ...splitBase, 'docs/task-list/changes': 'ファイル\n' });
+  try {
+    const [a, b, c] = runProbe([absent, empty, notDir], { TASK_LIST_LEDGER_NODE: join(absent, 'no-such-node') });
+    assert.equal(a.error, undefined, a.error);
+    assert.equal(b.error, undefined, b.error);
+    assert.match(c.error ?? '', /RuntimeError: 台帳の変更申告に問題がある.*ディレクトリでない/);
+  } finally {
+    for (const d of [absent, empty, notDir]) rmSync(d, { recursive: true, force: true });
+  }
+});
+
 test('申告があるのに node が無いときは止まる（生の月別ファイルだけで続けない）', { skip: python ? false : 'python が無い' }, () => {
   const root = writeTree(withChanges);
   try {
@@ -208,7 +223,7 @@ test('申告があるのに node が無いときは止まる（生の月別フ�
 
 test('共有 fixture の申告 case（合格するもの）で Python の実効台帳が Node と一致し、問題のある case は止まる', { skip: python ? false : 'python が無い' }, async () => {
   const { cases } = JSON.parse(readFileSync(join(repoRoot, 'scripts', 'fixtures', 'task-list-ledger-cases.json'), 'utf8'));
-  const targets = cases.filter((c) => c.name.startsWith('申告:') && Object.keys(c.files).some((p) => p.startsWith('docs/task-list/changes/')) && !Object.keys(c.files).some((p) => /changes\/[^/]+\//.test(p)));
+  const targets = cases.filter((c) => c.name.startsWith('申告:') && Object.keys(c.files).some((p) => p.startsWith('docs/task-list/changes/') || p === 'docs/task-list/changes') && !Object.keys(c.files).some((p) => /changes\/[^/]+\//.test(p)));
   assert.ok(targets.length >= 20, String(targets.length));
   const roots = targets.map((c) => writeTree(c.files));
   try {

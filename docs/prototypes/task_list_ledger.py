@@ -56,9 +56,14 @@ def ledger_files(root: Path) -> list[Path]:
 
 
 def change_files(root: Path) -> list[Path]:
-    """docs/task-list/changes/ の中身（名前順。不正なものも含む。判定は Node 側）。無ければ空。"""
+    """docs/task-list/changes/ の中身（名前順。不正なものも含む。判定は Node 側）。
+    不在・空ディレクトリは申告0件（空）。存在するがディレクトリでない（通常ファイル等）は RuntimeError（Node・Java と同じく拒否）。"""
     directory = root / CHANGES_RELATIVE
-    return sorted(directory.iterdir(), key=lambda path: path.name) if directory.is_dir() else []
+    if not directory.exists() and not directory.is_symlink():
+        return []
+    if not directory.is_dir():
+        raise RuntimeError(f"台帳の変更申告に問題がある: {CHANGES_RELATIVE.as_posix()} がディレクトリでない（申告は {CHANGES_RELATIVE.as_posix()}/ 配下に置く）")
+    return sorted(directory.iterdir(), key=lambda path: path.name)
 
 
 def ledger_source_files(root: Path) -> list[Path]:

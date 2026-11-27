@@ -1099,6 +1099,55 @@
       "expectLines": {
         "CMP-261124-1222": "| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |"
       }
+    },
+    {
+      "name": "申告: A→（終端の | が無い8列行）→C の連鎖は、壊れた中間申告を列数違反で赤にし適用しない",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | P2 実装中（終端なし） | — | 条件 | 証拠 | ledger | EXTRA\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T020000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:3f948dd543fc557dd5491cbe2654c42de353959c52877a52f41565300ab67bf6 -->\n| CMP-261124-1222 | 戦役 | 完了 | — | 条件 [証拠](../evidence/CMP-261124-1222.json) | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md",
+        "列数",
+        "docs/task-list/changes/CMP-261124-1222--20261127T020000Z--000001.md",
+        "孤児"
+      ],
+      "expectLines": {
+        "CMP-261124-1222": "| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |"
+      }
+    },
+    {
+      "name": "新配置: 月別ファイルの行が | で閉じていない（終端の | が無い8列行）と列数違反",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中（終端なし） | — | 条件 | 証拠 | ledger | EXTRA\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/2026-11.md: 列数"
+      ]
+    },
+    {
+      "name": "申告: docs/task-list/changes が通常ファイル（ディレクトリでない）なら赤",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | 完了 | — | 条件 [証拠](../evidence/CMP-261124-1222.json) | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes",
+        "ディレクトリでない"
+      ],
+      "expectLines": {
+        "CMP-261124-1222": "| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |"
+      }
     }
   ]
 }
