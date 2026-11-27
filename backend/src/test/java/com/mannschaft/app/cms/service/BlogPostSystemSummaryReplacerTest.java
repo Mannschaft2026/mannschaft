@@ -40,7 +40,7 @@ import static org.mockito.Mockito.when;
  * <p>既存記事の論理削除が同時に走った相手と同じ版を更新しようとした楽観ロック衝突（flush を EntityManager で
  * 直接呼ぶため変換前の {@link OptimisticLockException} のまま届く経路と、commit 時に Spring の
  * {@link ObjectOptimisticLockingFailureException} へ変換されて届く経路の両方）もやり直し対象であることを固定する
- * （台帳 CMP-261127-1817）。</p>
+ * （台帳 CMP-261127-2220）。</p>
  */
 @DisplayName("BlogPostSystemSummaryReplacer（差し替えのやり直し範囲）")
 class BlogPostSystemSummaryReplacerTest {

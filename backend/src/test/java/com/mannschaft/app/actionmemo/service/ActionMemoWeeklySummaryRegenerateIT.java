@@ -262,7 +262,7 @@ class ActionMemoWeeklySummaryRegenerateIT extends AbstractMySqlIntegrationTest {
     }
 
     /**
-     * 既存の週次まとめがある状態で同じユーザーの差し替えが同時に走る状況を、実 DB のロック待ちで再現する（台帳 CMP-261127-1817）。
+     * 既存の週次まとめがある状態で同じユーザーの差し替えが同時に走る状況を、実 DB のロック待ちで再現する（台帳 CMP-261127-2220）。
      * 相手の差し替えが既存記事（version=1）を論理削除して新記事を INSERT し、未確定の間に、こちらの再生成を走らせる。
      * こちらは既存記事を（相手の未確定の変更が見えない一貫読み取りで）version=1 のまま読み、その論理削除の UPDATE が
      * 相手の保持する行ロックを実際に待っていることを {@code performance_schema.data_lock_waits} で確かめてから相手を確定させる。
