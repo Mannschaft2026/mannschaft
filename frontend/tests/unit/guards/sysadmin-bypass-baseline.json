@@ -7,9 +7,6 @@
     "SYSTEM_ADMIN:#-": 1
   },
   "components/admin/AdminSettingsHub.vue": {
-    "isSystemAdmin#-": 2,
-    "'SYSTEM_ADMIN'#-": 1,
-    "isSystemAdmin#links": 1,
     "'SYSTEM_ADMIN'#sequence": 1
   },
   "components/dashboard/DashboardActionPanel.vue": {

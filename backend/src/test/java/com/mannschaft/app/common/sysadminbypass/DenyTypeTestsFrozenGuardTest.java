@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -49,6 +50,9 @@ class DenyTypeTestsFrozenGuardTest {
     private static final Set<String> REQUIRED_SUBJECTS = Set.of(
             "checkScopeAdminOnly", "canActAsScopeAdminOnly", "requireActorScopeAdminOnly", "useAppNavGroups");
 
+    /** 拒否型テストを含むファイルに @Disabled が 1 つでもあれば赤（メソッド・クラス・@Nested のいずれの無効化も塞ぐ）。 */
+    private static final Pattern DISABLED = Pattern.compile("@Disabled\\b");
+
     private record Entry(String subject, String path, String selector, String sha256) {
     }
 
@@ -76,13 +80,18 @@ class DenyTypeTestsFrozenGuardTest {
                 continue;
             }
             String src = Files.readString(file, StandardCharsets.UTF_8).replace("\r\n", "\n");
-            List<String> bodies = extract(src, e.selector(), e.path().endsWith(".java"));
+            boolean java = e.path().endsWith(".java");
+            List<String> bodies = extract(src, e.selector(), java);
             if (bodies.size() != 1) {
                 problems.add(String.format("%s の %s が %d 件見つかった（1 件であること）",
                         e.path(), e.selector(), bodies.size()));
                 continue;
             }
-            String actual = sha256(bodies.getFirst());
+            if (java && DISABLED.matcher(src).find()) {
+                problems.add("@Disabled が含まれている（拒否型テストを無効化できない）: " + e.path());
+                continue;
+            }
+            String actual = sha256(fingerprint(src, e.selector(), java));
             if (!actual.equals(e.sha256())) {
                 problems.add(String.format("拒否型テストが変更された: %s %s（固定 %s / 実際 %s）",
                         e.path(), e.selector(), e.sha256(), actual));
@@ -150,7 +159,132 @@ class DenyTypeTestsFrozenGuardTest {
         assertThat(its.getFirst()).startsWith("it('題名 A'").contains("toBeTruthy").doesNotContain("題名 B");
     }
 
+    @Test
+    @DisplayName("自己検証: 注釈の変更・補助メソッドの変更・@BeforeEach の変更で指紋が変わり、@Disabled は検出される")
+    void fingerprintSelfCheck() {
+        String base = """
+                class X {
+                    @BeforeEach
+                    void setUp() { init(); }
+                    @Test
+                    @DisplayName("a")
+                    void target() { helper(); }
+                    private void helper() { check(1); }
+                    private void unrelated() { }
+                }
+                """;
+        String fp = fingerprint(base, "target", true);
+        assertThat(fp).contains("@DisplayName(\"a\")").contains("@Test")
+                .contains("void helper()").contains("void setUp()").doesNotContain("unrelated");
+        // 本体は同じで注釈だけ変える（@Disabled の付与・@Test の削除・表示名変更）
+        assertThat(sha256(fingerprint(base.replace("    @Test\n", "    @Test\n    @Disabled\n"), "target", true)))
+                .isNotEqualTo(sha256(fp));
+        assertThat(sha256(fingerprint(base.replace("    @Test\n", ""), "target", true))).isNotEqualTo(sha256(fp));
+        assertThat(sha256(fingerprint(base.replace("DisplayName(\"a\")", "DisplayName(\"b\")"), "target", true)))
+                .isNotEqualTo(sha256(fp));
+        // 本体は同じで補助メソッド・@BeforeEach だけ変える
+        assertThat(sha256(fingerprint(base.replace("check(1)", "check(2)"), "target", true))).isNotEqualTo(sha256(fp));
+        assertThat(sha256(fingerprint(base.replace("init()", "skip()"), "target", true))).isNotEqualTo(sha256(fp));
+        // 無関係なメソッドの変更では変わらない
+        assertThat(sha256(fingerprint(base.replace("void unrelated() { }", "void unrelated() { x(); }"), "target", true)))
+                .isEqualTo(sha256(fp));
+        // @Disabled の検出
+        assertThat(DISABLED.matcher(base.replace("    @Test\n", "    @Test\n    @Disabled(\"x\")\n")).find()).isTrue();
+        assertThat(DISABLED.matcher(base).find()).isFalse();
+    }
+
     // ───────────────────────────── 抽出器 ─────────────────────────────
+
+    private static final String METHOD_DECL_FMT =
+            "^[ \\t]*(?:(?:public|protected|private|static|final|synchronized)\\s+)*[\\w<>\\[\\],.? ]+?\\s+%s\\s*"
+                    + "\\([^;{)]*\\)\\s*(?:throws\\s+[\\w., ]+)?\\s*\\{";
+
+    private static final Set<String> NOT_METHODS = Set.of(
+            "if", "for", "while", "switch", "catch", "return", "new", "assertThat", "when", "verify");
+
+    /**
+     * 固定対象の指紋テキスト。メソッド本体だけでなく、直前の注釈（@Test・@Disabled・@DisplayName 等）、
+     * 本体が呼ぶ同ファイルの補助メソッド（再帰的に）、@BeforeEach メソッドも含める。
+     * FE は it ブロックに加え、同ファイルの beforeEach ブロックを含める。
+     */
+    static String fingerprint(String src, String selector, boolean java) {
+        List<String> parts = new ArrayList<>();
+        if (!java) {
+            parts.addAll(extract(src, selector, false));
+            Matcher m = Pattern.compile("\\bbeforeEach\\(").matcher(src);
+            while (m.find()) {
+                int arrow = src.indexOf("=>", m.end());
+                int open = arrow < 0 ? -1 : src.indexOf('{', arrow);
+                int close = open < 0 ? -1 : matchBrace(src, open);
+                if (close > 0) {
+                    parts.add(src.substring(m.start(), close + 1));
+                }
+            }
+            return String.join("\n---\n", parts);
+        }
+        Set<String> included = new LinkedHashSet<>();
+        List<String> queue = new ArrayList<>();
+        queue.add(selector);
+        Matcher be = Pattern.compile(
+                "@BeforeEach\\b[^\\n]*\\n(?:\\s*@[^\\n]*\\n)*\\s*(?:(?:public|protected|private)\\s+)?void\\s+(\\w+)\\s*\\(")
+                .matcher(src);
+        while (be.find()) {
+            queue.add(be.group(1));
+        }
+        while (!queue.isEmpty()) {
+            String name = queue.remove(0);
+            if (included.contains(name)) {
+                continue;
+            }
+            String unit = methodUnit(src, name);
+            if (unit == null) {
+                continue;
+            }
+            included.add(name);
+            parts.add(unit);
+            Matcher call = Pattern.compile("\\b(\\w+)\\s*\\(").matcher(unit.substring(unit.indexOf('{')));
+            while (call.find()) {
+                String callee = call.group(1);
+                if (!included.contains(callee) && !NOT_METHODS.contains(callee) && methodUnit(src, callee) != null) {
+                    queue.add(callee);
+                }
+            }
+        }
+        // 先頭（対象）以外は辞書順にして順序の揺れを避ける
+        String head = parts.get(0);
+        List<String> rest = new ArrayList<>(parts.subList(1, parts.size()));
+        Collections.sort(rest);
+        StringBuilder sb = new StringBuilder(head);
+        for (String r : rest) {
+            sb.append("\n---\n").append(r);
+        }
+        return sb.toString();
+    }
+
+    /** 名前に一致するメソッドの「直前の注釈 + 宣言行 + 本体」。見つからなければ null。 */
+    private static String methodUnit(String src, String name) {
+        Matcher m = Pattern.compile(String.format(METHOD_DECL_FMT, Pattern.quote(name)), Pattern.MULTILINE).matcher(src);
+        if (!m.find()) {
+            return null;
+        }
+        int open = src.indexOf('{', m.end() - 1);
+        int close = matchBrace(src, open);
+        if (close < 0) {
+            return null;
+        }
+        // 直前の注釈行（@ で始まる行）を遡って含める
+        int from = m.start();
+        while (from > 0) {
+            int prevEnd = from - 1;
+            int prevStart = src.lastIndexOf('\n', prevEnd - 1) + 1;
+            if (src.substring(prevStart, prevEnd).trim().startsWith("@")) {
+                from = prevStart;
+            } else {
+                break;
+            }
+        }
+        return src.substring(from, close + 1);
+    }
 
     /**
      * selector に一致するテスト本体を抽出する。Java は {@code void 名前(} から本体の閉じ括弧まで、
