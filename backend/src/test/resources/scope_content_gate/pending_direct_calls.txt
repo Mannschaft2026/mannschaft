@@ -423,7 +423,6 @@ com.mannschaft.app.resident.service.ResidentDocumentService#listByResident
 com.mannschaft.app.resident.service.ResidentRegistryService#listByUnit
 
 ## role
-com.mannschaft.app.role.service.InviteReissueRequestService#reissue
 
 ## safetycheck
 com.mannschaft.app.safetycheck.service.SafetyCheckService#getSafetyCheck

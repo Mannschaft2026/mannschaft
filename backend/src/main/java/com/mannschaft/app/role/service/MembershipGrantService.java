@@ -2,6 +2,7 @@ package com.mannschaft.app.role.service;
 
 import com.mannschaft.app.auth.service.UserRowLockService;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.MembersOnlyTeamEntryGuard;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.membership.dto.MembershipCreateRequest;
@@ -53,6 +54,13 @@ import java.util.UUID;
  * </ol>
  * <p>付与と印は一緒にコミット（またはロールバック）されるので、claim を戻すか確定するかは印だけで決まる。</p>
  *
+ * <h2>非公開チームへの SUPPORTER 招待（CMP-261124-0159・F01.2 03「入口の関所」・AC-0159-41/91）</h2>
+ * <p>TEAM の SUPPORTER 招待の付与では、claim 行のロックの後・在籍の判定（user_roles / memberships のロック付き読み取り）の前に
+ * チーム行を {@code FOR SHARE} で読む（ロック順の規則。claim TX はチーム行をロックしない）。非公開チームなら付与せず 403 TEAM_073 を
+ * 投げる。TX ごと巻き戻るので付与印は立たず、呼び出し元（{@link InviteAcceptanceFacade}）の既存の補償が claim を戻し
+ * {@code used_count} を復元する。判定順は「claim の付与印 → 在籍済み → claim の状態 → 公開範囲」で、在籍済み・claim 失効の
+ * 結果は本戦役前と変えない。</p>
+ *
  * <h2>書き先（CMP-261124-0157）</h2>
  * <p>{@code memberships.role_kind} は SUPPORTER 招待なら SUPPORTER、それ以外は MEMBER とし、SUPPORTER は
  * {@code user_roles} を作らない（F01.2 03_business_logic.md「招待参加フロー」手順8。SUPPORTER の user_roles 行は
@@ -86,8 +94,10 @@ public class MembershipGrantService {
     private final MembershipService membershipService;
     private final UserRowLockService userRowLockService;
     private final InviteTokenRepository inviteTokenRepository;
+    private final MembersOnlyTeamEntryGuard membersOnlyTeamEntryGuard;
 
     private static final String MEMBER_ROLE_NAME = "MEMBER";
+    private static final String SUPPORTER_ROLE_NAME = "SUPPORTER";
 
     /**
      * MEMBER ロールを付与して入会させる（他ドメインが role ドメインの {@link RoleRepository} を
@@ -152,6 +162,11 @@ public class MembershipGrantService {
             return GrantOutcome.ALREADY_JOINED;
         }
 
+        // 2c. 非公開チームへの SUPPORTER 招待（CMP-261124-0159）: 在籍行のロックより前にチーム行を FOR SHARE で読む。
+        //     拒否は在籍済み・claim 失効の判定の後に行い、それらの結果を変えない（クラス javadoc）。
+        boolean supporterIntoMembersOnlyTeam = "TEAM".equals(scopeType) && isSupporterRole(roleId)
+                && membersOnlyTeamEntryGuard.lockAndCheckMembersOnly(scopeId);
+
         // 3. 冪等性チェック（P1-2）: 既に当該スコープのメンバーであれば二重割当・重複入会を行わない。
         if (isAlreadyJoined(Mode.INVITE, toScopeType(scopeType), scopeId, userId)) {
             logSkipped(scopeType, scopeId, userId, source);
@@ -163,6 +178,10 @@ public class MembershipGrantService {
             log.info("ロール付与を中止（付与の元の claim が既に {}）: claimId={}, userId={}", claim.status(),
                     claim.claimId(), userId);
             throw new BusinessException(RoleErrorCode.ROLE_002);
+        }
+        if (supporterIntoMembersOnlyTeam) {
+            log.info("ロール付与を中止（非公開チームへの SUPPORTER 招待）: scopeId={}, userId={}", scopeId, userId);
+            throw MembersOnlyTeamEntryGuard.rejection();
         }
 
         Long grantRoleId = roleId != null ? roleId : memberRoleId();
@@ -189,6 +208,13 @@ public class MembershipGrantService {
     private Long memberRoleId() {
         return roleRepository.findByName(MEMBER_ROLE_NAME)
                 .orElseThrow(() -> new BusinessException(RoleErrorCode.ROLE_001)).getId();
+    }
+
+    /** 付与するロールが SUPPORTER か（ロールが引けなければ false。存在しないロールの扱いは従来の判定に任せる）。 */
+    private boolean isSupporterRole(Long roleId) {
+        return roleId != null && roleRepository.findById(roleId)
+                .map(role -> SUPPORTER_ROLE_NAME.equals(role.getName()))
+                .orElse(false);
     }
 
     private static GrantTarget memberTarget() {

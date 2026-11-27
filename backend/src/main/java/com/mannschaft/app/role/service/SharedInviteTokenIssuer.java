@@ -1,5 +1,6 @@
 package com.mannschaft.app.role.service;
 
+import com.mannschaft.app.common.MembersOnlyTeamEntryGuard;
 import com.mannschaft.app.common.token.IssuedToken;
 import com.mannschaft.app.common.token.SecretTokenVault;
 import com.mannschaft.app.role.dto.InviteTokenIssuedResponse;
@@ -17,17 +18,28 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
-/** 共有招待のrole専属writer。親状態は読まず、親TXとtoken更新TXを物理的に分ける。 */
+/**
+ * 共有招待のrole専属writer。親の閉鎖状態は読まず、親TXとtoken更新TXを物理的に分ける。
+ *
+ * <p>例外: TEAM の SUPPORTER 招待だけは、トークン行を作る前に同じTXでチーム行を {@code FOR SHARE} で読み、非公開チーム
+ * （{@code MEMBERS_AND_ABOVE}）なら行を作らず 403 TEAM_073 とする（CMP-261124-0159・F01.2 03「サポーター入口の拒否」・
+ * AC-0159-40）。非公開化のTXはチーム行を排他ロックしてから SUPPORTER 招待を一括失効させるので、ロック順
+ * （invite_tokens より前にチーム行）が揃い、非公開化と並行しても有効な SUPPORTER 招待が非公開チームに残らない。</p>
+ */
 @Service
 @RequiredArgsConstructor
 public class SharedInviteTokenIssuer {
     private final InviteTokenRepository tokens;
     private final ApplicationEventPublisher events;
     private final SecretTokenVault vault;
+    private final MembersOnlyTeamEntryGuard membersOnlyTeamEntryGuard;
 
     /** 平文は応答にだけ載せる。DB にはハッシュだけを保存する。 */
     @Transactional
     public InviteTokenIssuedResponse issue(SharedInviteTokenCommand command) {
+        if ("TEAM".equals(command.scopeType()) && "SUPPORTER".equals(command.roleName())) {
+            membersOnlyTeamEntryGuard.assertSupporterEntryAllowed(command.scopeId());
+        }
         IssuedToken issued = vault.issueBase64Url();
         var builder = InviteTokenEntity.builder().tokenHash(issued.hash())
                 .roleId(command.roleId()).createdBy(command.createdBy())

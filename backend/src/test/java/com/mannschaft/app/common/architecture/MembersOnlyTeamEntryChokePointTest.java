@@ -200,7 +200,10 @@ class MembersOnlyTeamEntryChokePointTest {
         return keys;
     }
 
-    /** {@code owner} のメソッドを呼ぶメソッドの一覧。 */
+    /**
+     * {@code owner} のメソッドを呼ぶメソッドの一覧。同じクラスの補助メソッド（private ヘルパ等）経由の呼び出しも、
+     * 呼び出し元のメソッドとして数える（同一クラス内の推移閉包）。
+     */
     static Set<String> callersOf(JavaClasses classes, String owner) {
         Set<String> keys = new TreeSet<>();
         for (JavaClass javaClass : classes) {
@@ -210,7 +213,28 @@ class MembersOnlyTeamEntryChokePointTest {
                 }
             }
         }
+        boolean grown = true;
+        while (grown) {
+            grown = false;
+            for (JavaClass javaClass : classes) {
+                for (JavaMethodCall call : javaClass.getMethodCallsFromSelf()) {
+                    if (!call.getTargetOwner().equals(call.getOriginOwner())) {
+                        continue;
+                    }
+                    String target = targetKey(call.getTargetOwner().getName(), call.getName());
+                    if (keys.contains(target) && keys.add(keyOf(call.getOrigin()))) {
+                        grown = true;
+                    }
+                }
+            }
+        }
         return keys;
+    }
+
+    private static String targetKey(String ownerName, String methodName) {
+        int nested = ownerName.indexOf('$');
+        return nested < 0 ? ownerName + "#" + methodName
+                : ownerName.substring(0, nested) + "#" + ownerName.substring(nested + 1) + "." + methodName;
     }
 
     /** {@code 最上位クラスFQCN#メソッド}。ラムダはその外側のメソッド名に正規化する（門の番人と同じ規則）。 */

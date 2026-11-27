@@ -1,5 +1,6 @@
 package com.mannschaft.app.membership.service;
 
+import com.mannschaft.app.common.MembersOnlyTeamEntryGuard;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.MembershipScopeQueryService;
 import com.mannschaft.app.auth.service.UserRowLockService;
@@ -101,6 +102,9 @@ class MembershipServiceTest {
     @Mock
     private EntityManager entityManager;
 
+    /** CMP-261124-0159: 入口の関所の判定（既定は公開チーム扱い＝false・何もしない）。 */
+    @Mock private MembersOnlyTeamEntryGuard membersOnlyTeamEntryGuard;
+
     @InjectMocks
     private MembershipService service;
 
@@ -180,6 +184,38 @@ class MembershipServiceTest {
             assertThat(dto.id()).isEqualTo(777L);
             verify(membershipRepository, never()).save(any());
             verify(eventPublisher, never()).publishEvent(any());
+        }
+
+        @Test
+        @DisplayName("AC-0159-48: 関所 — 非公開チームへの SUPPORTER 入会は 403 TEAM_073 で行を作らない（判定は在籍の読み取りより前）")
+        void 非公開チームのSUPPORTER入会は拒否() {
+            MembershipCreateRequest req = req(99L, ScopeType.TEAM, 100L, RoleKind.SUPPORTER, null);
+            given(membersOnlyTeamEntryGuard.lockAndCheckMembersOnly(100L)).willReturn(true);
+            given(membershipRepository.findActiveByUserAndScope(99L, ScopeType.TEAM, 100L))
+                    .willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.join(req))
+                    .isInstanceOf(BusinessException.class)
+                    .hasFieldOrPropertyWithValue("errorCode", com.mannschaft.app.team.TeamErrorCode.TEAM_073);
+
+            org.mockito.InOrder order = org.mockito.Mockito.inOrder(membersOnlyTeamEntryGuard, membershipRepository);
+            order.verify(membersOnlyTeamEntryGuard).lockAndCheckMembersOnly(100L);
+            order.verify(membershipRepository).findActiveByUserAndScope(99L, ScopeType.TEAM, 100L);
+            verify(membershipRepository, never()).save(any());
+            verify(eventPublisher, never()).publishEvent(any());
+        }
+
+        @Test
+        @DisplayName("AC-0159-48: 関所 — MEMBER の入会・組織の SUPPORTER 入会はチーム行を判定しない")
+        void MEMBERと組織は判定しない() {
+            given(membershipRepository.findActiveByUserAndScope(any(), any(), any())).willReturn(Optional.empty());
+            given(membershipRepository.findHistoryByUserAndScope(any(), any(), any())).willReturn(List.of());
+            given(membershipRepository.save(any(MembershipEntity.class))).willAnswer(inv -> inv.getArgument(0));
+
+            service.join(req(99L, ScopeType.TEAM, 100L, RoleKind.MEMBER, null));
+            service.join(req(99L, ScopeType.ORGANIZATION, 200L, RoleKind.SUPPORTER, null));
+
+            verifyNoInteractions(membersOnlyTeamEntryGuard);
         }
 
         @Test

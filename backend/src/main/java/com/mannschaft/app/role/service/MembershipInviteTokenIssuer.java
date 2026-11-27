@@ -3,6 +3,7 @@ package com.mannschaft.app.role.service;
 import com.mannschaft.app.auth.AuditEventType;
 import com.mannschaft.app.auth.service.AuditLogService;
 import com.mannschaft.app.common.DomainEventPublisher;
+import com.mannschaft.app.common.MembersOnlyTeamEntryGuard;
 import com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser;
 import com.mannschaft.app.common.token.SecretTokenVault;
 import com.mannschaft.app.role.dto.InviteScopeRef;
@@ -12,6 +13,7 @@ import com.mannschaft.app.role.dto.StagedInviteToken;
 import com.mannschaft.app.role.entity.InviteTokenEntity;
 import com.mannschaft.app.role.event.InviteReissuedEvent;
 import com.mannschaft.app.role.repository.InviteTokenRepository;
+import com.mannschaft.app.role.repository.RoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -30,6 +32,10 @@ import java.time.LocalDateTime;
  * <p>本番では発行 → カード投稿がそれぞれ独立コミットされる Saga となり、カード投稿失敗時は
  * {@link #revokeForCompensation(Long)} でトークンを失効して宙に浮いた PENDING を残さない。
      * 発行facadeはNOT_SUPPORTEDで、親再確認の前にrole発行TXを完了する。</p>
+ *
+ * <p>非公開チーム（CMP-261124-0159・F01.2 03「サポーター入口の拒否」）: TEAM の SUPPORTER 招待は、発行・再招待の仮発行・
+ * 仮発行の有効化のいずれでも、トークン行に触れる前に同じTXでチーム行を {@code FOR SHARE} で読み、非公開なら 403 TEAM_073
+ * （行を作らない・有効にしない）。ロック順は非公開化のTXと同じ（invite_tokens より前にチーム行）。</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -40,6 +46,8 @@ public class MembershipInviteTokenIssuer {
     private final AuditLogService auditLogService;
     private final SecretTokenVault vault;
     private final DomainEventPublisher eventPublisher;
+    private final RoleRepository roleRepository;
+    private final MembersOnlyTeamEntryGuard membersOnlyTeamEntryGuard;
 
     /**
      * 宛先付き承諾型トークンを発行する（{@code target_user_id} 非 NULL・{@code max_uses = 1}）。
@@ -49,6 +57,7 @@ public class MembershipInviteTokenIssuer {
      */
     @Transactional
     public MembershipInviteIssuedToken issue(MembershipInviteTokenCommand command) {
+        requireSupporterInviteAllowed(command.scopeType(), command.scopeId(), command.roleId());
         var builder = InviteTokenEntity.builder()
                 .tokenHash(vault.issueBase64Url().hash())
                 .roleId(command.roleId())
@@ -78,6 +87,7 @@ public class MembershipInviteTokenIssuer {
      */
     @Transactional
     public StagedInviteToken stageForReissue(MembershipInviteTokenCommand command) {
+        requireSupporterInviteAllowed(command.scopeType(), command.scopeId(), command.roleId());
         String tokenHash = vault.issueBase64Url().hash();
         var builder = InviteTokenEntity.builder()
                 .tokenHash(tokenHash)
@@ -118,6 +128,10 @@ public class MembershipInviteTokenIssuer {
      */
     @Transactional
     public boolean activateStaged(Long tokenId, Long targetUserId) {
+        // 仮発行から有効化までの間に非公開化されていれば有効にしない（仮発行の印のまま残り、誰も使えない）。
+        inviteTokenRepository.findById(tokenId).ifPresent(staged -> requireSupporterInviteAllowed(
+                staged.getTeamId() != null ? "TEAM" : "ORGANIZATION",
+                staged.getTeamId() != null ? staged.getTeamId() : staged.getOrganizationId(), staged.getRoleId()));
         if (inviteTokenRepository.activateStaged(tokenId, targetUserId) != 1) {
             return false;
         }
@@ -127,6 +141,17 @@ public class MembershipInviteTokenIssuer {
         eventPublisher.publish(new InviteReissuedEvent(targetUserId, scope.scopeType(), scope.scopeId()));
         log.info("再招待の招待を有効化: tokenId={}, scopeType={}, scopeId={}", tokenId, scope.scopeType(), scope.scopeId());
         return true;
+    }
+
+    /** TEAM の SUPPORTER 招待なら、チーム行を FOR SHARE で読み、非公開チームなら 403 TEAM_073。 */
+    private void requireSupporterInviteAllowed(String scopeType, Long scopeId, Long roleId) {
+        if (!"TEAM".equals(scopeType) || roleId == null) {
+            return;
+        }
+        boolean supporter = roleRepository.findById(roleId).map(role -> "SUPPORTER".equals(role.getName())).orElse(false);
+        if (supporter) {
+            membersOnlyTeamEntryGuard.assertSupporterEntryAllowed(scopeId);
+        }
     }
 
     /**

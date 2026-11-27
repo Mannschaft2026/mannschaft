@@ -21,6 +21,7 @@ import com.mannschaft.app.role.repository.TeamRolePermissionRepository;
 import com.mannschaft.app.role.RoleErrorCode;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
+import com.mannschaft.app.common.MembersOnlyTeamEntryGuard;
 import com.mannschaft.app.role.dto.RoleChangeRequest;
 import com.mannschaft.app.role.dto.ScopeRoleUserContact;
 import com.mannschaft.app.role.dto.ScopeUserRoleResponse;
@@ -79,6 +80,7 @@ public class RoleService {
 
     private final UserRowLockService userRowLockService;
     private final AdminRoleMutationLockService adminRoleMutationLockService;
+    private final MembersOnlyTeamEntryGuard membersOnlyTeamEntryGuard;
 
     /**
      * 自己プロキシ参照（issue #2544）。{@code @Cacheable} は Spring AOP プロキシ経由でのみ作用するため、
@@ -152,6 +154,17 @@ public class RoleService {
     }
 
     /**
+     * 入口の関所（CMP-261124-0159・F01.2 03「入口の関所」）: TEAM で GUEST / SUPPORTER を付与・変更するときは、
+     * user_roles・memberships の行に触れる前にチーム行を {@code FOR SHARE} で読み、非公開チームなら 403 TEAM_073。
+     * 操作者の認可（{@code requireActorAdmin} 等）の後に呼ぶ（判定順: 既存の認可 → 公開範囲）。
+     */
+    private void requireSupporterOrGuestEntryAllowed(Long scopeId, String scopeType, String roleName) {
+        if ("TEAM".equals(scopeType) && MembersOnlyTeamEntryGuard.isSupporterOrGuestRole(roleName)) {
+            membersOnlyTeamEntryGuard.assertSupporterEntryAllowed(scopeId);
+        }
+    }
+
+    /**
      * ユーザーにロールを割り当てる。
      */
     @Transactional
@@ -171,6 +184,8 @@ public class RoleService {
         }
         // P2: ロール付与も変更・削除と同じく、当該scopeの管理者だけに限定する。
         requireActorAdmin(scopeId, scopeType, grantedBy);
+        // 入口の関所: 非公開チームへの GUEST / SUPPORTER の付与は 403 TEAM_073（CMP-261124-0159）。
+        requireSupporterOrGuestEntryAllowed(scopeId, scopeType, assignedRole.getName());
 
         // 既存ロール存在チェック → 上書き
         // 上書き時は changeRole と同様に flush して DELETE を先に確定させる
@@ -280,6 +295,9 @@ public class RoleService {
             // ADMIN への昇格は当該スコープの ADMIN のみ（DEPUTY_ADMIN は 403）。対象の在籍有無に依らず先に弾く。
             requireActorIsScopeAdmin(scopeId, scopeType, changedBy);
         }
+        // 入口の関所: 非公開チームでの GUEST / SUPPORTER への変更（降格・非所属者への付与）は 403 TEAM_073
+        // （CMP-261124-0159）。対象のロール行の有無（ROLE_001）より前に判定する。
+        requireSupporterOrGuestEntryAllowed(scopeId, scopeType, requestedRole.getName());
 
         UserRoleEntity current = findUserRole(targetUserId, scopeId, scopeType)
                 .orElseThrow(() -> new BusinessException(RoleErrorCode.ROLE_001));
