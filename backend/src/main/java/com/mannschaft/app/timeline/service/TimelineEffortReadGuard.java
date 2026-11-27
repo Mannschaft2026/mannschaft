@@ -60,6 +60,72 @@ public class TimelineEffortReadGuard {
         return filter(posts, viewerUserId, false);
     }
 
+    /**
+     * カーソル方式の一覧を、見える投稿だけで要求件数まで埋めて 1 ページにする（フィード・マイフィード・リプライ共通）。
+     *
+     * <p>非表示の投稿は飛ばし、足りない分は続きを取得し直して補う。{@code nextCursor} は返したページの最後の
+     * <b>見えた</b>投稿の ID だけで、非表示の投稿の ID は応答に出さない（内部で次の取得位置に使うだけ）。
+     * {@code hasNext} は「見える投稿がもう 1 件以上ある」ときだけ true（先読みで確かめる）ため、
+     * 末尾が非表示だけなら false・null になる。取得位置は 1 バッチごとに必ず進むので、非表示が続いても
+     * 必ず終わる（バッチは要求件数 + 1 件で、判定はバッチ単位の一括。1 件ずつ照会しない）。</p>
+     *
+     * @param cursor   起点カーソル（null なら先頭）
+     * @param pageSize 要求件数（1 以上）
+     * @param fetch    (カーソル, 件数) → カーソルより後の最大 件数 + 1 件（先読み 1 件込み）の取得結果。TX は呼出先で完結させる
+     * @param viewerUserId 閲覧者
+     */
+    public TimelineVisiblePage fillVisiblePage(Long cursor, int pageSize,
+                                               java.util.function.BiFunction<Long, Integer, List<PostResponse>> fetch,
+                                               Long viewerUserId) {
+        List<PostResponse> collected = new ArrayList<>();
+        Long position = cursor;
+        while (true) {
+            List<PostResponse> raw = fetch.apply(position, pageSize);
+            if (raw == null || raw.isEmpty()) {
+                break;
+            }
+            boolean sourceHasMore = raw.size() > pageSize;
+            List<PostResponse> batch = sourceHasMore ? raw.subList(0, pageSize) : raw;
+            List<PostResponse> visible = filter(batch, viewerUserId, true);
+            if (visible != null) {
+                collected.addAll(visible);
+            }
+            if (collected.size() > pageSize || !sourceHasMore) {
+                break;
+            }
+            position = batch.get(batch.size() - 1).getId();
+        }
+        boolean hasNext = collected.size() > pageSize;
+        List<PostResponse> page = hasNext ? new ArrayList<>(collected.subList(0, pageSize)) : collected;
+        Long nextCursor = hasNext ? page.get(page.size() - 1).getId() : null;
+        return new TimelineVisiblePage(page, nextCursor, hasNext);
+    }
+
+    /**
+     * ユーザー別投稿一覧（作成日時降順・カーソル無し）を、見える投稿で要求件数まで埋める。応答にカーソルは無い。
+     * 匿名の共有などを除いて足りないときは、取得件数を倍にして先頭から取り直す（取得は毎回 1 クエリ群で、1 件ずつ照会しない。
+     * 取得件数が増える一方なので必ず終わる）。
+     *
+     * @param pageSize 要求件数（1 以上）
+     * @param fetch    取得件数 → 先頭からその件数までの取得結果（件数に満たなければ続きは無い）
+     */
+    public List<PostResponse> fillVisibleAuthorPosts(int pageSize,
+                                                     java.util.function.IntFunction<List<PostResponse>> fetch,
+                                                     Long viewerUserId) {
+        int limit = pageSize;
+        while (true) {
+            List<PostResponse> raw = fetch.apply(limit);
+            if (raw == null || raw.isEmpty()) {
+                return List.of();
+            }
+            List<PostResponse> visible = filter(raw, viewerUserId, false);
+            if (visible.size() >= pageSize || raw.size() < limit) {
+                return visible.size() > pageSize ? new ArrayList<>(visible.subList(0, pageSize)) : visible;
+            }
+            limit = limit > Integer.MAX_VALUE / 2 ? Integer.MAX_VALUE : limit * 2;
+        }
+    }
+
     private List<PostResponse> filter(List<PostResponse> posts, Long viewerUserId, boolean keepAnonymous) {
         if (posts == null || posts.isEmpty()) {
             return posts;
