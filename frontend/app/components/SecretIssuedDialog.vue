@@ -15,6 +15,8 @@ const props = defineProps<{
   url: string
   /** ダイアログ見出し。省略時は共通の「リンクを発行しました」。 */
   title?: string
+  /** 値の見出し。省略時は「発行されたリンク」。リンクでなくトークンそのものを見せる場合に指定する。 */
+  valueLabel?: string
 }>()
 
 const visible = defineModel<boolean>('visible', { default: false })
@@ -84,7 +86,7 @@ onBeforeUnmount(() => {
 
       <div class="flex flex-col gap-1">
         <span class="text-xs font-medium text-surface-500 dark:text-surface-400">
-          {{ t('secret_token.issued_dialog.url_label') }}
+          {{ valueLabel ?? t('secret_token.issued_dialog.url_label') }}
         </span>
         <code
           class="block break-all rounded-md bg-surface-100 p-3 text-sm select-all dark:bg-surface-800"

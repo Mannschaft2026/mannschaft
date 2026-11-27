@@ -2,9 +2,7 @@ package com.mannschaft.app.moderation.controller;
 
 import com.mannschaft.app.common.PagedResponse;
 import com.mannschaft.app.common.security.AuthorizedByPathConfig;
-import com.mannschaft.app.moderation.ModerationMapper;
 import com.mannschaft.app.moderation.dto.ReportResponse;
-import com.mannschaft.app.moderation.entity.ContentReportEntity;
 import com.mannschaft.app.moderation.service.ReportActionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -43,20 +41,20 @@ import java.util.List;
 public class SystemAdminReportController {
 
     private final ReportActionService reportActionService;
-    private final ModerationMapper moderationMapper;
 
     /**
-     * 全通報一覧を取得する。
+     * 全通報一覧を取得する。status 指定時はそのステータスのみ（未定義値は 400）。
      */
     @GetMapping
     @Operation(summary = "全通報一覧取得")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")
     public ResponseEntity<PagedResponse<ReportResponse>> getAllReports(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        Page<ContentReportEntity> reportPage = reportActionService.getAllReports(
-                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
-        List<ReportResponse> responses = moderationMapper.toReportResponseList(reportPage.getContent());
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String status) {
+        Page<ReportResponse> reportPage = reportActionService.getAllReports(
+                status, PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
+        List<ReportResponse> responses = reportPage.getContent();
         PagedResponse.PageMeta meta = new PagedResponse.PageMeta(
                 reportPage.getTotalElements(), page, size, reportPage.getTotalPages());
         return ResponseEntity.ok(PagedResponse.of(responses, meta));

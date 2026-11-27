@@ -3195,15 +3195,20 @@ type だけ厳格にガードする漸進的アプローチを採用。Phase B �
 7. **チームに在籍しない親組織の ADMIN**: 既存のチーム可視性判定（`visibleByLevel` の `MEMBERS_AND_ABOVE` は**そのチームのスコープでの**ロールだけを見る）に従い、非公開チームの詳細も中身も見えない（部外者と同一扱い）。親組織の ADMIN であることで上限を緩めない。組織の機能として配下チームの情報を集計表示する既存経路（組織ダッシュボード等）は §20.5.2 の棚卸しで個別に分類する。
 8. 未ログイン（`userId = null`）: §17 Q1 どおり PUBLIC のみ。非公開チームの中身は PUBLIC 記事であっても見えない（公開 EP は既存の「非公開チーム」と同じ 404 応答。F06.4 `ActivityPublicContractIT` の等価性番人 AC-32 を本規則込みで維持する）。
 
-### 20.3 共通の門 `AccessControlService#checkScopeContentAccess`
+### 20.3 共通の門 `ScopeContentAccessGate#checkScopeContentAccess`
 
-Resolver を通らない読み取り経路（スコープ単位の一覧・集計・設定読み取りなど）のために、共通の門を新設する。名称は既存の `checkMembership` / `isMember` の命名に合わせる。
+Resolver を通らない読み取り経路（スコープ単位の一覧・集計・設定読み取りなど）のために、共通の門 `com.mannschaft.app.common.ScopeContentAccessGate` を新設する（PR #4893 で実装。2026-11-25 殿承認）。メソッド名は既存の `checkMembership` / `isMember` の命名に合わせる。
+
+- **置き場所**: 門は `AccessControlService` / `DefaultAccessControlService` には足さず、トランザクションを開かない common の部品として置く。`DefaultAccessControlService` はクラス単位の `@Transactional` を持つため、公開メソッドを足すとその全てが他ドメイン（membership）の Repository へ推移的に到達する入口になり、番人 D-3T（`CrossDomainTransactionalTransitiveArchTest`）の新規違反になるため。門は `AccessControlService` の既存の照会（`isMember`・`isRegularMemberOrAbove`・`getTeamMembershipStates`・`checkMembership`）と下記の非公開チーム判定だけを組み合わせる。
+- **非公開チームの判定**: `com.mannschaft.app.common.MembersOnlyTeamQuery`（実装 `common.visibility.MembersOnlyTeamQueryService`）。`SELECT id FROM teams WHERE id IN (...) AND visibility = 'MEMBERS_AND_ABOVE'` の 1 本（`teams` の id と visibility だけを読む・書かない・キャッシュしない）。親チーム上限は共通の可視性基盤の責務（§20.2 規則 4/5）なので common に置く（team ドメインの Repository 経由にすると、Resolver を通る他ドメインのトランザクション入口すべてに D-3T の新規違反が出る）。Resolver（`MembershipBatchQueryService`）と門が同じ実装を使う。
+- **呼び出し**: 後続 PR は `scopeContentAccessGate.checkScopeContentAccess(...)` / `canAccessScopeContent` / `filterAccessibleTeamIds` / `checkMembershipForWrite` を呼ぶ（`accessControlService.checkScopeContentAccess` は存在しない）。
 
 | メソッド | 契約 |
 |---|---|
 | `void checkScopeContentAccess(Long userId, Long scopeId, String scopeType)` | **既存メソッドの組合せで作る（二つ目の判定器を作らない。精査 M-2）**: `isMember(userId, scopeId, scopeType)` が真、かつ scopeType=TEAM で当該チームが非公開チームなら既存の `isRegularMemberOrAbove(userId, scopeId, "TEAM")`（`DefaultAccessControlService`。在籍が `role_kind=MEMBER`、または在籍したうえで ADMIN / DEPUTY_ADMIN。SUPPORTER・GUEST・非在籍を除く。SYSTEM_ADMIN を特別扱いしない）も真であること。満たさなければ **既存 `checkMembership` の非所属拒否と同一の例外**（403 `COMMON_002`）を投げる。ORGANIZATION / その他の scopeType は `checkMembership` と完全に同じ（挙動不変）。 |
 | `boolean canAccessScopeContent(Long userId, Long scopeId, String scopeType)` | 上記の真偽版（例外を投げない） |
-| `Set<Long> filterAccessibleTeamIds(Long userId, Collection<Long> teamIds)` | 複数チームの一括版。問い合わせ 2 本以内（在籍・ロールの一括取得＋非公開チーム ID の一括取得） |
+| `Set<Long> filterAccessibleTeamIds(Long userId, Collection<Long> teamIds)` | 複数チームの一括版。在籍・管理者の一括取得（既存 `getTeamMembershipStates` の 2 本）＋在籍はあるが正式メンバー以上でないチームがあるときだけ非公開チーム判定 1 本。チーム数・件数に比例しない。在籍は archive 済みを除く投影で判定するため単体版より閲覧不可側に倒れる |
+| `boolean isBeyondTeamContentCap(Long userId, Long scopeId, String scopeType)` | TEAM の非公開チームで正式メンバー以上でなければ true（在籍の有無は問わない）。`ScopeConcealingAccessGate` が所有者・`permitted`・在籍メンバーの成功経路に AND する（AC-0159-94）。TEAM 以外・公開側は false |
 | `void checkMembershipForWrite(Long userId, Long scopeId, String scopeType)` | 中身を返さない書き込み用の別名。判定は `checkMembership` と同一（§20.5.1。呼び出し箇所の意図を明示し ArchUnit で分類するため） |
 
 - `checkMembership` の意味は変えない（書き込み・在籍確認の用途があるため）。**読み取り経路**の `checkMembership` / `isMember` 呼び出しを §20.5 の表に従ってこの門へ置き換える。
@@ -3232,9 +3237,9 @@ Resolver を通らない読み取り経路（スコープ単位の一覧・集�
 
 | 分類 | 意味 | 実装 |
 |---|---|---|
-| **門** | TEAM スコープの中身を返す読み取り | `checkScopeContentAccess` / `canAccessScopeContent` / `filterAccessibleTeamIds`（§20.3） |
+| **門** | TEAM スコープの中身を返す読み取り | `ScopeContentAccessGate#checkScopeContentAccess` / `#canAccessScopeContent` / `#filterAccessibleTeamIds`（§20.3） |
 | **Resolver** | `ContentVisibilityChecker` を通る経路 | §20.2 の上限で自動。追加の門は不要（重ねてもよい） |
-| **書き込み** | 中身を返さない作成・更新・削除 | 新設の `checkMembershipForWrite`（`checkMembership` と同じ判定の別名）。不変条件（非公開チームにサポーター・ゲストが在籍しない）に依拠する |
+| **書き込み** | 中身を返さない作成・更新・削除 | 新設の `ScopeContentAccessGate#checkMembershipForWrite`（`checkMembership` と同じ判定の別名）。不変条件（非公開チームにサポーター・ゲストが在籍しない）に依拠する |
 | **中身を返す書き込み** | 作成・更新の応答本文に中身（他人の投稿・一覧・添付 URL 等）を含むもの | **門**を通す（精査 S-5） |
 | **対象外** | チームの中身を返さない・TEAM スコープでない | 理由を棚卸し表と ArchUnit の許可リストに書く |
 
@@ -3259,7 +3264,7 @@ Resolver を通らない読み取り経路（スコープ単位の一覧・集�
 | `circulation` | 2 | CirculationService(2) | 門 | 回覧（受信者 ACL と AND） |
 | `cms` | 11 | BlogMediaAclService(1)、BlogPostService(2)、BlogSeriesService(4)、BlogTagService(4) | 門 | ブログのタグ・連載・メディア ACL。記事本体は Resolver（既存 assertCanView(TEAM)） |
 | `committee` | 4 | CommitteeInvitationService(1)、CommitteeService(3) | 対象外 | COMMITTEE スコープ（チームではない） |
-| `common` | 8 | AccessControlService(2)、ScopeConcealingAccessGate(2)、AutomaticActivityActualPolicy(1)、AccessGuard(1)、MembershipQueryCache(2) | 基盤 | AccessControlService の定義・ScopeConcealingAccessGate・MembershipQueryCache。秘匿ゲート内部の所属判定を門へ差し替える |
+| `common` | 8 | AccessControlService(2)、ScopeConcealingAccessGate(2)、AutomaticActivityActualPolicy(1)、AccessGuard(1)、MembershipQueryCache(2) | 基盤 | AccessControlService の定義・ScopeConcealingAccessGate・MembershipQueryCache・門本体 `ScopeContentAccessGate`（対象外リストに理由付きで登録）。AccessGuard#isScopeMember・AutomaticActivityActualPolicy#filterEligible は担当 PR 未割当のため未移行リストに残し、PR-Z で棚卸しする。秘匿ゲート内部の所属判定を門へ差し替える |
 | `corkboard` | 8 | CorkboardPermissionService(3)、CorkboardScopedBoardVisibilityGuard(1)、CorkboardService(4) | 門（回帰） | REST は既に CorkboardScopedBoardVisibilityGuard で防げている。ボード読み取りを門へ統一。WebSocket `/topic/corkboard/{boardId}` は購読認可が無いため §20.5.5 で新設 |
 | `dashboard` | 5 | DashboardScopeTabService(1)、DashboardService(2)、DashboardWidgetVisibilityService(2) | 門 | チーム/個人ダッシュボード・ウィジェット・要対応（一括版） |
 | `digest` | 3 | DigestConfigService(1)、DigestGenerationService(2) | 門 | タイムラインダイジェストの設定・生成結果の読み取り |
@@ -3410,7 +3415,7 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 ### 20.6 番人（ガードテスト）
 
 - `ScopeContentAccessMatrixIT`（新設）: §20.5.2 の棚卸し表（門・Resolver の行）と §20.5.3 の公開 EP 表から読み取りエンドポイントを**表駆動**で生成し、非公開チームに対して、**期待値を「既存の認可 AND 親チーム上限」**とする（MEMBER 一律 200 とはしない）。各エンドポイントの行に既存の許可ロール・所有者条件・ACL（例: `ShiftHourlyRateAuthorizer` の他人の時給は管理者のみ、回覧の受信者 ACL、チャンネルメンバー行）を記載し、権限あり側は「本戦役前に 200 だった閲覧者は 200 のまま」、権限なし側（在籍サポーター（是正前データを模したフィクスチャ）・GUEST・部外者・他チームのメンバー・他組織のメンバー）は**部外者と同一応答**を表駆動で検証する。期待値表は本戦役前の実挙動を記録して作り（スナップショット）、上限の追加で変わるのは権限なし側だけであることを確かめる。公開チーム（`SUPPORTERS_AND_ABOVE`）では従来の結果を回帰固定する。
-- `ScopeContentAccessGateCoverageTest`（新設・ArchUnit）: **全パッケージ**の Service / Guard / Controller / Facade / Listener から `AccessControlService#checkMembership` / `#isMember`（および `ActivityScopeAccessGuard` 等の同名ラッパ）を直接呼ぶと落ちる。呼び出しは `checkScopeContentAccess` 系か `checkMembershipForWrite` のどちらかに書き分ける（§20.5.1）。例外は理由付きの許可リスト（クラス名＋理由）だけ。
+- `ScopeContentAccessGateCoverageTest`（新設・ArchUnit）: **全パッケージ**の Service / Guard / Controller / Facade / Listener から `AccessControlService#checkMembership` / `#isMember`（および `ActivityScopeAccessGuard` 等の同名ラッパ）を直接呼ぶと落ちる。呼び出しは `ScopeContentAccessGate` の `checkScopeContentAccess` 系か `checkMembershipForWrite` のどちらかに書き分ける（§20.5.1）。例外は理由付きの許可リスト（クラス名＋理由）だけ。
 - `ScopeContentAccessGateEquivalenceTest`（新設）: 非公開チームで、閲覧者ロール（ADMIN / DEPUTY_ADMIN / MEMBER / SUPPORTER / GUEST / 非在籍の親組織 ADMIN / 部外者 / SYSTEM_ADMIN）ごとに、門（`canAccessScopeContent`）と Resolver（`canView(TEAM, teamId)`）の結果が一致する（SYSTEM_ADMIN は既存挙動どおりの差を許可リストで明示）。
 - `TeamContentAudienceCoverageTest`（新設・ArchUnit）: §20.5.4 の宛先作成メソッドを、非公開チーム用の絞り込みを経ずに通知・fan-out へ渡す呼び出しを禁止する（許可リストは理由付き）。
 - `MembersOnlyTeamEntryChokePointTest`（新設・ArchUnit）: `memberships` への SUPPORTER 在籍の作成・変更と `user_roles` への GUEST 付与が、入口の関所（F01.2 03「入口の関所」）以外から行われないこと（入口の網羅の番人。精査 S-5）。
@@ -3420,6 +3425,7 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 ### 20.7 非機能要件
 
 - 1000 万ユーザー・チーム数十万を前提とする。上限判定の追加コストは `filterAccessible` 1 回あたり問い合わせ 1 本（`teams` の主キー IN）まで。ループ内 Repository 呼び出し禁止。
+- 閲覧者のロールが既に MEMBER 以上のチームは上限が発動し得ないため、Resolver（`MembershipBatchQueryService`）は非公開チームの問い合わせに載せない。direct の TEAM すべてで MEMBER 以上なら 1 本も撃たない（在籍メンバーの閲覧の問い合わせ本数は本戦役前と同一。F03.16 AC-29 等の本数番人を維持）。委任役割で MEMBER 未満へ差し替える経路（`*Delegated*`）だけは、差し替えたチームを必要時に 1 本で引き直す。
 - 検索の母集団除外は `SearchViewerResolver` の既存の定数回の問い合わせに相乗りさせ、所属スコープ数に比例させない。
 - 非公開化の後始末（F01.2 03）は集合演算の UPDATE で行い、対象人数に比例した行単位の問い合わせを行わない（通知の作成のみ件数比例・非同期）。
 - 検証の主手段は**問い合わせ本数の番人**（Hibernate statistics）と **`EXPLAIN` の索引確認**とする（精査 M-7）。性能の実測は補助。
@@ -3462,12 +3468,14 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 - **AC-0159-01**: 非公開チームの TEAM コンテンツ（コンテンツ自身は PUBLIC）について、Resolver `canView` は権限ありで true、権限なし・他テナント・未ログインで false。
 - **AC-0159-02**: 同じコンテンツが `SUPPORTERS_AND_ABOVE` / `GUESTS_AND_ABOVE` / `PUBLIC` のチームにあるとき、結果は本戦役前と同一（回帰）。
 - **AC-0159-03**: `filterAccessible` に 50 チーム（4 段混在）のコンテンツ 500 件を渡しても、追加の問い合わせは 1 本（Hibernate statistics で計測）。
-- **AC-0159-04**: `checkScopeContentAccess` は非公開チームで MEMBER / DEPUTY_ADMIN / ADMIN を通し、SUPPORTER / GUEST / 部外者を 403 `COMMON_002`（`checkMembership` の部外者拒否と同一）で拒否する。ORGANIZATION スコープでは `checkMembership` と結果が全件一致する。
+- **AC-0159-04**: `ScopeContentAccessGate#checkScopeContentAccess` は非公開チームで MEMBER / DEPUTY_ADMIN / ADMIN を通し、SUPPORTER / GUEST / 部外者を 403 `COMMON_002`（`checkMembership` の部外者拒否と同一）で拒否する。ORGANIZATION スコープでは `checkMembership` と結果が全件一致する。
 - **AC-0159-05**: `checkMembership` の結果は本戦役前と全件一致（書き込み経路の回帰）。
 - **AC-0159-06**: チームを公開→非公開に変更した直後の次のリクエストから上限が効く（キャッシュで旧判定が残らない）。非公開→公開も同様に即時。
 - **AC-0159-07**: SYSTEM_ADMIN の各経路の結果は本戦役前と同一（新たなバイパス・拒否なし）。
 - **AC-0159-08**: §20.5.3 の表の**全行**（未ログイン・ログイン済み部外者・外されたサポーターの各閲覧者）について、非公開チームでは表の「非公開チームでの扱い」どおりの応答になり、本文に中身が出ない（表駆動）。公開チームでは本戦役前と同一。`ActivityPublicContractIT` の等価性番人（AC-32）とサイトマップの回帰が緑のまま。
 - **AC-0159-09**: 非公開チームに在籍しない親組織の ADMIN は、チーム詳細・§20.5.2 の門の経路とも部外者と同一応答。そのチームに MEMBER として在籍していれば見える。
+- **AC-0159-94**: `ScopeConcealingAccessGate` の所有者一致・`permitted`・在籍メンバーの成功経路でも、所属チームが非公開でスコープのロールが MEMBER 未満なら不在と同一の 404（拒否経路でもそうした在籍者は 403 ではなく不在と同一）。上限を越える所有者でも ADMIN / DEPUTY_ADMIN の資格があれば従来どおり許可。公開チームでは所有者経路の結果が本戦役前と同一（単体＋IT）。検証事項 V-0159-94-1〜4。
+- **AC-0159-107**: 経路台帳（`backend/src/test/resources/scope_content_gate/routes.tsv`。補助 ID `R-<pkg>-<n>`・`R-public-<n>`・`R-aud-<n>`・`R-ws-<n>`）・Matrix 表（`scope_content_matrix/<package>.yaml`）・コード側の読み取りエンドポイント一覧（`RequestMappingHandlerMapping` が読むのと同じ合成済みマッピングから TEAM スコープ・公開経路の GET を導出）・検証事項表（`verification_items.tsv`。`V-0159-<AC>-<n>`）が双方向に一致し、どれか 1 件を削除・追加すると `ScopeContentRouteLedgerCoverageTest` が赤になる（自己検査で固定）。台帳は再生成モード（`SCOPE_ROUTES_REGENERATE=1`）でコードから導出し、手書きしない。検証事項 V-0159-107-1〜7。
 
 #### D. ドメイン別（各行: 非公開チームで 権限あり=**既存の認可どおり**（本戦役前に 200 だった閲覧者は 200。既存の追加認可・所有者条件・ACL で拒否されていたものは拒否のまま）／権限なし・他テナント=部外者と同一応答／公開チーム SUPPORTERS_AND_ABOVE ではサポーターの結果が本戦役前と同一／FE の該当画面 URL 直打ちで権限なし・他テナントは §20.8 の理由表示、不在 slug は「見つかりません」）
 

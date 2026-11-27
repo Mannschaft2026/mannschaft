@@ -547,6 +547,18 @@ class MemberProfileServiceTest {
             assertThat(capturedLookupPageSize(21)).isEqualTo(20);
         }
 
+        @Test
+        @DisplayName("CMP-260926-0029(O1): limit=0 は例外にせず最小の1件に丸める")
+        void limit0は1件に丸める() {
+            assertThat(capturedLookupPageSize(0)).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("CMP-260926-0029(O1): limit が負数でも例外にせず最小の1件に丸める")
+        void limit負数は1件に丸める() {
+            assertThat(capturedLookupPageSize(-5)).isEqualTo(1);
+        }
+
         private int capturedLookupPageSize(int limit) {
             TeamPageEntity page = orgPage(500L);
             given(pageService.findPageOrThrow(10L)).willReturn(page);
@@ -653,8 +665,34 @@ class MemberProfileServiceTest {
             CopyMembersResponse result = service.copyMembers(ACTOR, 1L, new CopyMembersRequest(2L));
 
             assertThat(result.getCopiedCount()).isEqualTo(2);
-            verify(profileRepository, times(2)).save(any(MemberProfileEntity.class));
+            ArgumentCaptor<List<MemberProfileEntity>> saved = ArgumentCaptor.forClass(List.class);
+            verify(profileRepository, times(1)).saveAll(saved.capture());
+            assertThat(saved.getValue()).hasSize(2);
             verify(profileRepository, never()).findByTeamPageIdOrderBySortOrder(anyLong(), any());
+        }
+
+        @Test
+        @DisplayName("CMP-260926-0028(O2): 既存会員の判定は件数に依らず1回の一括問い合わせで行い、重複は skip して残りを saveAll する")
+        void O2_重複判定は一括1回() {
+            TeamPageEntity target = orgPage(500L);
+            TeamPageEntity source = orgPage(500L);
+            stubPages(target, source);
+            given(profileRepository.findByTeamPageIdAndIsVisibleTrueOrderBySortOrder(2L)).willReturn(List.of(
+                    MemberProfileEntity.builder().teamPageId(2L).userId(11L).displayName("既存").build(),
+                    MemberProfileEntity.builder().teamPageId(2L).userId(12L).displayName("新規1").build(),
+                    MemberProfileEntity.builder().teamPageId(2L).userId(13L).displayName("新規2").build()));
+            given(profileRepository.findUserIdsByTeamPageIdAndUserIdIn(eq(1L), any()))
+                    .willReturn(List.of(11L));
+
+            CopyMembersResponse result = service.copyMembers(ACTOR, 1L, new CopyMembersRequest(2L));
+
+            assertThat(result.getCopiedCount()).isEqualTo(2);
+            assertThat(result.getSkippedCount()).isEqualTo(1);
+            assertThat(result.getSkippedUserIds()).containsExactly(11L);
+            verify(profileRepository, times(1)).findUserIdsByTeamPageIdAndUserIdIn(eq(1L), any());
+            verify(profileRepository, never()).existsByTeamPageIdAndUserId(anyLong(), anyLong());
+            verify(profileRepository, never()).save(any(MemberProfileEntity.class));
+            verify(profileRepository, times(1)).saveAll(any());
         }
 
         @Test

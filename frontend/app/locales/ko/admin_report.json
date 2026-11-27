@@ -1,6 +1,10 @@
 {
   "admin_report": {
     "title": "신고 관리",
+    "filter": {
+      "placeholder": "상태별 필터",
+      "all": "모든 상태"
+    },
     "empty": "신고가 없습니다",
     "messages": {
       "load_failed": "신고 조회에 실패했습니다",

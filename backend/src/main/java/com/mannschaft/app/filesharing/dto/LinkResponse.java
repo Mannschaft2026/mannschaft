@@ -6,7 +6,7 @@ import lombok.RequiredArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * 共有リンクレスポンスDTO。
+ * 共有リンクレスポンスDTO（一覧・詳細用）。平文のトークン・URL は含めない（発行時の {@link LinkIssuedResponse} だけが平文を返す）。
  */
 @Getter
 @RequiredArgsConstructor
@@ -14,7 +14,6 @@ public class LinkResponse {
 
     private final Long id;
     private final Long fileId;
-    private final String token;
     private final LocalDateTime expiresAt;
     private final boolean hasPassword;
     private final Integer accessCount;

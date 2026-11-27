@@ -26,7 +26,8 @@
       "visibility_to_org": "对组织的公开设置",
       "start_date": "开始日期",
       "end_date": "结束日期",
-      "member_count": "成员数量"
+      "member_count": "成员数量",
+      "chair": "委员长"
     },
     "visibility": {
       "HIDDEN": "隐藏",
@@ -96,7 +97,16 @@
       "invitee": "受邀者"
     },
     "create_dialog": {
-      "title": "成立委员会"
+      "title": "成立委员会",
+      "chair_placeholder": "选择委员长",
+      "purpose_placeholder": "选择目的标签"
+    },
+    "purpose_tag": {
+      "TOURNAMENT": "赛事运营",
+      "GOVERNANCE": "治理",
+      "ELECTION": "选举",
+      "PROJECT": "项目",
+      "OTHER": "其他"
     }
   }
 }

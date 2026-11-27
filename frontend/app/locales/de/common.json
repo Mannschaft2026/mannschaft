@@ -3362,6 +3362,27 @@
       "created_at": "Erstellt am",
       "expires_at": "Gültig bis",
       "used_count": "Anzahl der Nutzungen"
+    },
+    "signage": {
+      "section": "Anzeigegeräte-Token",
+      "issue": "Token ausstellen",
+      "device_name": "Gerätename",
+      "device_placeholder": "z. B. Eingangsmonitor",
+      "empty": "Keine Token vorhanden",
+      "issued_title": "Geräte-Token ausgestellt",
+      "no_expiry": "Unbefristet",
+      "inactive": "Widerrufen",
+      "reissue_confirm": "Es wird ein neuer Link ausgestellt und dieses Token widerrufen. Fortfahren?",
+      "revoke_confirm": "Dieses Token widerrufen?",
+      "issue_success": "Token ausgestellt",
+      "issue_failed": "Token konnte nicht ausgestellt werden",
+      "reissue_success": "Token neu ausgestellt",
+      "reissue_failed": "Token konnte nicht neu ausgestellt werden",
+      "revoke_success": "Token widerrufen",
+      "revoke_failed": "Token konnte nicht widerrufen werden",
+      "name_required": "Gerätenamen eingeben",
+      "token_label": "Token zur Einrichtung am Gerät",
+      "reissue_revoke_failed": "Das neue Token wurde ausgestellt, der Widerruf des alten Tokens ist jedoch fehlgeschlagen. Bitte widerrufen Sie es manuell"
     }
   },
   "globalSearch": {

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-260916-0055",
+  "scope": "app",
+  "implementation": {
+    "pr": 4881,
+    "sha": "464aacce5944c38a6f3a80d98ab6d31318a9e682"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-0055-1",
+      "description": "キーセット方式（最後に処理した ID より大きいもの）で、チャンクをコミットして対象集合が縮んでも取りこぼしなく全件処理する",
+      "tests": [
+        {
+          "name": "PointCardRematchBatchServiceTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/pointcard/batch/PointCardRematchBatchServiceTest.java"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 45558406547
+    },
+    {
+      "runId": 45558406685
+    },
+    {
+      "runId": 45558406571
+    },
+    {
+      "runId": 45558406722
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4881"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-260916-0055-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-260916-0055-real.md"
+    }
+  },
+  "regressions": []
+}

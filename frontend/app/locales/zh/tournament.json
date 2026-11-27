@@ -156,7 +156,9 @@
         "apply_template_failed": "应用模板失败",
         "load_all_failed": "获取名单列表失败",
         "update_deadline_failed": "更新截止日期失败"
-      }
+      },
+      "templates_unavailable": "无法确定球队所属组织，因此无法使用模板，请手动输入成员。",
+      "templates_load_failed": "模板加载失败。您仍可手动输入成员。"
     },
     "communication": {
       "title": "联络空间",

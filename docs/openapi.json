@@ -46370,7 +46370,8 @@
             "schema": {
               "type": "integer",
               "format": "int32",
-              "default": 0
+              "default": 0,
+              "minimum": 0
             }
           },
           {
@@ -46380,7 +46381,8 @@
             "schema": {
               "type": "integer",
               "format": "int32",
-              "default": 20
+              "default": 20,
+              "minimum": 1
             }
           }
         ],
@@ -60360,7 +60362,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseSignageAccessTokenResponse"
+                  "$ref": "#/components/schemas/ApiResponseSignageAccessTokenIssuedResponse"
                 }
               }
             }
@@ -67015,7 +67017,8 @@
             "schema": {
               "type": "integer",
               "format": "int32",
-              "default": 0
+              "default": 0,
+              "minimum": 0
             }
           },
           {
@@ -67025,7 +67028,8 @@
             "schema": {
               "type": "integer",
               "format": "int32",
-              "default": 20
+              "default": 20,
+              "minimum": 1
             }
           }
         ],
@@ -84408,7 +84412,7 @@
         "tags": [
           "ファイル共有 - 共有リンク"
         ],
-        "summary": "共有リンク作成",
+        "summary": "共有リンク作成（平文トークンは発行応答の1回だけ）",
         "operationId": "createLink_1",
         "parameters": [
           {
@@ -84437,7 +84441,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseLinkResponse"
+                  "$ref": "#/components/schemas/ApiResponseLinkIssuedResponse"
                 }
               }
             }
@@ -129217,6 +129221,14 @@
               "type": "integer",
               "format": "int32",
               "default": 20
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -201088,11 +201100,47 @@
           }
         }
       },
-      "ApiResponseSignageAccessTokenResponse": {
+      "ApiResponseSignageAccessTokenIssuedResponse": {
         "type": "object",
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/SignageAccessTokenResponse"
+            "$ref": "#/components/schemas/SignageAccessTokenIssuedResponse"
+          }
+        }
+      },
+      "SignageAccessTokenIssuedResponse": {
+        "type": "object",
+        "properties": {
+          "allowedIps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "screenId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "token": {
+            "type": "string"
           }
         }
       },
@@ -201126,9 +201174,6 @@
           "screenId": {
             "type": "integer",
             "format": "int64"
-          },
-          "token": {
-            "type": "string"
           }
         }
       },
@@ -212637,11 +212682,56 @@
           }
         }
       },
-      "ApiResponseLinkResponse": {
+      "ApiResponseLinkIssuedResponse": {
         "type": "object",
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/LinkResponse"
+            "$ref": "#/components/schemas/LinkIssuedResponse"
+          }
+        }
+      },
+      "LinkIssuedResponse": {
+        "type": "object",
+        "properties": {
+          "accessCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdBy": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "downloadAllowed": {
+            "type": "boolean"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fileId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "hasPassword": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "lastAccessedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "token": {
+            "type": "string"
           }
         }
       },
@@ -212684,9 +212774,6 @@
           "lastAccessedAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "token": {
-            "type": "string"
           }
         }
       },
@@ -221509,6 +221596,9 @@
               "UNDECIDED"
             ]
           },
+          "studentDisplayName": {
+            "type": "string"
+          },
           "studentUserId": {
             "type": "integer",
             "format": "int64"
@@ -229616,6 +229706,9 @@
           "organizationId": {
             "type": "integer",
             "format": "int64"
+          },
+          "organizationSlug": {
+            "type": "string"
           },
           "record": {
             "$ref": "#/components/schemas/TournamentHistoryEntryRecord"

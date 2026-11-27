@@ -1,0 +1,593 @@
+# CMP-261124-0159 未移行リスト（共通の門の番人 ScopeContentAccessGateCoverageTest のラチェット台帳）
+# 書式: パッケージごとの「## <package>」見出し行の下に「FQCN#method」。
+# 各ドメイン PR は自パッケージの行だけを削除する。見出し行は締め PR-Z まで消さない（並行 PR の衝突を防ぐ）。
+# 新しい行を足してはならない（新規の直呼びは共通の門 ScopeContentAccessGate の checkScopeContentAccess 系か checkMembershipForWrite に書き分ける）。
+
+## activity
+com.mannschaft.app.activity.controller.ActivityStatsController#checkScopeMembership
+com.mannschaft.app.activity.service.ActivityCommentService#checkScopeMembership
+com.mannschaft.app.activity.service.ActivityDetailService#deletionReference
+com.mannschaft.app.activity.service.ActivityDetailService#requireAutomaticAccess
+com.mannschaft.app.activity.service.ActivityResultService#addParticipants
+com.mannschaft.app.activity.service.ActivityResultService#createActivity
+com.mannschaft.app.activity.service.ActivityResultService#createDraftActivity
+com.mannschaft.app.activity.service.ActivityResultService#duplicateActivity
+com.mannschaft.app.activity.service.ActivityResultService#getActivity
+com.mannschaft.app.activity.service.ActivityResultService#listActivities
+com.mannschaft.app.activity.service.ActivityResultService#removeParticipants
+com.mannschaft.app.activity.service.ActivityScheduleSyncService#createDraft
+com.mannschaft.app.activity.service.ActivityScheduleSyncService#permission
+com.mannschaft.app.activity.service.ActivityScopeAccessGuard#checkMembership
+com.mannschaft.app.activity.service.ActivityScopeAccessGuard#isMember
+com.mannschaft.app.activity.service.ActivityTemplateService#checkScopeMembership
+com.mannschaft.app.activity.service.AutomaticActivityListService#actualIds
+com.mannschaft.app.activity.service.AutomaticActivityListService#linkedMetadata
+com.mannschaft.app.activity.service.AutomaticActivityListService#list
+
+## analytics
+com.mannschaft.app.analytics.service.PageViewAnalyticsAccessGuard#isAllowed
+
+## budget
+com.mannschaft.app.budget.service.BudgetCategoryService#copyFromPreviousYear
+com.mannschaft.app.budget.service.BudgetReportService#getDownloadUrl
+com.mannschaft.app.budget.service.BudgetReportService#listByFiscalYear
+com.mannschaft.app.budget.service.BudgetTransactionService#create
+com.mannschaft.app.budget.service.BudgetTransactionService#getById
+com.mannschaft.app.budget.service.BudgetTransactionService#listByScope
+com.mannschaft.app.budget.service.BudgetTransactionService#requireMemberOrConceal
+
+## bulletin
+com.mannschaft.app.bulletin.service.BulletinAccessGuard#checkMembership
+com.mannschaft.app.bulletin.service.BulletinArchiveFolderService#createFolder
+com.mannschaft.app.bulletin.service.BulletinArchiveFolderService#deleteFolder
+com.mannschaft.app.bulletin.service.BulletinArchiveFolderService#getFolderTree
+com.mannschaft.app.bulletin.service.BulletinArchiveFolderService#updateFolder
+com.mannschaft.app.bulletin.service.BulletinAttachmentService#checkViewAuthorization
+com.mannschaft.app.bulletin.service.BulletinCategoryService#createCategory
+com.mannschaft.app.bulletin.service.BulletinCategoryService#deleteCategory
+com.mannschaft.app.bulletin.service.BulletinCategoryService#getCategory
+com.mannschaft.app.bulletin.service.BulletinCategoryService#listCategories
+com.mannschaft.app.bulletin.service.BulletinCategoryService#updateCategory
+com.mannschaft.app.bulletin.service.BulletinReactionService#checkTargetMembership
+com.mannschaft.app.bulletin.service.BulletinReadFacade#assertReadable
+com.mannschaft.app.bulletin.service.BulletinReadStatusService#listReadUsers
+com.mannschaft.app.bulletin.service.BulletinReadStatusService#markAllAsReadGlobal
+com.mannschaft.app.bulletin.service.BulletinReadStatusService#markAsRead
+com.mannschaft.app.bulletin.service.BulletinReadStatusService#markAsReadGlobal
+com.mannschaft.app.bulletin.service.BulletinReplyService#createReply
+com.mannschaft.app.bulletin.service.BulletinReplyService#deleteReply
+com.mannschaft.app.bulletin.service.BulletinReplyService#listReplies
+com.mannschaft.app.bulletin.service.BulletinReplyService#updateReply
+com.mannschaft.app.bulletin.service.BulletinThreadService#archive
+com.mannschaft.app.bulletin.service.BulletinThreadService#createThread
+com.mannschaft.app.bulletin.service.BulletinThreadService#deleteThread
+com.mannschaft.app.bulletin.service.BulletinThreadService#getThread
+com.mannschaft.app.bulletin.service.BulletinThreadService#getThreadGlobal
+com.mannschaft.app.bulletin.service.BulletinThreadService#listArchiveThreads
+com.mannschaft.app.bulletin.service.BulletinThreadService#listThreads
+com.mannschaft.app.bulletin.service.BulletinThreadService#listThreadsByCategory
+com.mannschaft.app.bulletin.service.BulletinThreadService#moveThreadToFolder
+com.mannschaft.app.bulletin.service.BulletinThreadService#requireModeration
+com.mannschaft.app.bulletin.service.BulletinThreadService#searchThreads
+com.mannschaft.app.bulletin.service.BulletinThreadService#toggleLock
+com.mannschaft.app.bulletin.service.BulletinThreadService#togglePin
+com.mannschaft.app.bulletin.service.BulletinThreadService#updateThread
+com.mannschaft.app.bulletin.service.SurveyBulletinThreadService#findThreadResponseBySurveyId
+
+## chart
+com.mannschaft.app.chart.service.ChartFormulaService#listFormulas
+com.mannschaft.app.chart.service.ChartIntakeFormService#getIntakeForms
+com.mannschaft.app.chart.service.ChartRecordService#getChart
+com.mannschaft.app.chart.service.ChartRecordService#listCharts
+com.mannschaft.app.chart.service.ChartRecordService#listCustomerCharts
+com.mannschaft.app.chart.service.ChartSettingsService#getProgressData
+com.mannschaft.app.chart.service.ChartSettingsService#getSectionSettings
+com.mannschaft.app.chart.service.ChartSettingsService#listCustomFields
+com.mannschaft.app.chart.service.ChartSettingsService#listRecordTemplates
+
+## chat
+com.mannschaft.app.chat.service.ChatChannelAccessGuard#isScopeMember
+com.mannschaft.app.chat.service.ChatChannelAccessGuard#requireChannelCreationScope
+
+## circulation
+com.mannschaft.app.circulation.service.CirculationService#createDocument
+com.mannschaft.app.circulation.service.CirculationService#getUnconfirmedForUserInScope
+
+## cms
+com.mannschaft.app.cms.service.BlogMediaAclService#checkScopeMembership
+com.mannschaft.app.cms.service.BlogPostService#createPost
+com.mannschaft.app.cms.service.BlogSeriesService#createSeries
+com.mannschaft.app.cms.service.BlogSeriesService#listSeries
+com.mannschaft.app.cms.service.BlogTagService#createTag
+com.mannschaft.app.cms.service.BlogTagService#listTags
+
+## common
+# 理由: 共通基盤の AccessGuard（@PreAuthorize 用）と AutomaticActivityActualPolicy は担当 PR 未割当。PR-Z の棚卸し対象として残す（CMP-261124-0159 殿裁定 2026-11-25）。
+com.mannschaft.app.common.activityschedule.AutomaticActivityActualPolicy#filterEligible
+com.mannschaft.app.common.security.AccessGuard#isScopeMember
+
+## corkboard
+com.mannschaft.app.corkboard.service.CorkboardPermissionService#canEdit
+com.mannschaft.app.corkboard.service.CorkboardPermissionService#checkEditPermission
+com.mannschaft.app.corkboard.service.CorkboardScopedBoardVisibilityGuard#requireVisible
+com.mannschaft.app.corkboard.service.CorkboardService#getBoardDetailByIdOnly
+com.mannschaft.app.corkboard.service.CorkboardService#getOrganizationBoardDetail
+com.mannschaft.app.corkboard.service.CorkboardService#getScopedBoard
+com.mannschaft.app.corkboard.service.CorkboardService#listScopedBoards
+
+## dashboard
+com.mannschaft.app.dashboard.service.DashboardScopeTabService#updateOrder
+com.mannschaft.app.dashboard.service.DashboardService#getOrgDashboard
+com.mannschaft.app.dashboard.service.DashboardService#getTeamDashboard
+com.mannschaft.app.dashboard.service.DashboardWidgetVisibilityService#getSettings
+com.mannschaft.app.dashboard.service.DashboardWidgetVisibilityService#updateSettings
+
+## digest
+com.mannschaft.app.digest.service.DigestConfigService#getConfig
+com.mannschaft.app.digest.service.DigestGenerationService#getDetail
+com.mannschaft.app.digest.service.DigestGenerationService#list
+
+## directmail
+com.mannschaft.app.directmail.service.DirectMailService#checkReadAccess
+com.mannschaft.app.directmail.service.DirectMailTemplateService#checkReadAccess
+
+## disclosure
+com.mannschaft.app.disclosure.service.DisclosureExportService#getExport
+com.mannschaft.app.disclosure.service.DisclosureExportService#listExports
+com.mannschaft.app.disclosure.service.DisclosureFormDraftService#get
+com.mannschaft.app.disclosure.service.DisclosureFormDraftService#list
+com.mannschaft.app.disclosure.service.DisclosureFormTemplateService#get
+com.mannschaft.app.disclosure.service.DisclosureFormTemplateService#listAvailable
+
+## effortrecord
+com.mannschaft.app.effortrecord.service.EffortTeamAccessGuard#requireMember
+
+## equipment
+com.mannschaft.app.equipment.service.EquipmentAssignmentService#getHistoryForOrganization
+com.mannschaft.app.equipment.service.EquipmentAssignmentService#getHistoryForTeam
+com.mannschaft.app.equipment.service.EquipmentAssignmentService#getOverdueForOrganization
+com.mannschaft.app.equipment.service.EquipmentAssignmentService#getOverdueForTeam
+com.mannschaft.app.equipment.service.EquipmentAssignmentViewAccessGuard#requireAssignments
+com.mannschaft.app.equipment.service.EquipmentItemService#getByOrganization
+com.mannschaft.app.equipment.service.EquipmentItemService#getByTeam
+com.mannschaft.app.equipment.service.EquipmentItemService#getCategoriesByOrganization
+com.mannschaft.app.equipment.service.EquipmentItemService#getCategoriesByTeam
+com.mannschaft.app.equipment.service.EquipmentItemService#getQrCodesByOrganization
+com.mannschaft.app.equipment.service.EquipmentItemService#getQrCodesByTeam
+com.mannschaft.app.equipment.service.EquipmentItemService#listByOrganization
+com.mannschaft.app.equipment.service.EquipmentItemService#listByTeam
+
+## event
+com.mannschaft.app.event.service.EventScopeAccessGuard#assertMember
+com.mannschaft.app.event.service.EventScopeAccessGuard#isEventScopeMember
+
+## facility
+com.mannschaft.app.facility.service.FacilityAccessGuard#requireBookingMember
+com.mannschaft.app.facility.service.FacilityAccessGuard#requireFacilityMember
+com.mannschaft.app.facility.service.FacilityAccessGuard#requireScopeMember
+
+## family
+com.mannschaft.app.family.service.AnniversaryService#createAnniversary
+com.mannschaft.app.family.service.AnniversaryService#deleteAnniversary
+com.mannschaft.app.family.service.AnniversaryService#getAnniversaries
+com.mannschaft.app.family.service.AnniversaryService#getUpcoming
+com.mannschaft.app.family.service.AnniversaryService#updateAnniversary
+com.mannschaft.app.family.service.CoinTossService#getHistory
+com.mannschaft.app.family.service.CoinTossService#share
+com.mannschaft.app.family.service.CoinTossService#toss
+com.mannschaft.app.family.service.DutyRotationService#getDuties
+com.mannschaft.app.family.service.DutyRotationService#getTodayDuties
+com.mannschaft.app.family.service.PresenceIconService#getIcons
+com.mannschaft.app.family.service.PresenceService#getHistory
+com.mannschaft.app.family.service.PresenceService#getStatus
+com.mannschaft.app.family.service.PresenceService#sendGoingOut
+com.mannschaft.app.family.service.PresenceService#sendHome
+com.mannschaft.app.family.service.RoleAliasService#getAliases
+com.mannschaft.app.family.service.ShoppingListService#addItem
+com.mannschaft.app.family.service.ShoppingListService#archiveList
+com.mannschaft.app.family.service.ShoppingListService#copyFromTemplate
+com.mannschaft.app.family.service.ShoppingListService#createList
+com.mannschaft.app.family.service.ShoppingListService#deleteCheckedItems
+com.mannschaft.app.family.service.ShoppingListService#deleteItem
+com.mannschaft.app.family.service.ShoppingListService#deleteList
+com.mannschaft.app.family.service.ShoppingListService#getItems
+com.mannschaft.app.family.service.ShoppingListService#getLists
+com.mannschaft.app.family.service.ShoppingListService#toggleCheck
+com.mannschaft.app.family.service.ShoppingListService#uncheckAll
+com.mannschaft.app.family.service.ShoppingListService#updateItem
+com.mannschaft.app.family.service.ShoppingListService#updateList
+com.mannschaft.app.family.service.WallpaperService#getAvailableWallpapers
+
+## filesharing
+com.mannschaft.app.filesharing.service.SharedFolderAccessGuard#authorizeBaseView
+com.mannschaft.app.filesharing.service.SharedFolderQueryService#authorizeScopeView
+com.mannschaft.app.filesharing.service.SharedFolderService#checkFolderViewAccess
+com.mannschaft.app.filesharing.service.SharedFolderService#createOrgFolder
+com.mannschaft.app.filesharing.service.SharedFolderService#createTeamFolder
+com.mannschaft.app.filesharing.service.SharedFolderService#listOrgRootFolders
+com.mannschaft.app.filesharing.service.SharedFolderService#listTeamRootFolders
+
+## forms
+com.mannschaft.app.forms.controller.FormPresetCatalogController#listCatalog
+com.mannschaft.app.forms.service.FormSubmissionService#createSubmission
+com.mannschaft.app.forms.service.FormSubmissionService#getSubmission
+com.mannschaft.app.forms.service.FormSubmissionService#listMySubmissions
+com.mannschaft.app.forms.service.FormTemplateService#getTemplate
+com.mannschaft.app.forms.service.FormTemplateService#listTemplates
+
+## gallery
+com.mannschaft.app.gallery.service.GalleryMediaUploadService#generateUploadUrl
+com.mannschaft.app.gallery.service.PhotoService#getAlbumDownloadUrl
+com.mannschaft.app.gallery.service.PhotoService#getPhotoDownloadUrl
+com.mannschaft.app.gallery.service.PhotoService#listPhotos
+com.mannschaft.app.gallery.service.PhotoService#uploadPhotos
+
+## gamification
+com.mannschaft.app.gamification.controller.GamificationBadgeController#getMyBadges
+com.mannschaft.app.gamification.controller.GamificationBadgeController#getUserBadges
+com.mannschaft.app.gamification.controller.GamificationPointController#getMyPointHistory
+com.mannschaft.app.gamification.controller.GamificationPointController#getMyPointSummary
+com.mannschaft.app.gamification.controller.GamificationRankingController#getRanking
+com.mannschaft.app.gamification.controller.GamificationSettingController#getMySetting
+com.mannschaft.app.gamification.controller.GamificationSettingController#updateMySetting
+
+## incident
+com.mannschaft.app.incident.service.IncidentAccessGuard#requireListVisibility
+com.mannschaft.app.incident.service.IncidentAccessGuard#requireVisibleOrConceal
+com.mannschaft.app.incident.service.IncidentCategoryService#listCategories
+com.mannschaft.app.incident.service.IncidentCategoryService#requireMemberOrConceal
+com.mannschaft.app.incident.service.IncidentService#reportIncident
+com.mannschaft.app.incident.service.IncidentService#requireMemberOrConceal
+com.mannschaft.app.incident.service.MaintenanceScheduleService#requireMemberOrConceal
+
+## jobmatching
+com.mannschaft.app.jobmatching.policy.JobPolicy#canApply
+com.mannschaft.app.jobmatching.policy.JobPolicy#isNonSupporterMember
+
+## knowledgebase
+com.mannschaft.app.knowledgebase.controller.KbFavoriteController#addFavorite
+com.mannschaft.app.knowledgebase.controller.KbFavoriteController#getFavorites
+com.mannschaft.app.knowledgebase.controller.KbFavoriteController#removeFavorite
+com.mannschaft.app.knowledgebase.controller.KbPageController#archivePage
+com.mannschaft.app.knowledgebase.controller.KbPageController#createPage
+com.mannschaft.app.knowledgebase.controller.KbPageController#deletePage
+com.mannschaft.app.knowledgebase.controller.KbPageController#getPage
+com.mannschaft.app.knowledgebase.controller.KbPageController#getPageTree
+com.mannschaft.app.knowledgebase.controller.KbPageController#getPinnedPages
+com.mannschaft.app.knowledgebase.controller.KbPageController#getRecentPages
+com.mannschaft.app.knowledgebase.controller.KbPageController#movePage
+com.mannschaft.app.knowledgebase.controller.KbPageController#publishPage
+com.mannschaft.app.knowledgebase.controller.KbPageController#updatePage
+com.mannschaft.app.knowledgebase.controller.KbRevisionController#getRevision
+com.mannschaft.app.knowledgebase.controller.KbRevisionController#getRevisions
+com.mannschaft.app.knowledgebase.controller.KbRevisionController#restoreRevision
+com.mannschaft.app.knowledgebase.controller.KbSearchController#getUploadUrl
+com.mannschaft.app.knowledgebase.controller.KbSearchController#search
+com.mannschaft.app.knowledgebase.controller.KbTemplateController#createTemplate
+com.mannschaft.app.knowledgebase.controller.KbTemplateController#deleteTemplate
+com.mannschaft.app.knowledgebase.controller.KbTemplateController#getTemplates
+com.mannschaft.app.knowledgebase.controller.KbTemplateController#updateTemplate
+
+## line
+com.mannschaft.app.line.service.SnsFeedConfigService#findAll
+com.mannschaft.app.line.service.SnsFeedConfigService#preview
+
+## match
+com.mannschaft.app.match.controller.MatchStatsController#assertCanViewOtherUserStats
+com.mannschaft.app.match.controller.MatchStatsController#getTeamStats
+com.mannschaft.app.match.service.MatchAccessService#canListTeamMatches
+com.mannschaft.app.match.visibility.MatchVisibilityResolver#isAuthorized
+
+## matching
+com.mannschaft.app.matching.service.MatchProposalService#checkProposalReadAccess
+com.mannschaft.app.matching.service.MatchProposalService#listProposals
+
+## member
+com.mannschaft.app.member.service.MemberProfileFieldService#listFields
+com.mannschaft.app.member.service.MemberSubtabVisibilityService#updateSettings
+com.mannschaft.app.member.service.TeamPageService#checkPageMembershipOrNotFound
+com.mannschaft.app.member.service.TeamPageService#checkPageViewableOrNotFound
+com.mannschaft.app.member.service.TeamPageService#listPages
+
+## memberinfo
+com.mannschaft.app.memberinfo.service.MemberInfoFieldService#getFields
+com.mannschaft.app.memberinfo.service.MemberInfoResponseService#getMyResponses
+com.mannschaft.app.memberinfo.service.MemberInfoResponseService#upsertMyResponses
+
+## membership
+com.mannschaft.app.membership.service.CheckinLocationService#getLocations
+com.mannschaft.app.membership.service.MemberCardService#requireMemberOrConceal
+
+## notification
+com.mannschaft.app.notification.confirmable.controller.TeamConfirmableNotificationController#list
+com.mannschaft.app.notification.confirmable.controller.TeamConfirmableNotificationSettingsController#getSettings
+com.mannschaft.app.notification.confirmable.controller.TeamConfirmableNotificationTemplateController#list
+com.mannschaft.app.notification.confirmable.controller.TeamConfirmableRecipientGroupController#list
+com.mannschaft.app.notification.confirmable.service.ConfirmableScopeAuthorizer#denial
+com.mannschaft.app.notification.confirmable.service.ConfirmableScopeAuthorizer#requireMember
+
+## parking
+com.mannschaft.app.parking.service.ParkingAccessGuard#requireScopeMember
+com.mannschaft.app.parking.service.ParkingSettingsService#getSettings
+com.mannschaft.app.parking.service.ParkingSpaceService#getDetail
+com.mannschaft.app.parking.service.ParkingSpaceService#getHistory
+com.mannschaft.app.parking.service.ParkingSpaceService#getPriceHistory
+com.mannschaft.app.parking.service.ParkingSpaceService#getStats
+com.mannschaft.app.parking.service.ParkingSpaceService#list
+com.mannschaft.app.parking.service.ParkingSpaceService#listVacant
+com.mannschaft.app.parking.service.ParkingVisitorReservationService#getDetail
+
+## payment
+com.mannschaft.app.payment.controller.TeamAccessRequirementController#getAccessRequirements
+com.mannschaft.app.payment.controller.TeamContentPaymentGateController#listContentGates
+com.mannschaft.app.payment.controller.TeamPaymentController#listPayments
+com.mannschaft.app.payment.controller.TeamPaymentItemController#listPaymentItems
+com.mannschaft.app.payment.controller.TeamPaymentSummaryController#getPaymentSummary
+com.mannschaft.app.payment.service.PaymentItemService#getPaymentItemById
+
+## performance
+com.mannschaft.app.performance.service.PerformanceExportService#countExportRecords
+com.mannschaft.app.performance.service.PerformanceExportService#exportCsv
+com.mannschaft.app.performance.service.PerformanceMetricService#listLinkableFields
+com.mannschaft.app.performance.service.PerformanceMetricService#listMetrics
+com.mannschaft.app.performance.service.PerformanceRecordService#createSelfRecord
+com.mannschaft.app.performance.service.PerformanceStatsService#getActivityPerformance
+com.mannschaft.app.performance.service.PerformanceStatsService#getMemberPerformance
+com.mannschaft.app.performance.service.PerformanceStatsService#getMyPerformance
+com.mannschaft.app.performance.service.PerformanceStatsService#getSchedulePerformance
+com.mannschaft.app.performance.service.PerformanceStatsService#getTeamStats
+
+## promotion
+com.mannschaft.app.promotion.service.CouponService#get
+com.mannschaft.app.promotion.service.CouponService#list
+com.mannschaft.app.promotion.service.PromotionService#estimateAudience
+com.mannschaft.app.promotion.service.PromotionService#get
+com.mannschaft.app.promotion.service.PromotionService#getStats
+com.mannschaft.app.promotion.service.PromotionService#list
+com.mannschaft.app.promotion.service.SegmentPresetService#list
+
+## property
+com.mannschaft.app.property.controller.PropertyWorkPackageController#categorySuggestions
+com.mannschaft.app.property.controller.PropertyWorkPackageController#exportList
+com.mannschaft.app.property.controller.PropertyWorkPackageController#exportSingle
+com.mannschaft.app.property.controller.PropertyWorkPackageController#gantt
+com.mannschaft.app.property.controller.PropertyWorkPackageController#getPackage
+com.mannschaft.app.property.controller.PropertyWorkPackageController#listPackages
+com.mannschaft.app.property.controller.PropertyWorkPackageController#timeline
+com.mannschaft.app.property.controller.VendorController#checkReadAccess
+
+## proxyvote
+com.mannschaft.app.proxyvote.service.ProxyDelegationService#cancelDelegation
+com.mannschaft.app.proxyvote.service.ProxyDelegationService#delegate
+com.mannschaft.app.proxyvote.service.ProxyDelegationService#getAttendance
+com.mannschaft.app.proxyvote.service.ProxyVoteCastService#castVote
+com.mannschaft.app.proxyvote.service.ProxyVoteCastService#updateVote
+com.mannschaft.app.proxyvote.service.ProxyVoteCommentService#createComment
+com.mannschaft.app.proxyvote.service.ProxyVoteCommentService#listComments
+com.mannschaft.app.proxyvote.service.ProxyVoteExportService#exportMinutesPdf
+com.mannschaft.app.proxyvote.service.ProxyVoteExportService#exportResultsCsv
+com.mannschaft.app.proxyvote.service.ProxyVoteSessionService#getResults
+com.mannschaft.app.proxyvote.service.ProxyVoteSessionService#getSession
+com.mannschaft.app.proxyvote.service.ProxyVoteSessionService#listSessions
+
+## queue
+com.mannschaft.app.queue.service.QueueAccessGuard#requireScopeMember
+
+## receipt
+com.mannschaft.app.receipt.service.ReceiptManagementReadFacade#requireReadAccess
+com.mannschaft.app.receipt.service.ReceiptPresetService#listPresets
+
+## recruitment
+com.mannschaft.app.recruitment.service.RecruitmentListingFacade#getTemplate
+com.mannschaft.app.recruitment.service.RecruitmentListingFacade#isScopeInsider
+com.mannschaft.app.recruitment.service.RecruitmentListingFacade#requireDraftViewer
+com.mannschaft.app.recruitment.service.RecruitmentListingFacade#requireListingAdmin
+com.mannschaft.app.recruitment.service.RecruitmentListingFacade#requireTemplateAdmin
+com.mannschaft.app.recruitment.service.RecruitmentListingService#listByScope
+com.mannschaft.app.recruitment.service.RecruitmentMoneyFacade#requireScopeAdmin
+com.mannschaft.app.recruitment.service.RecruitmentMoneyFacade#waiveDenial
+com.mannschaft.app.recruitment.service.RecruitmentSubcategoryService#listByScope
+com.mannschaft.app.recruitment.service.RecruitmentTemplateService#listByScope
+
+## repairplan
+com.mannschaft.app.repairplan.controller.RepairPlanDashboardController#getDashboard
+com.mannschaft.app.repairplan.controller.RepairPlanQuoteKanbanController#checkReadAccess
+com.mannschaft.app.repairplan.controller.RepairPlanTimelineController#getTimeline
+com.mannschaft.app.repairplan.service.BoardHandoverPackService#getDownloadUrl
+com.mannschaft.app.repairplan.service.BoardHandoverPackService#listPacks
+com.mannschaft.app.repairplan.service.RepairPlanItemService#get
+com.mannschaft.app.repairplan.service.RepairPlanItemService#list
+com.mannschaft.app.repairplan.service.RepairPlanScenarioService#getScenario
+com.mannschaft.app.repairplan.service.RepairPlanScenarioService#listScenarios
+com.mannschaft.app.repairplan.service.RepairPlanScenarioService#simulate
+com.mannschaft.app.repairplan.service.TeamMemberTermService#getTerm
+com.mannschaft.app.repairplan.service.TeamMemberTermService#listTerms
+
+## reservation
+com.mannschaft.app.reservation.service.ReservationDetailFacade#denyDetailView
+com.mannschaft.app.reservation.service.ReservationSlotTemplateService#validateStaffMembership
+com.mannschaft.app.reservation.service.ReservationViewAccessGuard#assertCanView
+
+## resident
+com.mannschaft.app.resident.service.DwellingUnitService#getByOrganization
+com.mannschaft.app.resident.service.DwellingUnitService#getByTeam
+com.mannschaft.app.resident.service.DwellingUnitService#listByOrganization
+com.mannschaft.app.resident.service.DwellingUnitService#listByTeam
+com.mannschaft.app.resident.service.PropertyListingService#createInquiry
+com.mannschaft.app.resident.service.PropertyListingService#getByOrganization
+com.mannschaft.app.resident.service.PropertyListingService#getByTeam
+com.mannschaft.app.resident.service.PropertyListingService#listByOrganization
+com.mannschaft.app.resident.service.PropertyListingService#listByTeam
+com.mannschaft.app.resident.service.PropertyListingService#listInquiries
+com.mannschaft.app.resident.service.ResidentDocumentService#listByResident
+com.mannschaft.app.resident.service.ResidentRegistryService#listByUnit
+
+## role
+com.mannschaft.app.role.service.InviteReissueRequestService#reissue
+
+## safetycheck
+com.mannschaft.app.safetycheck.service.SafetyCheckService#getSafetyCheck
+com.mannschaft.app.safetycheck.service.SafetyCheckService#requireScopeMember
+com.mannschaft.app.safetycheck.service.SafetyFollowupService#updateFollowup
+com.mannschaft.app.safetycheck.service.SafetyResponseService#respond
+com.mannschaft.app.safetycheck.service.SafetyTemplateService#getScopedTemplate
+com.mannschaft.app.safetycheck.service.SafetyTemplateService#requireScopeMember
+com.mannschaft.app.safetycheck.service.SafetyTemplateService#updateScopedTemplate
+
+## schedule
+com.mannschaft.app.schedule.controller.OrgAnnualScheduleController#getAnnualView
+com.mannschaft.app.schedule.controller.OrgAnnualScheduleController#previewCopy
+com.mannschaft.app.schedule.controller.TeamAnnualScheduleController#getAnnualView
+com.mannschaft.app.schedule.controller.TeamAnnualScheduleController#previewCopy
+com.mannschaft.app.schedule.controller.TeamEventCategoryController#listCategories
+com.mannschaft.app.schedule.service.ScheduleCrossRefService#listReceivedInvitations
+com.mannschaft.app.schedule.service.ScheduleMediaAclService#requireUploadable
+com.mannschaft.app.schedule.service.ScheduleMediaQueryService#isScheduleMediaOwner
+com.mannschaft.app.schedule.service.ScheduleService#checkScopeViewAccess
+
+## school
+com.mannschaft.app.school.service.AttendanceRequirementService#listOrganizationRules
+com.mannschaft.app.school.service.AttendanceRequirementService#listTeamRules
+com.mannschaft.app.school.service.SchoolAttendanceAccessPolicy#isActiveHomeroomTeacher
+
+## service
+com.mannschaft.app.service.service.ServiceRecordExportService#exportOrNull
+com.mannschaft.app.service.service.ServiceRecordExportService#writeCsv
+com.mannschaft.app.service.service.ServiceRecordFieldService#getSettings
+com.mannschaft.app.service.service.ServiceRecordFieldService#listFields
+com.mannschaft.app.service.service.ServiceRecordService#addReaction
+com.mannschaft.app.service.service.ServiceRecordService#deleteReaction
+com.mannschaft.app.service.service.ServiceRecordService#getMemberHistory
+com.mannschaft.app.service.service.ServiceRecordService#getMemberSummary
+com.mannschaft.app.service.service.ServiceRecordService#getRecord
+com.mannschaft.app.service.service.ServiceRecordService#listRecords
+com.mannschaft.app.service.service.ServiceRecordTemplateService#getTeamTemplate
+com.mannschaft.app.service.service.ServiceRecordTemplateService#listOrgTemplates
+com.mannschaft.app.service.service.ServiceRecordTemplateService#listTeamTemplates
+
+## shift
+com.mannschaft.app.shift.service.MemberWorkConstraintFacade#upsertConstraint
+com.mannschaft.app.shift.service.MemberWorkConstraintService#getConstraint
+com.mannschaft.app.shift.service.MemberWorkConstraintService#getTeamDefault
+com.mannschaft.app.shift.service.ShiftAvailabilityService#checkTeamAccess
+com.mannschaft.app.shift.service.ShiftHourlyRateAuthorizer#checkHourlyRateAccess
+com.mannschaft.app.shift.service.ShiftHourlyRateAuthorizer#checkHourlyRateDeleteAccess
+com.mannschaft.app.shift.service.ShiftHourlyRateAuthorizer#checkHourlyRateWriteAccess
+com.mannschaft.app.shift.service.ShiftPdfFacade#authorize
+com.mannschaft.app.shift.service.ShiftPositionFacade#checkTeamMemberAccess
+com.mannschaft.app.shift.service.ShiftScheduleFacade#listSchedules
+com.mannschaft.app.shift.service.ShiftSwapFacade#checkListAccessAndIsPrivileged
+com.mannschaft.app.shift.service.ShiftSwapFacade#resolveSwapRequest
+
+## shiftbudget
+com.mannschaft.app.shiftbudget.controller.ShiftBudgetSummaryController#hasOrgPermission
+com.mannschaft.app.shiftbudget.service.BudgetThresholdAlertService#hasOrgPermission
+com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCloseService#hasOrgPermission
+com.mannschaft.app.shiftbudget.service.ShiftBudgetAllocationService#hasOrgPermission
+com.mannschaft.app.shiftbudget.service.ShiftBudgetFailedEventService#hasOrgPermission
+com.mannschaft.app.shiftbudget.service.ShiftBudgetSummaryService#hasOrgPermission
+com.mannschaft.app.shiftbudget.service.TodoBudgetLinkService#requireBudgetView
+
+## signage
+com.mannschaft.app.signage.service.SignageEmergencyService#listEmergencyMessages
+com.mannschaft.app.signage.service.SignageScreenReadFacade#getScreenForActor
+com.mannschaft.app.signage.service.SignageScreenService#listScreensForActor
+com.mannschaft.app.signage.service.SignageSlotService#listSlotsForActor
+
+## social
+com.mannschaft.app.social.announcement.AnnouncementBroadcastService#broadcast
+com.mannschaft.app.social.announcement.AnnouncementRangeTemplateService#findAll
+com.mannschaft.app.social.announcement.audience.BroadcastAudienceResolver#preview
+com.mannschaft.app.social.announcement.audience.BroadcastAudienceResolver#resolveForBroadcast
+com.mannschaft.app.social.service.TeamFriendFolderService#listFolders
+com.mannschaft.app.social.service.TeamFriendQueryService#listFriends
+com.mannschaft.app.social.service.TeamFriendViewAccessGuard#canSeeFrom
+
+## survey
+com.mannschaft.app.survey.service.SurveyAccessGuard#checkCanCreate
+
+## team
+com.mannschaft.app.team.controller.TeamShiftSettingsController#getSettings
+com.mannschaft.app.team.controller.TeamShiftSettingsController#updateSettings
+com.mannschaft.app.team.service.TeamExtendedProfileService#getCustomFields
+com.mannschaft.app.team.service.TeamExtendedProfileService#getOfficers
+
+## template
+com.mannschaft.app.template.controller.TeamModuleController#getTeamModuleCatalog
+com.mannschaft.app.template.controller.TeamModuleController#getTeamModules
+
+## ticket
+com.mannschaft.app.ticket.service.TicketAccessGuard#requireTeamMember
+
+## timeline
+com.mannschaft.app.timeline.service.TimelineAttachmentAccessGuard#checkCanUpload
+com.mannschaft.app.timeline.service.TimelinePostService#checkScopeMembership
+com.mannschaft.app.timeline.service.TimelinePostVisibilityAccessGuard#isVisible
+
+## timetable
+com.mannschaft.app.timetable.service.TimetableChangeService#getChanges
+com.mannschaft.app.timetable.service.TimetablePeriodTemplateService#getByOrganization
+com.mannschaft.app.timetable.service.TimetableService#getById
+com.mannschaft.app.timetable.service.TimetableService#getByIdWithoutTeam
+com.mannschaft.app.timetable.service.TimetableService#getByTeamId
+com.mannschaft.app.timetable.service.TimetableService#getEffective
+com.mannschaft.app.timetable.service.TimetableSlotService#getSlots
+com.mannschaft.app.timetable.service.TimetableSlotService#getSlotsByDay
+com.mannschaft.app.timetable.service.TimetableSlotService#getSubjectSuggestions
+com.mannschaft.app.timetable.service.TimetableSlotService#getTodaySlots
+com.mannschaft.app.timetable.service.TimetableSlotService#getWeeklyView
+com.mannschaft.app.timetable.service.TimetableTermService#getOrganizationTerms
+com.mannschaft.app.timetable.service.TimetableTermService#getTeamTerms
+
+## todo
+com.mannschaft.app.todo.controller.MilestoneGateController#validateTeamProjectAccess
+com.mannschaft.app.todo.security.ProjectAccessGuard#validateOrgMembership
+com.mannschaft.app.todo.security.ProjectAccessGuard#validateOrgProjectAccess
+com.mannschaft.app.todo.security.ProjectAccessGuard#validateTeamMembership
+com.mannschaft.app.todo.security.ProjectAccessGuard#validateTeamProjectAccess
+com.mannschaft.app.todo.security.TodoAccessGuard#requireScopeMember
+com.mannschaft.app.todo.security.TodoAccessGuard#verifyScopeAndMembership
+com.mannschaft.app.todo.service.TodoCommentService#verifyScopeAndMembership
+com.mannschaft.app.todo.service.TodoHandoffService#handoff
+com.mannschaft.app.todo.service.TodoHandoffService#listHistory
+com.mannschaft.app.todo.service.TodoStatusLabelService#validateScopeAccess
+
+## tournament
+com.mannschaft.app.tournament.entry.TournamentEntryMemberService#checkEntryViewable
+com.mannschaft.app.tournament.entry.TournamentEntryTemplateService#checkTemplateViewable
+com.mannschaft.app.tournament.roster.FixtureRosterService#requireTeamMember
+com.mannschaft.app.tournament.roster.FixtureRosterService#resolveMyParticipant
+com.mannschaft.app.tournament.service.TournamentTemplateService#getTemplate
+com.mannschaft.app.tournament.service.TournamentTemplateService#listTemplates
+
+## translation
+com.mannschaft.app.translation.controller.ContentTranslationController#changeOrgTranslationStatus
+com.mannschaft.app.translation.controller.ContentTranslationController#changeTeamTranslationStatus
+com.mannschaft.app.translation.controller.ContentTranslationController#createOrgTranslation
+com.mannschaft.app.translation.controller.ContentTranslationController#createTeamTranslation
+com.mannschaft.app.translation.controller.ContentTranslationController#getOrgTranslation
+com.mannschaft.app.translation.controller.ContentTranslationController#getOrgTranslationForContent
+com.mannschaft.app.translation.controller.ContentTranslationController#getTeamTranslation
+com.mannschaft.app.translation.controller.ContentTranslationController#getTeamTranslationForContent
+com.mannschaft.app.translation.controller.ContentTranslationController#listOrgTranslations
+com.mannschaft.app.translation.controller.ContentTranslationController#listOrgTranslationsForContent
+com.mannschaft.app.translation.controller.ContentTranslationController#listTeamTranslations
+com.mannschaft.app.translation.controller.ContentTranslationController#listTeamTranslationsForContent
+com.mannschaft.app.translation.controller.ContentTranslationController#updateOrgTranslation
+com.mannschaft.app.translation.controller.ContentTranslationController#updateTeamTranslation
+com.mannschaft.app.translation.controller.TranslationAssignmentController#listMyOrgAssignments
+com.mannschaft.app.translation.controller.TranslationAssignmentController#listMyTeamAssignments
+com.mannschaft.app.translation.controller.TranslationAssignmentController#listOrgAssignments
+com.mannschaft.app.translation.controller.TranslationAssignmentController#listTeamAssignments
+com.mannschaft.app.translation.controller.TranslationConfigController#getOrgConfig
+com.mannschaft.app.translation.controller.TranslationConfigController#getTeamConfig
+
+## workflow
+com.mannschaft.app.workflow.service.WorkflowApprovalService#decide
+com.mannschaft.app.workflow.service.WorkflowCommentService#findVisibleRequestOrThrow
+com.mannschaft.app.workflow.service.WorkflowRequestAttachmentService#findVisibleRequestOrThrow
+com.mannschaft.app.workflow.service.WorkflowRequestService#checkRequestVisibility
+com.mannschaft.app.workflow.service.WorkflowRequestService#createRequestAsUser
+com.mannschaft.app.workflow.service.WorkflowRequestService#listRequests
+com.mannschaft.app.workflow.service.WorkflowTemplateService#getTemplate
+com.mannschaft.app.workflow.service.WorkflowTemplateService#listTemplates

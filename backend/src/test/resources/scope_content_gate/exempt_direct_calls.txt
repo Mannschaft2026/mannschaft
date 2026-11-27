@@ -1,0 +1,32 @@
+# CMP-261124-0159 対象外リスト（共通の門の番人 ScopeContentAccessGateCoverageTest）
+# 書式: 最上位クラスの FQCN<TAB>理由（理由空欄は赤）。F00 §20.5.2 の「対象外」行・基盤クラスだけを載せる。
+# 直呼びしなくなったクラスの行は削除する（陳腐行は赤）。
+com.mannschaft.app.role.service.DefaultAccessControlService	AccessControlService の実装本体（門は isMember の組合せで作る。F00 §20.3）
+com.mannschaft.app.common.ScopeConcealingAccessGate	秘匿ゲート本体。拒否経路の越境判定に isMember を使い、親チーム上限（ScopeContentAccessGate#isBeyondTeamContentCap）を AND 済み（AC-0159-94）
+com.mannschaft.app.common.ScopeContentAccessGate	共通の門の本体（isMember・checkMembership の組合せで門と書き込み用の別名を作る。F00 §20.3）
+com.mannschaft.app.common.visibility.MembershipQueryCache	リクエスト内メモ化ラッパ（呼び出し元なし・リクエストをまたぐキャッシュではない。F00 §9.3）
+com.mannschaft.app.admin.service.FeedbackService	対象外: プラットフォーム運営のフィードバック。チームの中身を返さない（F00 §20.5.2）
+com.mannschaft.app.auth.service.PendingInviteService	対象外（入口表）: 招待の保留承認は入口。非公開チームは UNAVAILABLE（F01.2 03・PR-E）
+com.mannschaft.app.billing.api.BillingEntitlementQueryService	対象外: 課金・権利の照会。中身でなく契約情報で、既存の管理者判定に従う
+com.mannschaft.app.committee.service.CommitteeInvitationService	対象外: COMMITTEE スコープ（チームではない）
+com.mannschaft.app.committee.service.CommitteeService	対象外: COMMITTEE スコープ（チームではない）
+com.mannschaft.app.joinrequest.service.JoinRequestService	対象外（入口表）: 参加申請。申請者は非所属が前提。SUPPORTER を作る経路は入口表（PR-E）
+com.mannschaft.app.organization.service.OrganizationExtendedProfileService	対象外: 組織スコープ（F00 §20.10 K-1）
+com.mannschaft.app.role.service.MembershipInviteService	対象外（権限管理）: 招待の管理操作。入口は入口表（PR-E）
+com.mannschaft.app.role.service.OwnershipTransferOfferService	対象外（権限管理）: オーナー委譲の管理操作
+com.mannschaft.app.role.service.PermissionGroupService	対象外（権限管理）: 権限グループの管理操作
+com.mannschaft.app.team.service.TeamSearchService	対象外: チーム自身の可視性述語（既存）で検索結果を絞る。チームの中身を返さない
+com.mannschaft.app.team.controller.OrganizationTeamSearchController	対象外: 組織配下のチーム検索。チーム自身の可視性述語（既存）で絞る
+com.mannschaft.app.notification.service.NotificationPreferenceService	対象外: 本人の通知設定（個人設定）。チームの中身を返さない
+com.mannschaft.app.notification.confirmable.controller.OrgConfirmableNotificationController	対象外: 組織スコープの確認通知（Org* 系）
+com.mannschaft.app.notification.confirmable.controller.OrgConfirmableNotificationSettingsController	対象外: 組織スコープの確認通知設定（Org* 系）
+com.mannschaft.app.notification.confirmable.controller.OrgConfirmableNotificationTemplateController	対象外: 組織スコープの確認通知テンプレート（Org* 系）
+com.mannschaft.app.notification.confirmable.controller.OrgConfirmableRecipientGroupController	対象外: 組織スコープの確認通知の宛先グループ（Org* 系）
+com.mannschaft.app.payment.controller.OrganizationAccessRequirementController	対象外: 組織スコープの支払い（Organization* 系）
+com.mannschaft.app.payment.controller.OrganizationContentPaymentGateController	対象外: 組織スコープの課金ゲート（Organization* 系）
+com.mannschaft.app.payment.controller.OrganizationPaymentController	対象外: 組織スコープの支払い（Organization* 系）
+com.mannschaft.app.payment.controller.OrganizationPaymentItemController	対象外: 組織スコープの支払い項目（Organization* 系）
+com.mannschaft.app.payment.controller.OrganizationPaymentSummaryController	対象外: 組織スコープの支払い集計（Organization* 系）
+com.mannschaft.app.template.controller.OrganizationModuleController	対象外: 組織スコープのモジュール設定（Organization* 系）
+com.mannschaft.app.tournament.controller.OrganizationTournamentSummaryController	対象外: 組織スコープの大会集計（Organization* 系）
+com.mannschaft.app.shift.service.ShiftManageAccessGate	対象外: シフト管理の認可ゲート本体（CMP-261125-2114）。越境（404）と所属者の権限不足（403）の作り分けに isMember を使う。ScopeConcealingAccessGate と同じ役割
