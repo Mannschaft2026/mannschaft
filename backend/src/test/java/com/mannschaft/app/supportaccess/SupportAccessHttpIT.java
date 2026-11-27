@@ -21,7 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -83,13 +83,13 @@ class SupportAccessHttpIT extends AbstractMySqlIntegrationTest {
 
     /** DB に直接、承認済み・閲覧開始済みの grant を置く（状態ごとの試験用）。 */
     private UUID approvedStartedGrant(Long op, Long tgt) {
-        LocalDateTime now = LocalDateTime.now();
+        Instant now = Instant.now();
         return grants.saveAndFlush(SupportAccessGrantEntity.builder()
                 .operatorUserId(op).targetUserId(tgt).status(SupportAccessStatus.APPROVED)
                 .requestReason("問い合わせの表示崩れを本人の画面で確認するため")
-                .requestedAt(now.minusHours(1)).requestExpiresAt(now.plusHours(71))
-                .decidedAt(now.minusMinutes(30)).expiresAt(now.plusHours(23))
-                .activeSessionStartedAt(now.minusMinutes(1)).guardianApprovalRequired(false).build()).getId();
+                .requestedAt(now.minus(java.time.Duration.ofHours(1))).requestExpiresAt(now.plus(java.time.Duration.ofHours(71)))
+                .decidedAt(now.minus(java.time.Duration.ofMinutes(30))).expiresAt(now.plus(java.time.Duration.ofHours(23)))
+                .activeSessionStartedAt(now.minus(java.time.Duration.ofMinutes(1))).guardianApprovalRequired(false).build()).getId();
     }
 
     private static String errorCode(MvcResult r) throws Exception {
@@ -217,7 +217,7 @@ class SupportAccessHttpIT extends AbstractMySqlIntegrationTest {
     void S1_期限切れは403() throws Exception {
         UUID grantId = approvedStartedGrant(operatorId, targetId);
         SupportAccessGrantEntity g = grants.findById(grantId).orElseThrow();
-        grants.saveAndFlush(g.toBuilder().expiresAt(LocalDateTime.now().minusSeconds(1)).build());
+        grants.saveAndFlush(g.toBuilder().expiresAt(Instant.now().minus(java.time.Duration.ofSeconds(1))).build());
 
         mvc.perform(get("/api/v1/users/me").with(operator()).header(HEADER, grantId.toString()))
                 .andExpect(status().isForbidden());

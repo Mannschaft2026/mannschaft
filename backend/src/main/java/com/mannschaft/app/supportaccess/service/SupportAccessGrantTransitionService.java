@@ -14,7 +14,6 @@ import com.mannschaft.app.supportaccess.entity.SupportAccessGrantEntity;
 import com.mannschaft.app.supportaccess.event.SupportAccessGrantChangedEvent;
 import com.mannschaft.app.supportaccess.repository.SupportAccessGrantRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -22,7 +21,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -57,7 +56,7 @@ public class SupportAccessGrantTransitionService {
     public SupportAccessGrantTransitionService(SupportAccessGrantRepository grantRepository,
                                                SupportAccessLogRecorder logRecorder,
                                                ApplicationEventPublisher eventPublisher,
-                                               @Qualifier("wallClock") Clock clock) {
+                                               Clock clock) {
         this.grantRepository = grantRepository;
         this.logRecorder = logRecorder;
         this.eventPublisher = eventPublisher;
@@ -69,7 +68,7 @@ public class SupportAccessGrantTransitionService {
     /** 依頼を作る。guardianUserId は呼び出し側が TX の外で解決した値（null なら保護者の承認は不要）。 */
     public SupportAccessTransitionResult request(Long operatorUserId, CreateSupportAccessGrantRequest request,
                                                  String reason, Long guardianUserId) {
-        LocalDateTime now = LocalDateTime.now(clock);
+        Instant now = Instant.now(clock);
         Long targetUserId = request.targetUserId();
         List<SupportAccessGrantSnapshot> expired = new ArrayList<>();
 
@@ -85,7 +84,7 @@ public class SupportAccessGrantTransitionService {
                     expired.add(SupportAccessGrantSnapshot.from(open));
                 });
 
-        if (grantRepository.countByOperatorUserIdAndRequestedAtAfter(operatorUserId, now.minusDays(1))
+        if (grantRepository.countByOperatorUserIdAndRequestedAtAfter(operatorUserId, now.minus(java.time.Duration.ofDays(1)))
                 >= SupportAccessGrantService.DAILY_REQUEST_LIMIT) {
             throw new BusinessException(SupportAccessErrorCode.REQUEST_RATE_LIMITED);
         }
@@ -98,7 +97,7 @@ public class SupportAccessGrantTransitionService {
                 .referenceType(request.referenceType())
                 .referenceId(request.referenceId())
                 .requestedAt(now)
-                .requestExpiresAt(now.plusHours(SupportAccessGrantService.REQUEST_TTL_HOURS))
+                .requestExpiresAt(now.plus(java.time.Duration.ofHours(SupportAccessGrantService.REQUEST_TTL_HOURS)))
                 .guardianApprovalRequired(guardianUserId != null)
                 .guardianUserId(guardianUserId)
                 .build();
@@ -118,7 +117,7 @@ public class SupportAccessGrantTransitionService {
     public SupportAccessTransitionResult cancel(Long operatorUserId, UUID grantId) {
         SupportAccessGrantEntity grant = findOwnedByOperator(operatorUserId, grantId);
         requireOpen(grant);
-        grant.cancel(LocalDateTime.now(clock));
+        grant.cancel(Instant.now(clock));
         grantRepository.save(grant);
         publish(SupportAccessAuditAction.CANCELLED, grant);
         return result(grant);
@@ -128,14 +127,14 @@ public class SupportAccessGrantTransitionService {
     @Transactional(readOnly = true)
     public Long preflightStartSession(Long operatorUserId, UUID grantId) {
         SupportAccessGrantEntity grant = findOwnedByOperator(operatorUserId, grantId);
-        requireUsable(grant, LocalDateTime.now(clock));
+        requireUsable(grant, Instant.now(clock));
         return grant.getTargetUserId();
     }
 
     /** 閲覧開始。承認済みで期限内の grant だけが開始できる（所属・本人の状態は呼び出し側が TX の前に確認済み）。 */
     public SupportAccessSessionResponse startSession(Long operatorUserId, UUID grantId, String targetDisplayName) {
         SupportAccessGrantEntity grant = findOwnedByOperator(operatorUserId, grantId);
-        LocalDateTime now = LocalDateTime.now(clock);
+        Instant now = Instant.now(clock);
         requireUsable(grant, now);
 
         grant.startSession(now);
@@ -154,7 +153,7 @@ public class SupportAccessGrantTransitionService {
         if (!grant.isSessionActive()) {
             return null;
         }
-        grant.endSession(LocalDateTime.now(clock));
+        grant.endSession(Instant.now(clock));
         grantRepository.save(grant);
         logRecorder.recordSessionEnd(contextOf(grant));
         publish(SupportAccessAuditAction.SESSION_ENDED, grant);
@@ -167,7 +166,7 @@ public class SupportAccessGrantTransitionService {
     @Transactional(readOnly = true)
     public Long preflightApprove(Long userId, UUID grantId) {
         SupportAccessGrantEntity grant = findVisibleToUser(userId, grantId);
-        requireApprovable(grant, isGuardianOnly(grant, userId), LocalDateTime.now(clock));
+        requireApprovable(grant, isGuardianOnly(grant, userId), Instant.now(clock));
         return grant.getTargetUserId();
     }
 
@@ -175,7 +174,7 @@ public class SupportAccessGrantTransitionService {
     public SupportAccessTransitionResult approve(Long userId, UUID grantId) {
         SupportAccessGrantEntity grant = findVisibleToUser(userId, grantId);
         boolean asGuardian = isGuardianOnly(grant, userId);
-        LocalDateTime now = LocalDateTime.now(clock);
+        Instant now = Instant.now(clock);
         requireApprovable(grant, asGuardian, now);
 
         if (asGuardian) {
@@ -195,7 +194,7 @@ public class SupportAccessGrantTransitionService {
     /** 本人（または保護者）が拒否する（DENIED）。 */
     public SupportAccessTransitionResult deny(Long userId, UUID grantId, String comment) {
         SupportAccessGrantEntity grant = findVisibleToUser(userId, grantId);
-        LocalDateTime now = LocalDateTime.now(clock);
+        Instant now = Instant.now(clock);
         if (grant.getStatus() != SupportAccessStatus.PENDING || !now.isBefore(grant.getRequestExpiresAt())) {
             throw new BusinessException(SupportAccessErrorCode.INVALID_TRANSITION);
         }
@@ -209,7 +208,7 @@ public class SupportAccessGrantTransitionService {
     public SupportAccessTransitionResult revoke(Long userId, UUID grantId) {
         SupportAccessGrantEntity grant = findVisibleToUser(userId, grantId);
         requireOpen(grant);
-        grant.revoke(LocalDateTime.now(clock), SupportAccessEndedReason.USER_REVOKED);
+        grant.revoke(Instant.now(clock), SupportAccessEndedReason.USER_REVOKED);
         grantRepository.save(grant);
         publish(SupportAccessAuditAction.REVOKED, grant);
         return result(grant);
@@ -223,7 +222,7 @@ public class SupportAccessGrantTransitionService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public List<SupportAccessGrantSnapshot> revokeAllForWithdrawal(Long targetUserId) {
-        LocalDateTime now = LocalDateTime.now(clock);
+        Instant now = Instant.now(clock);
         List<SupportAccessGrantSnapshot> revoked = new ArrayList<>();
         for (SupportAccessGrantEntity grant : grantRepository.findByTargetUserIdAndStatusIn(targetUserId, OPEN_STATUSES)) {
             grant.revoke(now, SupportAccessEndedReason.WITHDRAWAL);
@@ -236,7 +235,7 @@ public class SupportAccessGrantTransitionService {
 
     /** PENDING(依頼72h)・APPROVED(許可24h) の期限切れを EXPIRED にし、失効させた grant を返す。 */
     public List<SupportAccessGrantSnapshot> expireOverdue() {
-        LocalDateTime now = LocalDateTime.now(clock);
+        Instant now = Instant.now(clock);
         List<SupportAccessGrantSnapshot> expired = new ArrayList<>();
         for (SupportAccessGrantEntity grant
                 : grantRepository.findByStatusAndRequestExpiresAtBefore(SupportAccessStatus.PENDING, now)) {
@@ -260,7 +259,7 @@ public class SupportAccessGrantTransitionService {
     }
 
     /** 開いている grant が期限切れか（PENDING は依頼期限、APPROVED は許可期限）。 */
-    private static boolean isOverdue(SupportAccessGrantEntity grant, LocalDateTime now) {
+    private static boolean isOverdue(SupportAccessGrantEntity grant, Instant now) {
         if (grant.getStatus() == SupportAccessStatus.PENDING) {
             return !now.isBefore(grant.getRequestExpiresAt());
         }
@@ -268,7 +267,7 @@ public class SupportAccessGrantTransitionService {
     }
 
     /** 承認済み・本人（と必要なら保護者）の許可が揃い・取消なし・期限内であること。 */
-    private static void requireUsable(SupportAccessGrantEntity grant, LocalDateTime now) {
+    private static void requireUsable(SupportAccessGrantEntity grant, Instant now) {
         boolean usable = grant.getStatus() == SupportAccessStatus.APPROVED
                 && grant.getRevokedAt() == null
                 && grant.getExpiresAt() != null
@@ -280,7 +279,7 @@ public class SupportAccessGrantTransitionService {
         }
     }
 
-    private static void requireApprovable(SupportAccessGrantEntity grant, boolean asGuardian, LocalDateTime now) {
+    private static void requireApprovable(SupportAccessGrantEntity grant, boolean asGuardian, Instant now) {
         if (grant.getStatus() != SupportAccessStatus.PENDING
                 || !now.isBefore(grant.getRequestExpiresAt())
                 || grant.hasApprovalBy(asGuardian)) {

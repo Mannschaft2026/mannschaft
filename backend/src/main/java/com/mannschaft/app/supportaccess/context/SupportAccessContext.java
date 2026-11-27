@@ -1,6 +1,6 @@
 package com.mannschaft.app.supportaccess.context;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -11,5 +11,5 @@ import java.util.UUID;
  * @param targetUserId   視点を借りている本人
  * @param expiresAt      許可の期限（許可+24h 固定）
  */
-public record SupportAccessContext(UUID grantId, Long operatorUserId, Long targetUserId, LocalDateTime expiresAt) {
+public record SupportAccessContext(UUID grantId, Long operatorUserId, Long targetUserId, Instant expiresAt) {
 }

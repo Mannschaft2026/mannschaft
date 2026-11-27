@@ -651,6 +651,8 @@ HTTP|com.mannschaft.app.succession.controller.DelinquencyEscalationController|4|
 HTTP|com.mannschaft.app.succession.controller.LegalFilingController|6|6
 HTTP|com.mannschaft.app.succession.controller.SuccessionCovenantController|4|5
 HTTP|com.mannschaft.app.succession.controller.UnsealRequestController|6|6
+HTTP|com.mannschaft.app.supportaccess.controller.MySupportAccessController|0|5
+HTTP|com.mannschaft.app.supportaccess.controller.SystemAdminSupportAccessController|0|7
 HTTP|com.mannschaft.app.survey.controller.SurveyController|12|12
 HTTP|com.mannschaft.app.survey.controller.SurveyQuestionController|2|2
 HTTP|com.mannschaft.app.survey.controller.SurveyResponseController|3|3

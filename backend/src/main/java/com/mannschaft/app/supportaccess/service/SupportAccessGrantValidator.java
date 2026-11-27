@@ -9,11 +9,10 @@ import com.mannschaft.app.supportaccess.port.SupportAccessOperatorAffiliationPor
 import com.mannschaft.app.supportaccess.port.SupportAccessUserDirectory;
 import com.mannschaft.app.supportaccess.port.SupportAccessUserSnapshot;
 import com.mannschaft.app.supportaccess.repository.SupportAccessGrantRepository;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -35,7 +34,7 @@ public class SupportAccessGrantValidator {
     public SupportAccessGrantValidator(SupportAccessGrantRepository grantRepository,
                                        SupportAccessUserDirectory userDirectory,
                                        SupportAccessOperatorAffiliationPort affiliationPort,
-                                       @Qualifier("wallClock") Clock clock) {
+                                       Clock clock) {
         this.grantRepository = grantRepository;
         this.userDirectory = userDirectory;
         this.affiliationPort = affiliationPort;
@@ -50,7 +49,7 @@ public class SupportAccessGrantValidator {
             throw new BusinessException(SupportAccessErrorCode.GRANT_NOT_FOUND);
         }
 
-        LocalDateTime now = LocalDateTime.now(clock);
+        Instant now = Instant.now(clock);
         if (grant.getStatus() != SupportAccessStatus.APPROVED
                 || grant.getRevokedAt() != null
                 || grant.getExpiresAt() == null

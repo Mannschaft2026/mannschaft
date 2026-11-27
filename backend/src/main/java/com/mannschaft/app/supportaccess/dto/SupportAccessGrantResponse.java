@@ -1,6 +1,6 @@
 package com.mannschaft.app.supportaccess.dto;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -16,13 +16,13 @@ public record SupportAccessGrantResponse(
         String requestReason,
         String referenceType,
         Long referenceId,
-        LocalDateTime requestedAt,
-        LocalDateTime requestExpiresAt,
-        LocalDateTime decidedAt,
-        LocalDateTime expiresAt,
-        LocalDateTime revokedAt,
+        Instant requestedAt,
+        Instant requestExpiresAt,
+        Instant decidedAt,
+        Instant expiresAt,
+        Instant revokedAt,
         String endedReason,
         boolean guardianApprovalRequired,
-        LocalDateTime guardianDecidedAt,
+        Instant guardianDecidedAt,
         boolean sessionActive) {
 }

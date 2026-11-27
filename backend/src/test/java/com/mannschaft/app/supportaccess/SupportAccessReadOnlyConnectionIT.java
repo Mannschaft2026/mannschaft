@@ -20,7 +20,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -60,14 +60,14 @@ class SupportAccessReadOnlyConnectionIT extends AbstractMySqlIntegrationTest {
                 .lastName("山田").firstName("花子").lastNameKana("ヤマダ").firstNameKana("ハナコ")
                 .displayName("読取専用の本人").isSearchable(false)
                 .locale("ja").timezone("Asia/Tokyo").status(UserEntity.UserStatus.ACTIVE).build()).getId();
-        LocalDateTime now = LocalDateTime.now();
+        Instant now = Instant.now();
         grantId = grantRepository.saveAndFlush(SupportAccessGrantEntity.builder()
                 .operatorUserId(900_000_000L + (targetId % 1000)).targetUserId(targetId)
                 .status(SupportAccessStatus.APPROVED).requestReason("読取専用の結合テストのため")
-                .requestedAt(now.minusHours(1)).requestExpiresAt(now.plusHours(71))
-                .decidedAt(now.minusMinutes(30)).expiresAt(now.plusHours(23))
-                .activeSessionStartedAt(now.minusMinutes(1)).guardianApprovalRequired(false).build()).getId();
-        context = new SupportAccessContext(grantId, 900_000_000L + (targetId % 1000), targetId, now.plusHours(23));
+                .requestedAt(now.minus(java.time.Duration.ofHours(1))).requestExpiresAt(now.plus(java.time.Duration.ofHours(71)))
+                .decidedAt(now.minus(java.time.Duration.ofMinutes(30))).expiresAt(now.plus(java.time.Duration.ofHours(23)))
+                .activeSessionStartedAt(now.minus(java.time.Duration.ofMinutes(1))).guardianApprovalRequired(false).build()).getId();
+        context = new SupportAccessContext(grantId, 900_000_000L + (targetId % 1000), targetId, now.plus(java.time.Duration.ofHours(23)));
     }
 
     @AfterEach

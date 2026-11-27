@@ -8,7 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -23,23 +23,23 @@ public interface SupportAccessGrantRepository extends JpaRepository<SupportAcces
 
     List<SupportAccessGrantEntity> findByTargetUserIdAndStatusIn(Long targetUserId, Collection<SupportAccessStatus> statuses);
 
-    List<SupportAccessGrantEntity> findByStatusAndRequestExpiresAtBefore(SupportAccessStatus status, LocalDateTime threshold);
+    List<SupportAccessGrantEntity> findByStatusAndRequestExpiresAtBefore(SupportAccessStatus status, Instant threshold);
 
-    List<SupportAccessGrantEntity> findByStatusAndExpiresAtBefore(SupportAccessStatus status, LocalDateTime threshold);
+    List<SupportAccessGrantEntity> findByStatusAndExpiresAtBefore(SupportAccessStatus status, Instant threshold);
 
     /** 運営者ごとの1日あたり依頼数（011 の判定）。 */
-    long countByOperatorUserIdAndRequestedAtAfter(Long operatorUserId, LocalDateTime since);
+    long countByOperatorUserIdAndRequestedAtAfter(Long operatorUserId, Instant since);
 
     /** 運営者の自分の依頼（新しい順）。カーソルは requestedAt（これより前）。 */
     List<SupportAccessGrantEntity> findByOperatorUserIdAndRequestedAtBeforeOrderByRequestedAtDesc(
-            Long operatorUserId, LocalDateTime before, Pageable pageable);
+            Long operatorUserId, Instant before, Pageable pageable);
 
     /** 本人宛・保護者宛の依頼（新しい順）。 */
     @Query("select g from SupportAccessGrantEntity g "
             + "where (g.targetUserId = :userId or (g.guardianApprovalRequired = true and g.guardianUserId = :userId)) "
             + "and g.requestedAt < :before order by g.requestedAt desc")
     List<SupportAccessGrantEntity> findVisibleToUser(@Param("userId") Long userId,
-                                                     @Param("before") LocalDateTime before, Pageable pageable);
+                                                     @Param("before") Instant before, Pageable pageable);
 
     /** 退会30日後の強消去: 本人宛の許可を物理削除する。 */
     @Modifying
@@ -50,5 +50,5 @@ public interface SupportAccessGrantRepository extends JpaRepository<SupportAcces
     @Modifying
     @Query("delete from SupportAccessGrantEntity g where g.status in :statuses and g.updatedAt < :threshold")
     int deleteByStatusInAndUpdatedAtBefore(@Param("statuses") Collection<SupportAccessStatus> statuses,
-                                           @Param("threshold") LocalDateTime threshold);
+                                           @Param("threshold") Instant threshold);
 }

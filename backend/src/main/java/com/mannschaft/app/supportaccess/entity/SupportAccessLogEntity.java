@@ -15,7 +15,7 @@ import lombok.experimental.SuperBuilder;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 /** F10.9 代理中の閲覧記録（support_access_logs）。本人も閲覧できる。 */
@@ -63,15 +63,15 @@ public class SupportAccessLogEntity extends UuidV7Entity {
     private String denyCode;
 
     @Column(name = "occurred_at", nullable = false)
-    private LocalDateTime occurredAt;
+    private Instant occurredAt;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updatedAt;
+    private Instant updatedAt;
 
     /** chain の後に応答状態と最適一致パターンを書き足す。 */
     public void complete(int httpStatus, String routePattern) {

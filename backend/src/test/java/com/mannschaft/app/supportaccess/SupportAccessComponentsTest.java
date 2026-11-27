@@ -13,9 +13,11 @@ import com.mannschaft.app.supportaccess.event.SupportAccessGrantChangedEvent;
 import com.mannschaft.app.supportaccess.listener.SupportAccessNotificationListener;
 import com.mannschaft.app.supportaccess.listener.SupportAccessPurgeEventListener;
 import com.mannschaft.app.supportaccess.listener.SupportAccessWithdrawalListener;
-import com.mannschaft.app.supportaccess.port.SupportAccessNotificationSender;
+import com.mannschaft.app.notification.service.NotificationDeliveryRequest;
+import com.mannschaft.app.notification.service.NotificationDeliveryRunner;
 import com.mannschaft.app.supportaccess.port.SupportAccessUserDirectory;
 import com.mannschaft.app.supportaccess.port.SupportAccessUserSnapshot;
+import com.mannschaft.app.supportaccess.entity.SupportAccessGrantEntity;
 import com.mannschaft.app.supportaccess.repository.SupportAccessGrantRepository;
 import com.mannschaft.app.supportaccess.repository.SupportAccessLogRepository;
 import com.mannschaft.app.supportaccess.service.SupportAccessAuditRecorder;
@@ -39,7 +41,7 @@ import org.springframework.web.method.HandlerMethod;
 
 import java.lang.reflect.Method;
 import java.time.Clock;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
@@ -58,7 +60,9 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * 戦役Z-B 試練: 周辺部品（文脈の保持と伝播・第2層の注釈・記録の REQUIRES_NEW・通知・退会/パージ・保存期間・
@@ -71,9 +75,9 @@ class SupportAccessComponentsTest {
     private static final Long TARGET_ID = 42L;
     private static final Long GUARDIAN_ID = 55L;
     private static final UUID GRANT_ID = UUID.fromString("0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b");
-    private static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 26, 12, 0);
+    private static final Instant NOW = Instant.parse("2026-11-26T12:00:00Z");
     private static final SupportAccessContext CONTEXT =
-            new SupportAccessContext(GRANT_ID, OPERATOR_ID, TARGET_ID, NOW.plusHours(20));
+            new SupportAccessContext(GRANT_ID, OPERATOR_ID, TARGET_ID, NOW.plus(java.time.Duration.ofHours(20)));
 
     @AfterEach
     void tearDown() {
@@ -204,7 +208,7 @@ class SupportAccessComponentsTest {
     void S10_閲覧記録の内容() {
         SupportAccessLogRepository repo = mock(SupportAccessLogRepository.class);
         given(repo.save(any(SupportAccessLogEntity.class))).willAnswer(inv -> inv.getArgument(0));
-        Clock clock = Clock.fixed(NOW.toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
         new SupportAccessLogRecorder(repo, clock).recordView(CONTEXT, "GET", "/api/v1/teams/3/schedules?q=secret");
 
@@ -260,31 +264,58 @@ class SupportAccessComponentsTest {
     @Test
     @DisplayName("S12 依頼時と閲覧開始時は本人へ、未成年なら保護者へも通知する")
     void S12_本人への通知() {
-        SupportAccessNotificationSender sender = mock(SupportAccessNotificationSender.class);
-        SupportAccessNotificationListener listener = new SupportAccessNotificationListener(sender);
+        NotificationDeliveryRunner runner = mock(NotificationDeliveryRunner.class);
+        SupportAccessNotificationListener listener = newNotificationListener(runner);
 
         listener.onGrantChanged(new SupportAccessGrantChangedEvent(SupportAccessAuditAction.REQUESTED, GRANT_ID, OPERATOR_ID, TARGET_ID, GUARDIAN_ID));
         listener.onGrantChanged(new SupportAccessGrantChangedEvent(SupportAccessAuditAction.SESSION_STARTED, GRANT_ID, OPERATOR_ID, TARGET_ID, null));
 
-        verify(sender).send(TARGET_ID, SupportAccessNotificationKind.REQUESTED_TO_TARGET, GRANT_ID);
-        verify(sender).send(GUARDIAN_ID, SupportAccessNotificationKind.REQUESTED_TO_GUARDIAN, GRANT_ID);
-        verify(sender).send(TARGET_ID, SupportAccessNotificationKind.SESSION_STARTED_TO_TARGET, GRANT_ID);
-        verify(sender, never()).send(eq(OPERATOR_ID), any(), any());
+        assertThat(sentTo(runner)).containsExactlyInAnyOrder(
+                TARGET_ID + ":SUPPORT_ACCESS_" + SupportAccessNotificationKind.REQUESTED_TO_TARGET,
+                GUARDIAN_ID + ":SUPPORT_ACCESS_" + SupportAccessNotificationKind.REQUESTED_TO_GUARDIAN,
+                TARGET_ID + ":SUPPORT_ACCESS_" + SupportAccessNotificationKind.SESSION_STARTED_TO_TARGET);
     }
 
     @Test
     @DisplayName("S12 許可・拒否・取消は運営者へ通知する")
     void S12_運営者への通知() {
-        SupportAccessNotificationSender sender = mock(SupportAccessNotificationSender.class);
-        SupportAccessNotificationListener listener = new SupportAccessNotificationListener(sender);
+        NotificationDeliveryRunner runner = mock(NotificationDeliveryRunner.class);
+        SupportAccessNotificationListener listener = newNotificationListener(runner);
 
         listener.onGrantChanged(new SupportAccessGrantChangedEvent(SupportAccessAuditAction.APPROVED, GRANT_ID, OPERATOR_ID, TARGET_ID, null));
         listener.onGrantChanged(new SupportAccessGrantChangedEvent(SupportAccessAuditAction.DENIED, GRANT_ID, OPERATOR_ID, TARGET_ID, null));
         listener.onGrantChanged(new SupportAccessGrantChangedEvent(SupportAccessAuditAction.REVOKED, GRANT_ID, OPERATOR_ID, TARGET_ID, null));
 
-        verify(sender).send(OPERATOR_ID, SupportAccessNotificationKind.APPROVED_TO_OPERATOR, GRANT_ID);
-        verify(sender).send(OPERATOR_ID, SupportAccessNotificationKind.DENIED_TO_OPERATOR, GRANT_ID);
-        verify(sender).send(OPERATOR_ID, SupportAccessNotificationKind.REVOKED_TO_OPERATOR, GRANT_ID);
+        assertThat(sentTo(runner)).containsExactlyInAnyOrder(
+                OPERATOR_ID + ":SUPPORT_ACCESS_" + SupportAccessNotificationKind.APPROVED_TO_OPERATOR,
+                OPERATOR_ID + ":SUPPORT_ACCESS_" + SupportAccessNotificationKind.DENIED_TO_OPERATOR,
+                OPERATOR_ID + ":SUPPORT_ACCESS_" + SupportAccessNotificationKind.REVOKED_TO_OPERATOR);
+    }
+
+    /** 通知リスナーを、grant と利用者名を引ける最小の依存で組み立てる（配送は runner のモックで観測する）。 */
+    private static SupportAccessNotificationListener newNotificationListener(NotificationDeliveryRunner runner) {
+        SupportAccessGrantRepository grantRepository = mock(SupportAccessGrantRepository.class);
+        SupportAccessGrantEntity grant = mock(SupportAccessGrantEntity.class);
+        when(grant.getOperatorUserId()).thenReturn(OPERATOR_ID);
+        when(grant.getTargetUserId()).thenReturn(TARGET_ID);
+        when(grant.getRequestReason()).thenReturn("理由");
+        when(grantRepository.findById(GRANT_ID)).thenReturn(java.util.Optional.of(grant));
+        com.mannschaft.app.common.i18n.UserLocaleCache localeCache = mock(com.mannschaft.app.common.i18n.UserLocaleCache.class);
+        when(localeCache.getLocale(any())).thenReturn("ja");
+        org.springframework.context.MessageSource messageSource = mock(org.springframework.context.MessageSource.class);
+        when(messageSource.getMessage(anyString(), any(), anyString(), any(java.util.Locale.class)))
+                .thenAnswer(inv -> inv.getArgument(2));
+        com.mannschaft.app.supportaccess.port.SupportAccessUserDirectory directory =
+                mock(com.mannschaft.app.supportaccess.port.SupportAccessUserDirectory.class);
+        when(directory.findUser(any())).thenReturn(java.util.Optional.empty());
+        return new SupportAccessNotificationListener(runner, localeCache, messageSource, grantRepository, directory);
+    }
+
+    private static java.util.List<String> sentTo(NotificationDeliveryRunner runner) {
+        ArgumentCaptor<NotificationDeliveryRequest> captor = ArgumentCaptor.forClass(NotificationDeliveryRequest.class);
+        verify(runner, atLeastOnce()).sendOne(captor.capture());
+        return captor.getAllValues().stream()
+                .map(r -> r.recipientUserId() + ":" + r.notificationType()).toList();
     }
 
     // ─── 退会・パージ・保存期間・本人向け閲覧記録（S10/S15） ─────────
@@ -304,7 +335,7 @@ class SupportAccessComponentsTest {
     void S15_パージで物理削除() {
         SupportAccessGrantRepository grants = mock(SupportAccessGrantRepository.class);
         SupportAccessLogRepository logs = mock(SupportAccessLogRepository.class);
-        Clock clock = Clock.fixed(NOW.toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         SupportAccessRetentionService retention = new SupportAccessRetentionService(grants, logs, clock);
         retention.purgeUser(TARGET_ID);
         var order = inOrder(logs, grants);
@@ -323,14 +354,14 @@ class SupportAccessComponentsTest {
     void S15_保存期間() {
         SupportAccessGrantRepository grants = mock(SupportAccessGrantRepository.class);
         SupportAccessLogRepository logs = mock(SupportAccessLogRepository.class);
-        Clock clock = Clock.fixed(NOW.toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
         new SupportAccessRetentionService(grants, logs, clock).purgeExpiredRecords();
 
-        verify(logs).deleteByOccurredAtBefore(NOW.minusYears(1));
+        verify(logs).deleteByOccurredAtBefore(NOW.atZone(ZoneOffset.UTC).minusYears(1).toInstant());
         @SuppressWarnings("unchecked")
         ArgumentCaptor<java.util.Collection<SupportAccessStatus>> statuses = ArgumentCaptor.forClass(java.util.Collection.class);
-        verify(grants).deleteByStatusInAndUpdatedAtBefore(statuses.capture(), eq(NOW.minusYears(3)));
+        verify(grants).deleteByStatusInAndUpdatedAtBefore(statuses.capture(), eq(NOW.atZone(ZoneOffset.UTC).minusYears(3).toInstant()));
         assertThat(statuses.getValue())
                 .containsExactlyInAnyOrder(SupportAccessStatus.DENIED, SupportAccessStatus.REVOKED,
                         SupportAccessStatus.EXPIRED, SupportAccessStatus.CANCELLED)

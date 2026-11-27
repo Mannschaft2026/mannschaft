@@ -4,12 +4,11 @@ import com.mannschaft.app.supportaccess.SupportAccessStatus;
 import com.mannschaft.app.supportaccess.repository.SupportAccessGrantRepository;
 import com.mannschaft.app.supportaccess.repository.SupportAccessLogRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -38,7 +37,7 @@ public class SupportAccessRetentionService {
 
     public SupportAccessRetentionService(SupportAccessGrantRepository grantRepository,
                                          SupportAccessLogRepository logRepository,
-                                         @Qualifier("wallClock") Clock clock) {
+                                         Clock clock) {
         this.grantRepository = grantRepository;
         this.logRepository = logRepository;
         this.clock = clock;
@@ -46,9 +45,9 @@ public class SupportAccessRetentionService {
 
     /** 日次バッチ: 閲覧記録は1年、終了した依頼・許可は3年を過ぎたら物理削除する。 */
     public void purgeExpiredRecords() {
-        LocalDateTime now = LocalDateTime.now(clock);
-        int logs = logRepository.deleteByOccurredAtBefore(now.minusYears(LOG_RETENTION_YEARS));
-        int grants = grantRepository.deleteByStatusInAndUpdatedAtBefore(ENDED_STATUSES, now.minusYears(GRANT_RETENTION_YEARS));
+        Instant now = Instant.now(clock);
+        int logs = logRepository.deleteByOccurredAtBefore(now.atZone(java.time.ZoneOffset.UTC).minusYears(LOG_RETENTION_YEARS).toInstant());
+        int grants = grantRepository.deleteByStatusInAndUpdatedAtBefore(ENDED_STATUSES, now.atZone(java.time.ZoneOffset.UTC).minusYears(GRANT_RETENTION_YEARS).toInstant());
         log.info("サポート閲覧の保存期間削除: 閲覧記録={}件, 依頼・許可={}件", logs, grants);
     }
 

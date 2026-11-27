@@ -6,6 +6,8 @@ import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.CursorPagedResponse;
 import com.mannschaft.app.common.EnumInputParser;
 import com.mannschaft.app.common.SecurityUtils;
+import com.mannschaft.app.common.featuregate.AlwaysReachable;
+import com.mannschaft.app.common.featuregate.AlwaysReachableCategory;
 import com.mannschaft.app.common.security.AuthorizedInService;
 import com.mannschaft.app.supportaccess.SupportAccessStatus;
 import com.mannschaft.app.supportaccess.dto.MySupportAccessGrantResponse;
@@ -29,7 +31,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -58,6 +60,8 @@ public class MySupportAccessController {
     private final SupportAccessGrantQueryService queryService;
     private final SupportAccessPersonalDataService logService;
 
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "本人がサポート閲覧を許可・拒否・取消できる権利は個別機能の購入状態に依存せず常時提供するため")
     @GetMapping("/grants")
     @Operation(summary = "自分宛のサポート閲覧の依頼・許可の一覧", description = "運営者は表示名のみ。依頼理由はプレーンテキストとして表示すること。")
     public ResponseEntity<CursorPagedResponse<MySupportAccessGrantResponse>> listGrants(
@@ -75,6 +79,8 @@ public class MySupportAccessController {
         return ResponseEntity.ok(CursorPagedResponse.of(page, new CursorPagedResponse.CursorMeta(next, hasNext, size)));
     }
 
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "本人がサポート閲覧を許可・拒否・取消できる権利は個別機能の購入状態に依存せず常時提供するため")
     @PostMapping("/grants/{id}/approve")
     @Operation(summary = "サポート閲覧の許可", description = "再認証（currentPassword か passkeyAssertionJson）が必須。期限は許可から24時間で固定・延長不可。未成年・後見下は本人と保護者の両方の許可で有効になる。")
     public ResponseEntity<ApiResponse<MySupportAccessGrantResponse>> approve(
@@ -83,6 +89,8 @@ public class MySupportAccessController {
         return ResponseEntity.ok(ApiResponse.of(queryService.toMyResponse(grantService.approve(userId, id, request), userId)));
     }
 
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "本人がサポート閲覧を許可・拒否・取消できる権利は個別機能の購入状態に依存せず常時提供するため")
     @PostMapping("/grants/{id}/deny")
     @Operation(summary = "サポート閲覧の拒否")
     public ResponseEntity<ApiResponse<MySupportAccessGrantResponse>> deny(
@@ -92,6 +100,8 @@ public class MySupportAccessController {
                 grantService.deny(userId, id, request == null ? null : request.comment()), userId)));
     }
 
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "本人がサポート閲覧を許可・拒否・取消できる権利は個別機能の購入状態に依存せず常時提供するため")
     @PostMapping("/grants/{id}/revoke")
     @Operation(summary = "サポート閲覧の許可の取消", description = "いつでも取り消せる。取消の次のリクエストから代理閲覧は拒否される。")
     public ResponseEntity<ApiResponse<MySupportAccessGrantResponse>> revoke(@PathVariable UUID id) {
@@ -99,6 +109,8 @@ public class MySupportAccessController {
         return ResponseEntity.ok(ApiResponse.of(queryService.toMyResponse(grantService.revoke(userId, id), userId)));
     }
 
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "本人がサポート閲覧を許可・拒否・取消できる権利は個別機能の購入状態に依存せず常時提供するため")
     @GetMapping("/logs")
     @Operation(summary = "自分の画面が閲覧された記録", description = "日時・運営者の表示名・画面（パス）・スコープを新しい順に返す。メールは含まない。")
     public ResponseEntity<CursorPagedResponse<SupportAccessLogView>> listLogs(
@@ -118,12 +130,12 @@ public class MySupportAccessController {
         return Math.max(1, Math.min(limit, MAX_LIMIT));
     }
 
-    private static LocalDateTime parseCursor(String cursor) {
+    private static Instant parseCursor(String cursor) {
         if (cursor == null || cursor.isBlank()) {
             return null;
         }
         try {
-            return LocalDateTime.parse(cursor);
+            return Instant.parse(cursor);
         } catch (java.time.format.DateTimeParseException e) {
             throw new BusinessException(CommonErrorCode.COMMON_001);
         }

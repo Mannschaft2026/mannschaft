@@ -8,7 +8,7 @@ import com.mannschaft.app.supportaccess.repository.SupportAccessLogRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,8 +41,8 @@ public class SupportAccessPersonalDataService {
      * @param before  この日時より前（null で先頭から）
      * @param limit   取得件数
      */
-    public List<SupportAccessLogView> listLogsForTarget(Long targetUserId, UUID grantId, LocalDateTime before, int limit) {
-        LocalDateTime cursor = before != null ? before : LocalDateTime.of(9999, 1, 1, 0, 0);
+    public List<SupportAccessLogView> listLogsForTarget(Long targetUserId, UUID grantId, Instant before, int limit) {
+        Instant cursor = before != null ? before : Instant.parse("9999-01-01T00:00:00Z");
         PageRequest page = PageRequest.of(0, limit);
         List<SupportAccessLogEntity> rows = grantId == null
                 ? logRepository.findByTargetUserIdAndOccurredAtBeforeOrderByOccurredAtDesc(targetUserId, cursor, page)
@@ -52,8 +52,8 @@ public class SupportAccessPersonalDataService {
     }
 
     /** 運営側の詳細用: grant 単位の閲覧記録（新しい順）。 */
-    public List<SupportAccessLogView> listLogsForGrant(UUID grantId, LocalDateTime before, int limit) {
-        LocalDateTime cursor = before != null ? before : LocalDateTime.of(9999, 1, 1, 0, 0);
+    public List<SupportAccessLogView> listLogsForGrant(UUID grantId, Instant before, int limit) {
+        Instant cursor = before != null ? before : Instant.parse("9999-01-01T00:00:00Z");
         return toViews(logRepository.findByGrantIdAndOccurredAtBeforeOrderByOccurredAtDesc(
                 grantId, cursor, PageRequest.of(0, limit)));
     }

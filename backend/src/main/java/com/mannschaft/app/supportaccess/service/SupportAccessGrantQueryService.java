@@ -10,12 +10,11 @@ import com.mannschaft.app.supportaccess.entity.SupportAccessGrantEntity;
 import com.mannschaft.app.supportaccess.port.SupportAccessUserDirectory;
 import com.mannschaft.app.supportaccess.port.SupportAccessUserSnapshot;
 import com.mannschaft.app.supportaccess.repository.SupportAccessGrantRepository;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,7 +32,7 @@ public class SupportAccessGrantQueryService {
 
     /** 運営者の一覧で取得する上限（1日20件の上限があるため十分に小さい）。状態・対象での絞り込みはこの範囲で行う。 */
     private static final int OPERATOR_SCAN_LIMIT = 200;
-    private static final LocalDateTime FAR_FUTURE = LocalDateTime.of(9999, 1, 1, 0, 0);
+    private static final Instant FAR_FUTURE = Instant.parse("9999-01-01T00:00:00Z");
 
     private final SupportAccessGrantRepository grantRepository;
     private final SupportAccessUserDirectory userDirectory;
@@ -41,7 +40,7 @@ public class SupportAccessGrantQueryService {
 
     public SupportAccessGrantQueryService(SupportAccessGrantRepository grantRepository,
                                           SupportAccessUserDirectory userDirectory,
-                                          @Qualifier("wallClock") Clock clock) {
+                                          Clock clock) {
         this.grantRepository = grantRepository;
         this.userDirectory = userDirectory;
         this.clock = clock;
@@ -49,7 +48,7 @@ public class SupportAccessGrantQueryService {
 
     /** 運営者自身の依頼だけを新しい順に返す（他の運営者の依頼は含めない）。 */
     public List<SupportAccessGrantResponse> listForOperator(Long operatorUserId, SupportAccessStatus status,
-                                                            Long targetUserId, LocalDateTime before, int limit) {
+                                                            Long targetUserId, Instant before, int limit) {
         List<SupportAccessGrantEntity> rows = grantRepository.findByOperatorUserIdAndRequestedAtBeforeOrderByRequestedAtDesc(
                 operatorUserId, before != null ? before : FAR_FUTURE, PageRequest.of(0, OPERATOR_SCAN_LIMIT));
         Map<Long, String> names = new HashMap<>();
@@ -76,11 +75,11 @@ public class SupportAccessGrantQueryService {
 
     /** 本人宛・保護者宛の依頼を新しい順に返す。 */
     public List<MySupportAccessGrantResponse> listForUser(Long userId, SupportAccessStatus status,
-                                                          LocalDateTime before, int limit) {
+                                                          Instant before, int limit) {
         List<SupportAccessGrantEntity> rows = grantRepository.findVisibleToUser(
                 userId, before != null ? before : FAR_FUTURE, PageRequest.of(0, OPERATOR_SCAN_LIMIT));
         Map<Long, String> names = new HashMap<>();
-        LocalDateTime now = LocalDateTime.now(clock);
+        Instant now = Instant.now(clock);
         return rows.stream()
                 .filter(g -> status == null || g.getStatus() == status)
                 .limit(limit)
@@ -94,7 +93,7 @@ public class SupportAccessGrantQueryService {
                 .filter(g -> g.getTargetUserId().equals(userId)
                         || (g.isGuardianApprovalRequired() && userId.equals(g.getGuardianUserId())))
                 .orElseThrow(() -> new BusinessException(SupportAccessErrorCode.GRANT_NOT_FOUND));
-        return toMyResponse(SupportAccessGrantSnapshot.from(grant), userId, LocalDateTime.now(clock), new HashMap<>());
+        return toMyResponse(SupportAccessGrantSnapshot.from(grant), userId, Instant.now(clock), new HashMap<>());
     }
 
     /** 遷移直後の grant（運営者の視点）を応答に変換する。 */
@@ -104,7 +103,7 @@ public class SupportAccessGrantQueryService {
 
     /** 遷移直後の grant（本人または保護者の視点）を応答に変換する。 */
     public MySupportAccessGrantResponse toMyResponse(SupportAccessGrantSnapshot g, Long viewerUserId) {
-        return toMyResponse(g, viewerUserId, LocalDateTime.now(clock), new HashMap<>());
+        return toMyResponse(g, viewerUserId, Instant.now(clock), new HashMap<>());
     }
 
     private SupportAccessGrantResponse toOperatorResponse(SupportAccessGrantSnapshot g, Map<Long, String> names) {
@@ -128,7 +127,7 @@ public class SupportAccessGrantQueryService {
     }
 
     private MySupportAccessGrantResponse toMyResponse(SupportAccessGrantSnapshot g, Long viewerUserId,
-                                                      LocalDateTime now, Map<Long, String> names) {
+                                                      Instant now, Map<Long, String> names) {
         boolean guardianOnly = !g.targetUserId().equals(viewerUserId);
         boolean alreadyApproved = g.hasApprovalBy(guardianOnly);
         boolean canApprove = g.status() == SupportAccessStatus.PENDING

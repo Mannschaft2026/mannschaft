@@ -16,7 +16,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Clock;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
@@ -42,7 +42,7 @@ class SupportAccessGrantValidatorTest {
     private static final Long OPERATOR_ID = 9001L;
     private static final Long TARGET_ID = 42L;
     private static final UUID GRANT_ID = UUID.fromString("0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b");
-    private static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 26, 12, 0);
+    private static final Instant NOW = Instant.parse("2026-11-26T12:00:00Z");
 
     private SupportAccessGrantRepository grantRepository;
     private SupportAccessUserDirectory userDirectory;
@@ -54,7 +54,7 @@ class SupportAccessGrantValidatorTest {
         grantRepository = mock(SupportAccessGrantRepository.class);
         userDirectory = mock(SupportAccessUserDirectory.class);
         affiliationPort = mock(SupportAccessOperatorAffiliationPort.class);
-        Clock clock = Clock.fixed(NOW.toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         validator = new SupportAccessGrantValidator(grantRepository, userDirectory, affiliationPort, clock);
         lenient().when(userDirectory.findUser(TARGET_ID)).thenReturn(Optional.of(activeTarget()));
         lenient().when(affiliationPort.isAffiliatedWithAnyTenant(OPERATOR_ID)).thenReturn(false);
@@ -72,11 +72,11 @@ class SupportAccessGrantValidatorTest {
                 .targetUserId(TARGET_ID)
                 .status(SupportAccessStatus.APPROVED)
                 .requestReason("問い合わせ #123 の表示崩れを確認するため")
-                .requestedAt(NOW.minusHours(2))
-                .requestExpiresAt(NOW.plusHours(70))
-                .decidedAt(NOW.minusHours(1))
-                .expiresAt(NOW.plusHours(23))
-                .activeSessionStartedAt(NOW.minusMinutes(5))
+                .requestedAt(NOW.minus(java.time.Duration.ofHours(2)))
+                .requestExpiresAt(NOW.plus(java.time.Duration.ofHours(70)))
+                .decidedAt(NOW.minus(java.time.Duration.ofHours(1)))
+                .expiresAt(NOW.plus(java.time.Duration.ofHours(23)))
+                .activeSessionStartedAt(NOW.minus(java.time.Duration.ofMinutes(5)))
                 .guardianApprovalRequired(false);
     }
 
@@ -99,7 +99,7 @@ class SupportAccessGrantValidatorTest {
         assertThat(context.grantId()).isEqualTo(GRANT_ID);
         assertThat(context.operatorUserId()).isEqualTo(OPERATOR_ID);
         assertThat(context.targetUserId()).isEqualTo(TARGET_ID);
-        assertThat(context.expiresAt()).isEqualTo(NOW.plusHours(23));
+        assertThat(context.expiresAt()).isEqualTo(NOW.plus(java.time.Duration.ofHours(23)));
     }
 
     @Test
@@ -124,7 +124,7 @@ class SupportAccessGrantValidatorTest {
     @Test
     @DisplayName("S1 状態が APPROVED のままでも期限（expires_at）を過ぎていれば 002（バッチを待たず時刻で即時判定）")
     void S1_期限切れは時刻で即時002() {
-        givenGrant(validGrant().expiresAt(NOW.minusSeconds(1)).build());
+        givenGrant(validGrant().expiresAt(NOW.minus(java.time.Duration.ofSeconds(1))).build());
 
         assertThatThrownBy(() -> validator.validate(OPERATOR_ID, GRANT_ID))
                 .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_002"));
@@ -142,7 +142,7 @@ class SupportAccessGrantValidatorTest {
     @Test
     @DisplayName("S1 revoked_at が入っていれば APPROVED でも 002")
     void S1_取消時刻があれば002() {
-        givenGrant(validGrant().revokedAt(NOW.minusMinutes(1)).build());
+        givenGrant(validGrant().revokedAt(NOW.minus(java.time.Duration.ofMinutes(1))).build());
 
         assertThatThrownBy(() -> validator.validate(OPERATOR_ID, GRANT_ID))
                 .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_002"));
@@ -173,7 +173,7 @@ class SupportAccessGrantValidatorTest {
     @Test
     @DisplayName("S2 閲覧を終了した（active_session_ended_at が開始より後）grant は 002")
     void S2_閲覧終了後は002() {
-        givenGrant(validGrant().activeSessionEndedAt(NOW.minusMinutes(1)).build());
+        givenGrant(validGrant().activeSessionEndedAt(NOW.minus(java.time.Duration.ofMinutes(1))).build());
 
         assertThatThrownBy(() -> validator.validate(OPERATOR_ID, GRANT_ID))
                 .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_002"));

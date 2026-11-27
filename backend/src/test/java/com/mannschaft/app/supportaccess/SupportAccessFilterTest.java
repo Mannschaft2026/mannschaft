@@ -23,7 +23,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -88,7 +88,7 @@ class SupportAccessFilterTest {
     }
 
     private static final SupportAccessContext CONTEXT =
-            new SupportAccessContext(GRANT_ID, OPERATOR_ID, TARGET_ID, LocalDateTime.of(2026, 11, 27, 10, 0));
+            new SupportAccessContext(GRANT_ID, OPERATOR_ID, TARGET_ID, Instant.parse("2026-11-27T10:00:00Z"));
 
     private static SupportAccessContext validContext() {
         return CONTEXT;

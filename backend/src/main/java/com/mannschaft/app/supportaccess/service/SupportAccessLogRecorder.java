@@ -9,14 +9,13 @@ import com.mannschaft.app.supportaccess.entity.SupportAccessLogEntity;
 import com.mannschaft.app.supportaccess.event.SupportAccessGrantChangedEvent;
 import com.mannschaft.app.supportaccess.repository.SupportAccessLogRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -49,7 +48,7 @@ public class SupportAccessLogRecorder {
 
     @Autowired
     public SupportAccessLogRecorder(SupportAccessLogRepository logRepository,
-                                    @Qualifier("wallClock") Clock clock,
+                                    Clock clock,
                                     ApplicationEventPublisher eventPublisher) {
         this.logRepository = logRepository;
         this.clock = clock;
@@ -138,7 +137,7 @@ public class SupportAccessLogRecorder {
                 .operatorUserId(operatorUserId)
                 .targetUserId(targetUserId)
                 .eventKind(kind)
-                .occurredAt(LocalDateTime.now(clock));
+                .occurredAt(Instant.now(clock));
     }
 
     /** パスからスコープ（TEAM/ORGANIZATION/VILLAGE/COMMITTEE/PERSONAL）を推定して付ける。 */

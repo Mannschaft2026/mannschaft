@@ -15,7 +15,7 @@ import lombok.experimental.SuperBuilder;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 /**
  * F10.9 サポート閲覧の依頼と本人許可（support_access_grants）。
@@ -50,39 +50,39 @@ public class SupportAccessGrantEntity extends UuidV7Entity {
     private Long referenceId;
 
     @Column(name = "requested_at", nullable = false)
-    private LocalDateTime requestedAt;
+    private Instant requestedAt;
 
     @Column(name = "request_expires_at", nullable = false)
-    private LocalDateTime requestExpiresAt;
+    private Instant requestExpiresAt;
 
     /** 本人の許可/拒否の時刻。 */
     @Column(name = "decided_at")
-    private LocalDateTime decidedAt;
+    private Instant decidedAt;
 
     @Column(name = "deny_comment", length = 500)
     private String denyComment;
 
     /** 許可+24h（固定・延長不可）。 */
     @Column(name = "expires_at")
-    private LocalDateTime expiresAt;
+    private Instant expiresAt;
 
     @Column(name = "revoked_at")
-    private LocalDateTime revokedAt;
+    private Instant revokedAt;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "ended_reason", length = 30)
     private SupportAccessEndedReason endedReason;
 
     @Column(name = "last_session_started_at")
-    private LocalDateTime lastSessionStartedAt;
+    private Instant lastSessionStartedAt;
 
     /** 閲覧開始（POST sessions）の時刻。null なら未開始で、ヘッダーは 403。 */
     @Column(name = "active_session_started_at")
-    private LocalDateTime activeSessionStartedAt;
+    private Instant activeSessionStartedAt;
 
     /** 閲覧終了の時刻。開始後に値が入ったらヘッダーは 403。 */
     @Column(name = "active_session_ended_at")
-    private LocalDateTime activeSessionEndedAt;
+    private Instant activeSessionEndedAt;
 
     /** 未成年・後見下の本人で、保護者の承認も要るか。 */
     @Column(name = "guardian_approval_required", nullable = false)
@@ -92,7 +92,7 @@ public class SupportAccessGrantEntity extends UuidV7Entity {
     private Long guardianUserId;
 
     @Column(name = "guardian_decided_at")
-    private LocalDateTime guardianDecidedAt;
+    private Instant guardianDecidedAt;
 
     /** 生成列（PENDING/APPROVED のとき 1、それ以外 NULL）。一意制約で同じ組合せの同時1件を担保する。 */
     @Column(name = "open_flag", insertable = false, updatable = false,
@@ -101,11 +101,11 @@ public class SupportAccessGrantEntity extends UuidV7Entity {
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updatedAt;
+    private Instant updatedAt;
 
     // ─── 状態遷移（その場で書き換える） ─────────────────────────
 
@@ -115,23 +115,23 @@ public class SupportAccessGrantEntity extends UuidV7Entity {
     }
 
     /** 本人の許可を記録する。保護者の承認が要る grant で保護者が未承認なら PENDING のまま。 */
-    public void recordTargetApproval(LocalDateTime now, long ttlHours) {
+    public void recordTargetApproval(Instant now, long ttlHours) {
         this.decidedAt = now;
         promoteIfFullyApproved(now, ttlHours);
     }
 
     /** 保護者の許可を記録する。本人が未承認なら PENDING のまま。 */
-    public void recordGuardianApproval(LocalDateTime now, long ttlHours) {
+    public void recordGuardianApproval(Instant now, long ttlHours) {
         this.guardianDecidedAt = now;
         promoteIfFullyApproved(now, ttlHours);
     }
 
-    private void promoteIfFullyApproved(LocalDateTime now, long ttlHours) {
+    private void promoteIfFullyApproved(Instant now, long ttlHours) {
         boolean guardianOk = !guardianApprovalRequired || guardianDecidedAt != null;
         if (decidedAt != null && guardianOk) {
             this.status = SupportAccessStatus.APPROVED;
             // 期限は最後の許可時刻から固定（延長不可）
-            this.expiresAt = now.plusHours(ttlHours);
+            this.expiresAt = now.plus(java.time.Duration.ofHours(ttlHours));
         }
     }
 
@@ -140,19 +140,19 @@ public class SupportAccessGrantEntity extends UuidV7Entity {
         return asGuardian ? guardianDecidedAt != null : decidedAt != null;
     }
 
-    public void deny(LocalDateTime now, String comment) {
+    public void deny(Instant now, String comment) {
         this.status = SupportAccessStatus.DENIED;
         this.decidedAt = now;
         this.denyComment = comment;
     }
 
-    public void revoke(LocalDateTime now, SupportAccessEndedReason reason) {
+    public void revoke(Instant now, SupportAccessEndedReason reason) {
         this.status = SupportAccessStatus.REVOKED;
         this.revokedAt = now;
         this.endedReason = reason;
     }
 
-    public void cancel(LocalDateTime now) {
+    public void cancel(Instant now) {
         this.status = SupportAccessStatus.CANCELLED;
         this.revokedAt = now;
         this.endedReason = SupportAccessEndedReason.OPERATOR_CANCELLED;
@@ -163,13 +163,13 @@ public class SupportAccessGrantEntity extends UuidV7Entity {
         this.endedReason = SupportAccessEndedReason.EXPIRED;
     }
 
-    public void startSession(LocalDateTime now) {
+    public void startSession(Instant now) {
         this.activeSessionStartedAt = now;
         this.activeSessionEndedAt = null;
         this.lastSessionStartedAt = now;
     }
 
-    public void endSession(LocalDateTime now) {
+    public void endSession(Instant now) {
         this.activeSessionEndedAt = now;
     }
 

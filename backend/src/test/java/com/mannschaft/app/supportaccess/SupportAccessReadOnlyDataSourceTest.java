@@ -13,7 +13,7 @@ import org.springframework.beans.factory.config.BeanPostProcessor;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,7 +36,7 @@ import static org.mockito.Mockito.when;
 class SupportAccessReadOnlyDataSourceTest {
 
     private static final SupportAccessContext CONTEXT =
-            new SupportAccessContext(UUID.randomUUID(), 9001L, 42L, LocalDateTime.of(2026, 11, 27, 10, 0));
+            new SupportAccessContext(UUID.randomUUID(), 9001L, 42L, Instant.parse("2026-11-27T10:00:00Z"));
 
     private Connection physical;
     private HikariDataSource hikari;

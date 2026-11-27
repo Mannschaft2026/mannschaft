@@ -27,7 +27,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Clock;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
@@ -61,7 +61,7 @@ class SupportAccessGrantServiceTest {
     private static final Long TARGET_ID = 42L;
     private static final Long GUARDIAN_ID = 55L;
     private static final UUID GRANT_ID = UUID.fromString("0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b");
-    private static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 26, 12, 0);
+    private static final Instant NOW = Instant.parse("2026-11-26T12:00:00Z");
     private static final String REASON = "問い合わせ #123 の表示崩れを本人の画面で確認するため";
     private static final SupportAccessApproveRequest REAUTH = new SupportAccessApproveRequest("correct-password", null);
 
@@ -83,7 +83,7 @@ class SupportAccessGrantServiceTest {
         auditRecorder = mock(SupportAccessAuditRecorder.class);
         logRecorder = mock(SupportAccessLogRecorder.class);
         eventPublisher = mock(ApplicationEventPublisher.class);
-        Clock clock = Clock.fixed(NOW.toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         // 書込トランザクション（Repository のみ）と、TX の外で動く入口（port・監査）に分けて組む
         service = new SupportAccessGrantService(
                 new SupportAccessGrantTransitionService(grantRepository, logRecorder, eventPublisher, clock),
@@ -114,14 +114,14 @@ class SupportAccessGrantServiceTest {
                 .targetUserId(TARGET_ID)
                 .status(SupportAccessStatus.PENDING)
                 .requestReason(REASON)
-                .requestedAt(NOW.minusHours(1))
-                .requestExpiresAt(NOW.plusHours(71))
+                .requestedAt(NOW.minus(java.time.Duration.ofHours(1)))
+                .requestExpiresAt(NOW.plus(java.time.Duration.ofHours(71)))
                 .guardianApprovalRequired(false);
     }
 
     private static SupportAccessGrantEntity.SupportAccessGrantEntityBuilder<?, ?> approved() {
-        return pending().status(SupportAccessStatus.APPROVED).decidedAt(NOW.minusMinutes(30))
-                .expiresAt(NOW.minusMinutes(30).plusHours(24));
+        return pending().status(SupportAccessStatus.APPROVED).decidedAt(NOW.minus(java.time.Duration.ofMinutes(30)))
+                .expiresAt(NOW.minus(java.time.Duration.ofMinutes(30)).plus(java.time.Duration.ofHours(24)));
     }
 
     private SupportAccessGrantEntity givenGrant(SupportAccessGrantEntity grant) {
@@ -155,7 +155,7 @@ class SupportAccessGrantServiceTest {
             assertThat(saved.referenceType()).isEqualTo("FEEDBACK");
             assertThat(saved.referenceId()).isEqualTo(77L);
             assertThat(saved.requestedAt()).isEqualTo(NOW);
-            assertThat(saved.requestExpiresAt()).isEqualTo(NOW.plusHours(72));
+            assertThat(saved.requestExpiresAt()).isEqualTo(NOW.plus(java.time.Duration.ofHours(72)));
             assertThat(saved.expiresAt()).isNull();
             verify(grantRepository).save(any(SupportAccessGrantEntity.class));
             verify(auditRecorder).record(eq(SupportAccessAuditAction.REQUESTED), eq(OPERATOR_ID), eq(TARGET_ID), any());
@@ -239,7 +239,7 @@ class SupportAccessGrantServiceTest {
         @Test
         @DisplayName("S8 開いている grant が期限切れ（バッチ前）なら、その場で EXPIRED にしてから新しい依頼を作る")
         void S8_再依頼前にその場で失効() {
-            SupportAccessGrantEntity stale = approved().expiresAt(NOW.minusMinutes(1)).build();
+            SupportAccessGrantEntity stale = approved().expiresAt(NOW.minus(java.time.Duration.ofMinutes(1))).build();
             given(grantRepository.findFirstByOperatorUserIdAndTargetUserIdAndStatusIn(eq(OPERATOR_ID), eq(TARGET_ID), anyCollection()))
                     .willReturn(Optional.of(stale));
 
@@ -255,7 +255,7 @@ class SupportAccessGrantServiceTest {
         @Test
         @DisplayName("S8 開いている PENDING が依頼期限（72h）切れなら、その場で EXPIRED にして新しい依頼を作る")
         void S8_依頼期限切れのPENDINGもその場で失効() {
-            SupportAccessGrantEntity stale = pending().requestExpiresAt(NOW.minusSeconds(1)).build();
+            SupportAccessGrantEntity stale = pending().requestExpiresAt(NOW.minus(java.time.Duration.ofSeconds(1))).build();
             given(grantRepository.findFirstByOperatorUserIdAndTargetUserIdAndStatusIn(eq(OPERATOR_ID), eq(TARGET_ID), anyCollection()))
                     .willReturn(Optional.of(stale));
 
@@ -307,7 +307,7 @@ class SupportAccessGrantServiceTest {
 
             assertThat(grant.getStatus()).isEqualTo(SupportAccessStatus.APPROVED);
             assertThat(grant.getDecidedAt()).isEqualTo(NOW);
-            assertThat(grant.getExpiresAt()).isEqualTo(NOW.plusHours(24));
+            assertThat(grant.getExpiresAt()).isEqualTo(NOW.plus(java.time.Duration.ofHours(24)));
             verify(reauth).verify(TARGET_ID, REAUTH);
             verify(auditRecorder).record(eq(SupportAccessAuditAction.APPROVED), eq(OPERATOR_ID), eq(TARGET_ID), eq(GRANT_ID));
             assertThat(publishedEvents()).extracting(SupportAccessGrantChangedEvent::action)
@@ -341,7 +341,7 @@ class SupportAccessGrantServiceTest {
         @DisplayName("S9 既に APPROVED の grant を再び許可しても期限は延びない（007）")
         void S9_延長不可() {
             SupportAccessGrantEntity grant = givenGrant(approved().build());
-            LocalDateTime before = grant.getExpiresAt();
+            Instant before = grant.getExpiresAt();
 
             assertThatThrownBy(() -> service.approve(TARGET_ID, GRANT_ID, REAUTH))
                     .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_007"));
@@ -351,7 +351,7 @@ class SupportAccessGrantServiceTest {
         @Test
         @DisplayName("S9 依頼期限（72h）を過ぎた PENDING は許可できない（007）")
         void S9_依頼期限切れは許可できない() {
-            givenGrant(pending().requestExpiresAt(NOW.minusSeconds(1)).build());
+            givenGrant(pending().requestExpiresAt(NOW.minus(java.time.Duration.ofSeconds(1))).build());
 
             assertThatThrownBy(() -> service.approve(TARGET_ID, GRANT_ID, REAUTH))
                     .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_007"));
@@ -379,7 +379,7 @@ class SupportAccessGrantServiceTest {
             service.approve(GUARDIAN_ID, GRANT_ID, REAUTH);
             assertThat(grant.getStatus()).isEqualTo(SupportAccessStatus.APPROVED);
             assertThat(grant.getGuardianDecidedAt()).isEqualTo(NOW);
-            assertThat(grant.getExpiresAt()).isEqualTo(NOW.plusHours(24));
+            assertThat(grant.getExpiresAt()).isEqualTo(NOW.plus(java.time.Duration.ofHours(24)));
             verify(reauth).verify(GUARDIAN_ID, REAUTH);
         }
 
@@ -418,7 +418,7 @@ class SupportAccessGrantServiceTest {
         @Test
         @DisplayName("S9/S11/S12 本人はいつでも取消でき REVOKED(USER_REVOKED)、監査と運営者への通知イベント")
         void S9_本人はいつでも取消() {
-            SupportAccessGrantEntity grant = givenGrant(approved().activeSessionStartedAt(NOW.minusMinutes(1)).build());
+            SupportAccessGrantEntity grant = givenGrant(approved().activeSessionStartedAt(NOW.minus(java.time.Duration.ofMinutes(1))).build());
 
             service.revoke(TARGET_ID, GRANT_ID);
 
@@ -480,7 +480,7 @@ class SupportAccessGrantServiceTest {
             assertThatThrownBy(() -> service.startSession(OPERATOR_ID, GRANT_ID))
                     .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_002"));
 
-            givenGrant(approved().expiresAt(NOW.minusSeconds(1)).build());
+            givenGrant(approved().expiresAt(NOW.minus(java.time.Duration.ofSeconds(1))).build());
             assertThatThrownBy(() -> service.startSession(OPERATOR_ID, GRANT_ID))
                     .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_002"));
         }
@@ -507,7 +507,7 @@ class SupportAccessGrantServiceTest {
         @Test
         @DisplayName("S2/S11 閲覧終了で終了時刻を記録し、閲覧記録 SESSION_END と監査 SESSION_ENDED を残す")
         void S2_閲覧終了() {
-            SupportAccessGrantEntity grant = givenGrant(approved().activeSessionStartedAt(NOW.minusMinutes(10)).build());
+            SupportAccessGrantEntity grant = givenGrant(approved().activeSessionStartedAt(NOW.minus(java.time.Duration.ofMinutes(10))).build());
 
             service.endSession(OPERATOR_ID, GRANT_ID);
 
@@ -519,8 +519,8 @@ class SupportAccessGrantServiceTest {
         @Test
         @DisplayName("S11 失効バッチ: 依頼72h切れの PENDING と許可24h切れの APPROVED を EXPIRED にし、それぞれ監査する")
         void S11_失効バッチ() {
-            SupportAccessGrantEntity stalePending = pending().id(UUID.randomUUID()).requestExpiresAt(NOW.minusMinutes(1)).build();
-            SupportAccessGrantEntity staleApproved = approved().id(UUID.randomUUID()).expiresAt(NOW.minusMinutes(1)).build();
+            SupportAccessGrantEntity stalePending = pending().id(UUID.randomUUID()).requestExpiresAt(NOW.minus(java.time.Duration.ofMinutes(1))).build();
+            SupportAccessGrantEntity staleApproved = approved().id(UUID.randomUUID()).expiresAt(NOW.minus(java.time.Duration.ofMinutes(1))).build();
             given(grantRepository.findByStatusAndRequestExpiresAtBefore(eq(SupportAccessStatus.PENDING), any()))
                     .willReturn(List.of(stalePending));
             given(grantRepository.findByStatusAndExpiresAtBefore(eq(SupportAccessStatus.APPROVED), any()))

@@ -6,6 +6,8 @@ import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.CursorPagedResponse;
 import com.mannschaft.app.common.EnumInputParser;
 import com.mannschaft.app.common.SecurityUtils;
+import com.mannschaft.app.common.featuregate.AlwaysReachable;
+import com.mannschaft.app.common.featuregate.AlwaysReachableCategory;
 import com.mannschaft.app.common.security.AuthorizedByPathConfig;
 import com.mannschaft.app.supportaccess.SupportAccessStatus;
 import com.mannschaft.app.supportaccess.dto.CreateSupportAccessGrantRequest;
@@ -30,7 +32,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -57,6 +59,8 @@ public class SystemAdminSupportAccessController {
     private final SupportAccessGrantQueryService queryService;
     private final SupportAccessPersonalDataService logService;
 
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "運営者のサポート閲覧は個別機能の購入状態に依存しないプラットフォーム運営の基盤機能のため")
     @PostMapping("/grants")
     @Operation(summary = "サポート閲覧の依頼", description = "対象・理由（10〜1000字）を指定して本人へ許可を依頼する。依頼は72時間で失効する。")
     public ResponseEntity<ApiResponse<SupportAccessGrantResponse>> createGrant(
@@ -66,6 +70,8 @@ public class SystemAdminSupportAccessController {
                 .body(ApiResponse.of(queryService.toOperatorResponse(grantService.request(operatorId, request))));
     }
 
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "運営者のサポート閲覧は個別機能の購入状態に依存しないプラットフォーム運営の基盤機能のため")
     @GetMapping("/grants")
     @Operation(summary = "自分の依頼一覧", description = "自分が出した依頼だけを新しい順に返す。cursor は直前ページ末尾の requestedAt。")
     public ResponseEntity<CursorPagedResponse<SupportAccessGrantResponse>> listGrants(
@@ -82,12 +88,16 @@ public class SystemAdminSupportAccessController {
         return ResponseEntity.ok(CursorPagedResponse.of(page, new CursorPagedResponse.CursorMeta(next, hasNext, size)));
     }
 
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "運営者のサポート閲覧は個別機能の購入状態に依存しないプラットフォーム運営の基盤機能のため")
     @GetMapping("/grants/{id}")
     @Operation(summary = "依頼の詳細")
     public ResponseEntity<ApiResponse<SupportAccessGrantResponse>> getGrant(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.of(queryService.getForOperator(SecurityUtils.getCurrentUserId(), id)));
     }
 
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "運営者のサポート閲覧は個別機能の購入状態に依存しないプラットフォーム運営の基盤機能のため")
     @PostMapping("/grants/{id}/cancel")
     @Operation(summary = "依頼・許可の撤回", description = "PENDING/APPROVED を CANCELLED にする。次のリクエストから代理閲覧は拒否される。")
     public ResponseEntity<ApiResponse<SupportAccessGrantResponse>> cancel(@PathVariable UUID id) {
@@ -95,12 +105,16 @@ public class SystemAdminSupportAccessController {
         return ResponseEntity.ok(ApiResponse.of(queryService.toOperatorResponse(grantService.cancel(operatorId, id))));
     }
 
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "運営者のサポート閲覧は個別機能の購入状態に依存しないプラットフォーム運営の基盤機能のため")
     @PostMapping("/grants/{id}/sessions")
     @Operation(summary = "代理閲覧の開始", description = "承認済みで期限内の許可で閲覧を開始する。開始記録を残し、本人へ通知する。以後 X-Support-Access-Grant-Id ヘッダーで本人の視点を閲覧のみできる。")
     public ResponseEntity<ApiResponse<SupportAccessSessionResponse>> startSession(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.of(grantService.startSession(SecurityUtils.getCurrentUserId(), id)));
     }
 
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "運営者のサポート閲覧は個別機能の購入状態に依存しないプラットフォーム運営の基盤機能のため")
     @PostMapping("/grants/{id}/sessions/end")
     @Operation(summary = "代理閲覧の終了")
     public ResponseEntity<Void> endSession(@PathVariable UUID id) {
@@ -108,6 +122,8 @@ public class SystemAdminSupportAccessController {
         return ResponseEntity.noContent().build();
     }
 
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "運営者のサポート閲覧は個別機能の購入状態に依存しないプラットフォーム運営の基盤機能のため")
     @GetMapping("/grants/{id}/logs")
     @Operation(summary = "閲覧記録", description = "この依頼の代理閲覧の記録を新しい順に返す。cursor は直前ページ末尾の occurredAt。")
     public ResponseEntity<CursorPagedResponse<SupportAccessLogView>> listLogs(
@@ -131,12 +147,12 @@ public class SystemAdminSupportAccessController {
         return Math.max(1, Math.min(limit, MAX_LIMIT));
     }
 
-    private static LocalDateTime parseCursor(String cursor) {
+    private static Instant parseCursor(String cursor) {
         if (cursor == null || cursor.isBlank()) {
             return null;
         }
         try {
-            return LocalDateTime.parse(cursor);
+            return Instant.parse(cursor);
         } catch (java.time.format.DateTimeParseException e) {
             throw new BusinessException(CommonErrorCode.COMMON_001);
         }

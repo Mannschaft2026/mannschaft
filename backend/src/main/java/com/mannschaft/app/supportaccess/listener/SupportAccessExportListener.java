@@ -1,5 +1,7 @@
 package com.mannschaft.app.supportaccess.listener;
 
+import com.mannschaft.app.common.backgroundgate.BackgroundFeatureMode;
+import com.mannschaft.app.common.backgroundgate.BackgroundFeaturePolicy;
 import com.mannschaft.app.gdpr.event.PersonalDataCategoryCollectEvent;
 import com.mannschaft.app.supportaccess.service.SupportAccessPersonalDataService;
 import org.springframework.context.event.EventListener;
@@ -24,6 +26,8 @@ public class SupportAccessExportListener {
         this.personalDataService = personalDataService;
     }
 
+    @BackgroundFeaturePolicy(mode = BackgroundFeatureMode.ALWAYS,
+            reason = "本人の個人データ開示（GDPR エクスポート）に閲覧記録を含める。停止すると本人が自分の閲覧記録を受け取れず開示が欠落する")
     @EventListener
     public void onCollect(PersonalDataCategoryCollectEvent event) {
         if (CATEGORY.equals(event.getCategory())) {

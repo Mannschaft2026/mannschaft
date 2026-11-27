@@ -4,7 +4,7 @@ import com.mannschaft.app.supportaccess.SupportAccessEndedReason;
 import com.mannschaft.app.supportaccess.SupportAccessStatus;
 import com.mannschaft.app.supportaccess.entity.SupportAccessGrantEntity;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -21,15 +21,15 @@ public record SupportAccessGrantSnapshot(
         String requestReason,
         String referenceType,
         Long referenceId,
-        LocalDateTime requestedAt,
-        LocalDateTime requestExpiresAt,
-        LocalDateTime decidedAt,
-        LocalDateTime expiresAt,
-        LocalDateTime revokedAt,
+        Instant requestedAt,
+        Instant requestExpiresAt,
+        Instant decidedAt,
+        Instant expiresAt,
+        Instant revokedAt,
         SupportAccessEndedReason endedReason,
         boolean guardianApprovalRequired,
         Long guardianUserId,
-        LocalDateTime guardianDecidedAt,
+        Instant guardianDecidedAt,
         boolean sessionActive) {
 
     public static SupportAccessGrantSnapshot from(SupportAccessGrantEntity g) {

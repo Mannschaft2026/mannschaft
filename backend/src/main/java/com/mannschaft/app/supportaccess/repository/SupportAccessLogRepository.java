@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -19,17 +19,17 @@ public interface SupportAccessLogRepository extends JpaRepository<SupportAccessL
 
     /** 本人向けの閲覧記録（新しい順・カーソルは occurredAt）。 */
     List<SupportAccessLogEntity> findByTargetUserIdAndOccurredAtBeforeOrderByOccurredAtDesc(
-            Long targetUserId, LocalDateTime before, Pageable pageable);
+            Long targetUserId, Instant before, Pageable pageable);
 
     /** 本人向けの閲覧記録（grant を絞る）。 */
     List<SupportAccessLogEntity> findByTargetUserIdAndGrantIdAndOccurredAtBeforeOrderByOccurredAtDesc(
-            Long targetUserId, UUID grantId, LocalDateTime before, Pageable pageable);
+            Long targetUserId, UUID grantId, Instant before, Pageable pageable);
 
     List<SupportAccessLogEntity> findByGrantIdOrderByOccurredAtAsc(UUID grantId);
 
     /** 運営側の詳細（新しい順・カーソルは occurredAt）。 */
     List<SupportAccessLogEntity> findByGrantIdAndOccurredAtBeforeOrderByOccurredAtDesc(
-            UUID grantId, LocalDateTime before, Pageable pageable);
+            UUID grantId, Instant before, Pageable pageable);
 
     /** 退会30日後の強消去: 本人の閲覧記録を物理削除する。 */
     @Modifying
@@ -39,7 +39,7 @@ public interface SupportAccessLogRepository extends JpaRepository<SupportAccessL
     /** 保存期間（1年）を過ぎた閲覧記録の物理削除。 */
     @Modifying
     @Query("delete from SupportAccessLogEntity l where l.occurredAt < :threshold")
-    int deleteByOccurredAtBefore(@Param("threshold") LocalDateTime threshold);
+    int deleteByOccurredAtBefore(@Param("threshold") Instant threshold);
 
     /** 拒否の記録用: grant が実在するなら本人（閲覧された側）の userId を返す。 */
     @Query("select g.targetUserId from SupportAccessGrantEntity g where g.id = :grantId")

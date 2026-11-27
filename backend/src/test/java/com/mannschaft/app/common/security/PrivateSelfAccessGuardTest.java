@@ -12,7 +12,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -52,7 +52,7 @@ class PrivateSelfAccessGuardTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("42", null, List.of()));
         SupportAccessContextHolder.set(new SupportAccessContext(
-                UUID.randomUUID(), 9001L, 42L, LocalDateTime.of(2026, 11, 27, 10, 0)));
+                UUID.randomUUID(), 9001L, 42L, Instant.parse("2026-11-27T10:00:00Z")));
 
         assertThatThrownBy(() -> guard.requireSelfAccess(new MockHttpServletRequest(), new MockHttpServletResponse()))
                 .isInstanceOfSatisfying(BusinessException.class,
