@@ -516,7 +516,7 @@
       "comingSoon": "準備中",
       "free": "無料",
       "taxIncluded": "税込",
-      "taxBreakdown": "（税抜 {excl}＋消費税 {tax}・税率 {rate}%）",
+      "taxBreakdown": "（税抜 {excl}＋{taxName} {tax}・税率 {rate}%）",
       "loadError": "料金の取得に失敗しました",
       "retry": "再試行",
       "addonsHeading": "個別に追加できる機能（アドオン）",

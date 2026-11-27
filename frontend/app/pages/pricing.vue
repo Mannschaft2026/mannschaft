@@ -19,7 +19,7 @@ import type {
 
 definePageMeta({ layout: 'landing' })
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const billingApi = useBillingApi()
 
 useSeoMeta({
@@ -40,12 +40,15 @@ const scopeLabelKey: Record<BillingScopeKind, string> = {
   ORG: 'billing.pricing.scopeOrg',
 }
 
+// キーを scopeKind 依存にすると、タブ切替で自動的に再取得され、スコープごとにキャッシュが分かれる。
 const { data: catalog, error, status, refresh } = await useAsyncData(
-  'public-billing-plans',
+  () => `public-billing-plans-${scopeKind.value}`,
   async () => (await billingApi.getPublicPlans(scopeKind.value)).data,
-  { watch: [scopeKind] },
 )
-const loading = computed(() => status.value === 'pending' && !catalog.value)
+// 選択中スコープと一致しないカタログ（再取得中の旧スコープ分）は表示しない。
+const loading = computed(() =>
+  catalog.value?.scopeKind !== scopeKind.value && status.value !== 'error',
+)
 
 const plans = computed(() => catalog.value?.plans ?? [])
 const addons = computed(() => catalog.value?.addons ?? [])
@@ -61,7 +64,9 @@ function featureLabels(plan: PublicBillingPlan): string[] {
   return (plan.featureKeys ?? []).map(k => featureNameKey.value.get(k)).filter((k): k is string => !!k)
 }
 
-const yen = (n: number) => `¥${n.toLocaleString('ja-JP')}`
+/** 現在ロケール・応答の通貨で金額を整形する（通貨記号の直書きをしない）。 */
+const formatMoney = (n: number | undefined, m: PublicBillingMoney) =>
+  new Intl.NumberFormat(locale.value, { style: 'currency', currency: m.currency ?? 'JPY' }).format(n ?? 0)
 const isFree = (m?: PublicBillingMoney | null) => m?.amountIncludingTax === 0
 const bandsOf = (plan: PublicBillingPlan): PublicBillingPriceBand[] =>
   scopeKind.value === 'USER' ? [] : (plan.priceBands ?? [])
@@ -127,13 +132,14 @@ const bandsOf = (plan: PublicBillingPlan): PublicBillingPriceBand[] =>
                 <template v-else-if="plan.startingMonthlyTotal">
                   <span v-if="isFree(plan.startingMonthlyTotal)" class="text-2xl font-bold">{{ t('billing.pricing.free') }}</span>
                   <template v-else>
-                    <span class="text-2xl font-bold">{{ yen(plan.startingMonthlyTotal.amountIncludingTax ?? 0) }}</span>
+                    <span class="text-2xl font-bold">{{ formatMoney(plan.startingMonthlyTotal.amountIncludingTax, plan.startingMonthlyTotal) }}</span>
                     <span class="text-sm text-surface-500">{{ t('billing.plans.perMonth') }}</span>
                     <p class="text-xs text-surface-500">
                       {{ t('billing.pricing.taxIncluded') }}
                       {{ t('billing.pricing.taxBreakdown', {
-                        excl: yen(plan.startingMonthlyTotal.amountExcludingTax ?? 0),
-                        tax: yen(plan.startingMonthlyTotal.taxAmount ?? 0),
+                        excl: formatMoney(plan.startingMonthlyTotal.amountExcludingTax, plan.startingMonthlyTotal),
+                        taxName: plan.startingMonthlyTotal.taxName ?? '',
+                        tax: formatMoney(plan.startingMonthlyTotal.taxAmount, plan.startingMonthlyTotal),
                         rate: (plan.startingMonthlyTotal.taxRateBasisPoints ?? 0) / 100,
                       }) }}
                     </p>
@@ -185,7 +191,7 @@ const bandsOf = (plan: PublicBillingPlan): PublicBillingPriceBand[] =>
                   {{ t('billing.pricing.free') }}
                 </template>
                 <template v-else>
-                  {{ yen(a.startingMonthlyTotal.amountIncludingTax ?? 0) }}{{ t('billing.plans.perMonth') }}
+                  {{ formatMoney(a.startingMonthlyTotal.amountIncludingTax, a.startingMonthlyTotal) }}{{ t('billing.plans.perMonth') }}
                   <span class="text-xs font-normal text-surface-500">{{ t('billing.pricing.taxIncluded') }}</span>
                 </template>
               </p>

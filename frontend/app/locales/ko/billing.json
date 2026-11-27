@@ -516,7 +516,7 @@
       "comingSoon": "준비 중",
       "free": "무료",
       "taxIncluded": "세금 포함",
-      "taxBreakdown": "(세금 제외 {excl} + 세금 {tax}, 세율 {rate}%)",
+      "taxBreakdown": "(세금 제외 {excl} + {taxName} {tax}, 세율 {rate}%)",
       "loadError": "요금을 불러오지 못했습니다",
       "retry": "다시 시도",
       "addonsHeading": "개별로 추가할 수 있는 기능(애드온)",

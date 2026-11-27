@@ -516,7 +516,7 @@
       "comingSoon": "即将推出",
       "free": "免费",
       "taxIncluded": "含税",
-      "taxBreakdown": "（不含税 {excl} + 税额 {tax}，税率 {rate}%）",
+      "taxBreakdown": "（不含税 {excl} + {taxName} {tax}，税率 {rate}%）",
       "loadError": "价格加载失败",
       "retry": "重试",
       "addonsHeading": "可单独添加的功能（附加项）",

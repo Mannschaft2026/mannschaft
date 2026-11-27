@@ -516,7 +516,7 @@
       "comingSoon": "Próximamente",
       "free": "Gratis",
       "taxIncluded": "Impuestos incluidos",
-      "taxBreakdown": "(sin impuestos {excl} + impuestos {tax}, tasa {rate}%)",
+      "taxBreakdown": "(sin impuestos {excl} + {taxName} {tax}, tasa {rate}%)",
       "loadError": "No se pudieron cargar los precios",
       "retry": "Reintentar",
       "addonsHeading": "Funciones adicionales (complementos)",

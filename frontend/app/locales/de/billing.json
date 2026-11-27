@@ -516,7 +516,7 @@
       "comingSoon": "In Vorbereitung",
       "free": "Kostenlos",
       "taxIncluded": "Inkl. Steuern",
-      "taxBreakdown": "(netto {excl} + Steuer {tax}, Satz {rate}%)",
+      "taxBreakdown": "(netto {excl} + {taxName} {tax}, Satz {rate}%)",
       "loadError": "Preise konnten nicht geladen werden",
       "retry": "Erneut versuchen",
       "addonsHeading": "Einzeln zubuchbare Funktionen (Add-ons)",

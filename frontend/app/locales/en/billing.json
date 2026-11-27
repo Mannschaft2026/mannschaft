@@ -516,7 +516,7 @@
       "comingSoon": "Coming soon",
       "free": "Free",
       "taxIncluded": "Tax included",
-      "taxBreakdown": "(excl. tax {excl} + tax {tax}, rate {rate}%)",
+      "taxBreakdown": "(excl. tax {excl} + {taxName} {tax}, rate {rate}%)",
       "loadError": "Failed to load pricing",
       "retry": "Retry",
       "addonsHeading": "Optional features (add-ons)",
