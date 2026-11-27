@@ -1,6 +1,7 @@
 package com.mannschaft.app.schedule.service;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.storage.R2StorageService;
 import com.mannschaft.app.common.storage.acl.*;
 import com.mannschaft.app.common.storage.quota.StorageQuotaService;
@@ -43,6 +44,7 @@ class ScheduleMediaAclReadTest {
     @Mock private StorageQuotaService quota;
     @Mock private ContentVisibilityChecker visibility;
     @Mock private AccessControlService membership;
+    @Mock private ScopeContentAccessGate gate;
     @Mock private StorageAclRepository acls;
     private ScheduleMediaQueryService query;
 
@@ -50,8 +52,8 @@ class ScheduleMediaAclReadTest {
     void setUp() {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(1L, null, List.of()));
-        query = new ScheduleMediaQueryService(storage, media, schedules, membership, quota,
-                new ScheduleMediaAclService(media, schedules, visibility, membership),
+        query = new ScheduleMediaQueryService(storage, media, schedules, membership, gate, quota,
+                new ScheduleMediaAclService(media, schedules, visibility, gate),
                 new StorageAccessService(acls, storage));
         when(schedules.findById(100L)).thenReturn(Optional.of(ScheduleEntity.builder().id(100L).teamId(12L).build()));
         when(media.findByScheduleIdOrderByCreatedAtDesc(eq(100L), any())).thenReturn(new PageImpl<>(List.of(

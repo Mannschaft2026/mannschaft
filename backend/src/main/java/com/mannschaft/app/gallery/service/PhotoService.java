@@ -1,6 +1,7 @@
 package com.mannschaft.app.gallery.service;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.DomainEventPublisher;
 import com.mannschaft.app.common.storage.S3ObjectDeleteEvent;
@@ -62,6 +63,8 @@ public class PhotoService {
     private final StorageQuotaService storageQuotaService;
     /** 認可根治戦役 Wave3-B5: 書込CRUD/DL の scope 認可用。 */
     private final AccessControlService accessControlService;
+    /** チーム公開範囲の閲覧上限（CMP-261124-0159・F00 §20.3）。読み取りは門、書き込みは書き込み用の別名で書き分ける。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
 
     private static final long MAX_FILE_SIZE = 100L * 1024 * 1024; // 100MB（動画対応）
     private static final int MAX_BATCH_SIZE = 20;
@@ -81,7 +84,7 @@ public class PhotoService {
      */
     public Page<PhotoResponse> listPhotos(Long albumId, String sort, Pageable pageable, Long userId) {
         PhotoAlbumEntity album = albumService.findAlbumOrThrow(albumId);
-        accessControlService.checkMembership(userId,
+        scopeContentAccessGate.checkScopeContentAccess(userId,
                 PhotoAlbumService.resolveScopeId(album.getTeamId(), album.getOrganizationId()),
                 PhotoAlbumService.resolveScopeType(album.getTeamId()));
 
@@ -112,7 +115,7 @@ public class PhotoService {
         // allowMemberUpload=true であることを要求する（entity が保持する業務フラグを実効化）。
         Long authzScopeId = PhotoAlbumService.resolveScopeId(album.getTeamId(), album.getOrganizationId());
         String authzScopeType = PhotoAlbumService.resolveScopeType(album.getTeamId());
-        accessControlService.checkMembership(userId, authzScopeId, authzScopeType);
+        scopeContentAccessGate.checkMembershipForWrite(userId, authzScopeId, authzScopeType);
         boolean canUpload = accessControlService.isAdminOrAbove(userId, authzScopeId, authzScopeType)
                 || Boolean.TRUE.equals(album.getAllowMemberUpload());
         if (!canUpload) {
@@ -284,7 +287,7 @@ public class PhotoService {
 
         // アルバムの allow_download チェック
         PhotoAlbumEntity album = albumService.findAlbumOrThrow(entity.getAlbumId());
-        accessControlService.checkMembership(userId,
+        scopeContentAccessGate.checkScopeContentAccess(userId,
                 PhotoAlbumService.resolveScopeId(album.getTeamId(), album.getOrganizationId()),
                 PhotoAlbumService.resolveScopeType(album.getTeamId()));
         if (!album.getAllowDownload()) {
@@ -304,7 +307,7 @@ public class PhotoService {
      */
     public DownloadResponse getAlbumDownloadUrl(Long albumId, Long userId, List<Long> photoIds, int limit) {
         PhotoAlbumEntity album = albumService.findAlbumOrThrow(albumId);
-        accessControlService.checkMembership(userId,
+        scopeContentAccessGate.checkScopeContentAccess(userId,
                 PhotoAlbumService.resolveScopeId(album.getTeamId(), album.getOrganizationId()),
                 PhotoAlbumService.resolveScopeType(album.getTeamId()));
 

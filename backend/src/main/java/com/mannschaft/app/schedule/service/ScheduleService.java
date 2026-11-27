@@ -2,6 +2,7 @@ package com.mannschaft.app.schedule.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.EnumInputParser;
@@ -98,6 +99,8 @@ public class ScheduleService {
      * 認可根治 Wave3-B6: schedule 書込（update/delete/cancel/create）・出欠閲覧の per-scope 認可に使用する。
      */
     private final AccessControlService accessControlService;
+    /** チーム公開範囲の閲覧上限（CMP-261124-0159・F00 §20.3）。読み取りは門、書き込みは書き込み用の別名で書き分ける。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
     /**
      * F03.18: activity_feed 発行用の {@code detail} JSON をシリアライズするために使う。
      * シリアライズ失敗時は予定本体の処理を巻き込まない（{@link #publishScheduleActivity}）。
@@ -796,9 +799,9 @@ public class ScheduleService {
             return;
         }
         if (schedule.isTeamScope()) {
-            accessControlService.checkMembership(userId, schedule.getTeamId(), SCOPE_TYPE_TEAM);
+            scopeContentAccessGate.checkScopeContentAccess(userId, schedule.getTeamId(), SCOPE_TYPE_TEAM);
         } else if (schedule.isOrganizationScope()) {
-            accessControlService.checkMembership(userId, schedule.getOrganizationId(), SCOPE_TYPE_ORGANIZATION);
+            scopeContentAccessGate.checkScopeContentAccess(userId, schedule.getOrganizationId(), SCOPE_TYPE_ORGANIZATION);
         } else if (!Objects.equals(schedule.getUserId(), userId)) {
             throw new BusinessException(CommonErrorCode.COMMON_002);
         }

@@ -1,6 +1,7 @@
 package com.mannschaft.app.schedule.controller;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.team.service.TeamOrgMembershipQueryService;
@@ -35,6 +36,8 @@ public class TeamEventCategoryController {
     private final ScheduleEventCategoryService categoryService;
     private final TeamOrgMembershipQueryService teamOrgMembershipQueryService;
     private final AccessControlService accessControlService;
+    /** チーム公開範囲の閲覧上限（CMP-261124-0159・F00 §20.3）。読み取りは門、書き込みは書き込み用の別名で書き分ける。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
 
     /**
      * チーム行事カテゴリ一覧を取得する（チーム固有 + 全親組織カテゴリのマージ結果）。
@@ -45,7 +48,7 @@ public class TeamEventCategoryController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")
     public ResponseEntity<ApiResponse<List<EventCategoryResponse>>> listCategories(
             @PathVariable Long teamId) {
-        accessControlService.checkMembership(SecurityUtils.getCurrentUserId(), teamId, "TEAM");
+        scopeContentAccessGate.checkScopeContentAccess(SecurityUtils.getCurrentUserId(), teamId, "TEAM");
         // 全親組織の行事カテゴリをマージする（F01.2.1 §9.2 #10。各カテゴリに由来の組織IDを付ける）。
         List<ScheduleEventCategoryEntity> entities = categoryService.getCategoriesForTeam(
                 teamId, teamOrgMembershipQueryService.findActiveOrganizationIdsInPrimaryOrder(teamId));

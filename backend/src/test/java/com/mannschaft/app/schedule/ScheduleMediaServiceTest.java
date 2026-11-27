@@ -1,6 +1,7 @@
 package com.mannschaft.app.schedule;
 
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.storage.PresignedUploadResult;
 import com.mannschaft.app.common.storage.R2StorageService;
@@ -83,6 +84,10 @@ class ScheduleMediaServiceTest {
     @Mock
     private AccessControlService accessControlService;
 
+    /** CMP-261124-0159: チーム公開範囲の閲覧上限（共通の門）。 */
+    @Mock
+    private ScopeContentAccessGate scopeContentAccessGate;
+
     /**
      * リファクタリング第6弾（2026-05-17）以降、{@link ScheduleMediaService} は
      * {@link ScheduleMediaUploadService} と {@link ScheduleMediaQueryService} へ
@@ -116,7 +121,7 @@ class ScheduleMediaServiceTest {
         org.mockito.Mockito.lenient().when(storageAccessService.generateDownloadUrl(any(), any(), any(), any(), any()))
                 .thenReturn("https://r2.example.com/signed");
         var mediaAclService = new com.mannschaft.app.schedule.service.ScheduleMediaAclService(
-                scheduleMediaUploadRepository, scheduleRepository, visibilityChecker, accessControlService);
+                scheduleMediaUploadRepository, scheduleRepository, visibilityChecker, scopeContentAccessGate);
         ScheduleMediaUploadService uploadService = new ScheduleMediaUploadService(
                 r2StorageService,
                 multipartUploadService,
@@ -128,6 +133,7 @@ class ScheduleMediaServiceTest {
                 scheduleMediaUploadRepository,
                 scheduleRepository,
                 accessControlService,
+                scopeContentAccessGate,
                 storageQuotaService, mediaAclService, storageAccessService);
         scheduleMediaService = new ScheduleMediaService(uploadService, queryService);
 
@@ -137,7 +143,7 @@ class ScheduleMediaServiceTest {
                 .build();
         lenient().when(scheduleRepository.findById(SCHEDULE_ID))
                 .thenReturn(Optional.of(defaultSchedule));
-        lenient().when(accessControlService.isMember(UPLOADER_ID, 10L, "TEAM"))
+        lenient().when(scopeContentAccessGate.canAccessScopeContent(UPLOADER_ID, 10L, "TEAM"))
                 .thenReturn(true);
     }
 
@@ -1324,7 +1330,7 @@ class ScheduleMediaServiceTest {
             ScheduleEntity schedule = teamSchedule();
             given(scheduleMediaUploadRepository.findById(MEDIA_ID)).willReturn(Optional.of(entity));
             given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(schedule));
-            given(accessControlService.isMember(UPLOADER_ID, 50L, "TEAM")).willReturn(true);
+            given(scopeContentAccessGate.canAccessScopeContent(UPLOADER_ID, 50L, "TEAM")).willReturn(true);
 
             // when
             scheduleMediaService.deleteMedia(SCHEDULE_ID, MEDIA_ID, UPLOADER_ID);

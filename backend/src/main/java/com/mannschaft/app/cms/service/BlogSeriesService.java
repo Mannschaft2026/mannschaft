@@ -8,6 +8,7 @@ import com.mannschaft.app.cms.entity.BlogPostSeriesEntity;
 import com.mannschaft.app.cms.repository.BlogPostRepository;
 import com.mannschaft.app.cms.repository.BlogPostSeriesRepository;
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,8 @@ public class BlogSeriesService {
     private final BlogPostSeriesRepository seriesRepository;
     private final BlogPostRepository postRepository;
     private final AccessControlService accessControlService;
+    /** チーム公開範囲の閲覧上限（CMP-261124-0159・F00 §20.3）。読み取りは門、書き込みは書き込み用の別名で書き分ける。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
 
     /**
      * シリーズ一覧を取得する。
@@ -41,10 +44,10 @@ public class BlogSeriesService {
     public List<BlogSeriesResponse> listSeries(Long userId, Long teamId, Long organizationId) {
         List<BlogPostSeriesEntity> entities;
         if (teamId != null) {
-            accessControlService.checkMembership(userId, teamId, "TEAM");
+            scopeContentAccessGate.checkScopeContentAccess(userId, teamId, "TEAM");
             entities = seriesRepository.findByTeamIdOrderByCreatedAtDesc(teamId);
         } else if (organizationId != null) {
-            accessControlService.checkMembership(userId, organizationId, "ORGANIZATION");
+            scopeContentAccessGate.checkScopeContentAccess(userId, organizationId, "ORGANIZATION");
             entities = seriesRepository.findByOrganizationIdOrderByCreatedAtDesc(organizationId);
         } else {
             throw new BusinessException(CommonErrorCode.COMMON_002);
@@ -68,9 +71,9 @@ public class BlogSeriesService {
     @Transactional
     public BlogSeriesResponse createSeries(Long userId, CreateSeriesRequest request) {
         if (request.getTeamId() != null) {
-            accessControlService.checkMembership(userId, request.getTeamId(), "TEAM");
+            scopeContentAccessGate.checkMembershipForWrite(userId, request.getTeamId(), "TEAM");
         } else if (request.getOrganizationId() != null) {
-            accessControlService.checkMembership(userId, request.getOrganizationId(), "ORGANIZATION");
+            scopeContentAccessGate.checkMembershipForWrite(userId, request.getOrganizationId(), "ORGANIZATION");
         } else {
             throw new BusinessException(CommonErrorCode.COMMON_002);
         }

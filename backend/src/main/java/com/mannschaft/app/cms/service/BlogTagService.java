@@ -8,6 +8,7 @@ import com.mannschaft.app.cms.dto.UpdateTagRequest;
 import com.mannschaft.app.cms.entity.BlogTagEntity;
 import com.mannschaft.app.cms.repository.BlogTagRepository;
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +30,8 @@ public class BlogTagService {
     private final BlogTagRepository tagRepository;
     private final CmsMapper cmsMapper;
     private final AccessControlService accessControlService;
+    /** チーム公開範囲の閲覧上限（CMP-261124-0159・F00 §20.3）。読み取りは門、書き込みは書き込み用の別名で書き分ける。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
 
     /**
      * タグ一覧を取得する。
@@ -40,10 +43,10 @@ public class BlogTagService {
     public List<BlogTagResponse> listTags(Long userId, Long teamId, Long organizationId) {
         List<BlogTagEntity> tags;
         if (teamId != null) {
-            accessControlService.checkMembership(userId, teamId, "TEAM");
+            scopeContentAccessGate.checkScopeContentAccess(userId, teamId, "TEAM");
             tags = tagRepository.findByTeamIdOrderBySortOrderAsc(teamId);
         } else if (organizationId != null) {
-            accessControlService.checkMembership(userId, organizationId, "ORGANIZATION");
+            scopeContentAccessGate.checkScopeContentAccess(userId, organizationId, "ORGANIZATION");
             tags = tagRepository.findByOrganizationIdOrderBySortOrderAsc(organizationId);
         } else {
             throw new BusinessException(CommonErrorCode.COMMON_002);
@@ -61,9 +64,9 @@ public class BlogTagService {
     @Transactional
     public BlogTagResponse createTag(Long userId, CreateTagRequest request) {
         if (request.getTeamId() != null) {
-            accessControlService.checkMembership(userId, request.getTeamId(), "TEAM");
+            scopeContentAccessGate.checkMembershipForWrite(userId, request.getTeamId(), "TEAM");
         } else if (request.getOrganizationId() != null) {
-            accessControlService.checkMembership(userId, request.getOrganizationId(), "ORGANIZATION");
+            scopeContentAccessGate.checkMembershipForWrite(userId, request.getOrganizationId(), "ORGANIZATION");
         } else {
             throw new BusinessException(CommonErrorCode.COMMON_002);
         }

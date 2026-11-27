@@ -8,6 +8,7 @@ import com.mannschaft.app.cms.media.BlogMediaScope;
 import com.mannschaft.app.cms.repository.BlogMediaUploadRepository;
 import com.mannschaft.app.cms.repository.BlogPostRepository;
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.storage.StorageErrorCode;
@@ -29,6 +30,8 @@ public class BlogMediaAclService implements MultipartContentTargetResolver {
     private final BlogMediaUploadRepository mediaRepository;
     private final BlogPostRepository postRepository;
     private final AccessControlService accessControlService;
+    /** チーム公開範囲の閲覧上限（CMP-261124-0159・F00 §20.3）。読み取りは門、書き込みは書き込み用の別名で書き分ける。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
     private final BlogBodyMediaResolver bodyMediaResolver;
 
     /** 記事があれば保存スコープを正本とし、未保存なら要求スコープの投稿権限を確認する。 */
@@ -141,7 +144,7 @@ public class BlogMediaAclService implements MultipartContentTargetResolver {
             }
         } else if (scope.scopeType() == StorageScopeType.TEAM
                 || scope.scopeType() == StorageScopeType.ORGANIZATION) {
-            accessControlService.checkMembership(actorId, scope.scopeId(), scope.scopeType().name());
+            scopeContentAccessGate.checkMembershipForWrite(actorId, scope.scopeId(), scope.scopeType().name());
         } else {
             throw new BusinessException(StorageErrorCode.ACL_INVALID_REQUEST);
         }

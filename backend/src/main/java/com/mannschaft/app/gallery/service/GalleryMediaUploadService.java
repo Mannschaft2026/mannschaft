@@ -1,6 +1,7 @@
 package com.mannschaft.app.gallery.service;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.storage.FileTypeValidator;
 import com.mannschaft.app.common.storage.PresignedUploadResult;
@@ -45,6 +46,8 @@ public class GalleryMediaUploadService {
     private final StorageQuotaService storageQuotaService;
     /** 認可根治戦役 Wave3-B5: アップロード可否の scope 認可用。 */
     private final AccessControlService accessControlService;
+    /** チーム公開範囲の閲覧上限（CMP-261124-0159・F00 §20.3）。読み取りは門、書き込みは書き込み用の別名で書き分ける。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
 
     /**
      * アルバムのスコープ情報と mediaType に応じた R2 Presigned PUT URL を発行する。
@@ -62,7 +65,7 @@ public class GalleryMediaUploadService {
         // ADMIN/DEPUTY_ADMIN または allowMemberUpload=true）。
         Long authzScopeId = PhotoAlbumService.resolveScopeId(album.getTeamId(), album.getOrganizationId());
         String authzScopeType = PhotoAlbumService.resolveScopeType(album.getTeamId());
-        accessControlService.checkMembership(userId, authzScopeId, authzScopeType);
+        scopeContentAccessGate.checkMembershipForWrite(userId, authzScopeId, authzScopeType);
         boolean canUpload = accessControlService.isAdminOrAbove(userId, authzScopeId, authzScopeType)
                 || Boolean.TRUE.equals(album.getAllowMemberUpload());
         if (!canUpload) {

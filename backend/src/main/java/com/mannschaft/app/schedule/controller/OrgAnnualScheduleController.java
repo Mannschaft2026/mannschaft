@@ -1,6 +1,7 @@
 package com.mannschaft.app.schedule.controller;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.EnumInputParser;
 import com.mannschaft.app.schedule.DateShiftMode;
@@ -47,6 +48,8 @@ public class OrgAnnualScheduleController {
     private final ScheduleAnnualCopyService annualCopyService;
     private final ScheduleEventCategoryService categoryService;
     private final AccessControlService accessControlService;
+    /** チーム公開範囲の閲覧上限（CMP-261124-0159・F00 §20.3）。読み取りは門、書き込みは書き込み用の別名で書き分ける。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
 
     /**
      * 組織年間行事ビューを取得する。
@@ -68,7 +71,7 @@ public class OrgAnnualScheduleController {
             @RequestParam(name = "term_end_date", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate termEndDate) {
 
-        accessControlService.checkMembership(SecurityUtils.getCurrentUserId(), orgId, "ORGANIZATION");
+        scopeContentAccessGate.checkScopeContentAccess(SecurityUtils.getCurrentUserId(), orgId, "ORGANIZATION");
 
         ScheduleAnnualViewService.AnnualViewData viewData = annualViewService.getAnnualView(
                 orgId, false, academicYear, categoryIds, eventType, termStartDate, termEndDate);
@@ -97,7 +100,7 @@ public class OrgAnnualScheduleController {
             @RequestParam(name = "date_shift_mode", defaultValue = "SAME_WEEKDAY") String dateShiftMode,
             @RequestParam(name = "category_id", required = false) List<Long> categoryIds) {
 
-        accessControlService.checkMembership(SecurityUtils.getCurrentUserId(), orgId, "ORGANIZATION");
+        scopeContentAccessGate.checkScopeContentAccess(SecurityUtils.getCurrentUserId(), orgId, "ORGANIZATION");
 
         DateShiftMode mode = DateShiftMode.valueOf(dateShiftMode);
         ScheduleAnnualCopyService.PreviewResult previewResult =

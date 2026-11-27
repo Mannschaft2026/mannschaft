@@ -1,6 +1,7 @@
 package com.mannschaft.app.timeline.service;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.DomainEventPublisher;
@@ -114,6 +115,8 @@ public class TimelinePostService {
     private final VillageAccessGate villageAccessGate;
     /** TEAM/ORGANIZATION スコープへの投稿時のメンバーシップ検証。 */
     private final AccessControlService accessControlService;
+    /** チーム公開範囲の閲覧上限（CMP-261124-0159・F00 §20.3）。読み取りは門、書き込みは書き込み用の別名で書き分ける。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
     /**
      * 個人ダッシュボード集約タイムライン（マイフィード）の所属スコープ解決用。
      * ドメイン境界原則に従い membership ドメインの Repository を直注入せず Service 経由で利用する
@@ -200,9 +203,9 @@ public class TimelinePostService {
         // なお本判定を private ヘルパーに切り出すと、認可番人（AuthzControllerGuardArchTest）の
         // 委譲追跡（MAX_DELEGATION_DEPTH = 2）で accessControlService の呼び出しが
         // 3 ホップ目に沈み検出されなくなる。番人に見える位置を保つため、ここは
-        // checkScopeMembership を直接呼ぶ形にフラット化している。
+        // checkScopeWriteAccess を直接呼ぶ形にフラット化している。
         if (parseScopeType(req.getScopeTypeOrDefault()) != PostScopeType.VILLAGE) {
-            checkScopeMembership(req.getScopeTypeOrDefault(), resolvedScopeId, userId);
+            checkScopeWriteAccess(req.getScopeTypeOrDefault(), resolvedScopeId, userId);
             checkCanCreateInManagedScope(req.getScopeTypeOrDefault(), resolvedScopeId, userId);
         }
         // 配下配信（CHILDREN / DESCENDANTS）の送信権限ゲート。
@@ -222,7 +225,7 @@ public class TimelinePostService {
         // 展開する）。値が保存されても誰にも余分に届かないため権限を要求する理由が無く、
         // 指定値をそのまま保存する既存契約も変えない。
         //
-        // なお checkScopeMembership と同じ理由（認可番人 AuthzControllerGuardArchTest の
+        // なお checkScopeWriteAccess と同じ理由（認可番人 AuthzControllerGuardArchTest の
         // 委譲追跡 MAX_DELEGATION_DEPTH = 2）で、accessControlService の呼び出しは
         // private ヘルパーへ沈めず本メソッド直下に置く。
         if (req.getParentId() == null
@@ -443,13 +446,31 @@ public class TimelinePostService {
      * @param resolvedScopeId 解決済みの内部スコープ Long ID
      * @param userId          操作ユーザーID
      */
-    private void checkScopeMembership(String scopeTypeStr, Long resolvedScopeId, Long userId) {
+    /**
+     * 中身を返す読み取り（フィード・ピン留め）の入口で、スコープの閲覧資格を共通の門で検証する
+     * （CMP-261124-0159・F00 §20.3。非公開チームでは正式メンバー以上だけが通る）。
+     * 種別ごとの扱いは {@link #checkScopeWriteAccess} と同じ（TEAM/ORGANIZATION は門、他は従来どおり）。
+     */
+    private void checkScopeReadAccess(String scopeTypeStr, Long resolvedScopeId, Long userId) {
         switch (parseScopeType(scopeTypeStr)) {
             case PUBLIC -> {
                 // 公開スコープ。誰でも読み書きできるため追加の検証はしない。
             }
-            case TEAM -> accessControlService.checkMembership(userId, resolvedScopeId, "TEAM");
-            case ORGANIZATION -> accessControlService.checkMembership(userId, resolvedScopeId, "ORGANIZATION");
+            case TEAM -> scopeContentAccessGate.checkScopeContentAccess(userId, resolvedScopeId, "TEAM");
+            case ORGANIZATION -> scopeContentAccessGate.checkScopeContentAccess(userId, resolvedScopeId, "ORGANIZATION");
+            case PERSONAL -> requireSelfScope(resolvedScopeId, userId);
+            case VILLAGE, FRIEND_TEAM, FRIEND_FORWARD, FRIEND_ARCHIVE ->
+                    throw new BusinessException(CommonErrorCode.COMMON_002);
+        }
+    }
+
+    private void checkScopeWriteAccess(String scopeTypeStr, Long resolvedScopeId, Long userId) {
+        switch (parseScopeType(scopeTypeStr)) {
+            case PUBLIC -> {
+                // 公開スコープ。誰でも読み書きできるため追加の検証はしない。
+            }
+            case TEAM -> scopeContentAccessGate.checkMembershipForWrite(userId, resolvedScopeId, "TEAM");
+            case ORGANIZATION -> scopeContentAccessGate.checkMembershipForWrite(userId, resolvedScopeId, "ORGANIZATION");
             case PERSONAL -> requireSelfScope(resolvedScopeId, userId);
             case VILLAGE, FRIEND_TEAM, FRIEND_FORWARD, FRIEND_ARCHIVE ->
                     throw new BusinessException(CommonErrorCode.COMMON_002);
@@ -536,7 +557,7 @@ public class TimelinePostService {
      * 食い違うため、{@code enforceScopeAuthorization} が true の場合は
      * <b>継承後の実効スコープ</b>に対して {@link #requireReplyableParent} で認可を再評価する。
      * 非リプライ時は申告値＝実効値（{@code resolvedScopeId} をそのまま採用する）であり、
-     * {@link #createPost} が入口で行う {@link #checkScopeMembership} が実効スコープの検証に一致する。</p>
+     * {@link #createPost} が入口で行う {@link #checkScopeWriteAccess} が実効スコープの検証に一致する。</p>
      *
      * @param req                        作成リクエスト
      * @param resolvedScopeId            解決済みの内部スコープ Long ID（非リプライ時の {@code effectiveScopeId}）
@@ -894,7 +915,7 @@ public class TimelinePostService {
      * 「村 ID 無しの VILLAGE 指定」を fail-closed で拒否するため（認可根治 Wave6）。
      * FE は VILLAGE スコープでは常に scopeVillageId を送るため正常系に影響はない。</p>
      *
-     * <p><b>認可根治 Wave3-B7-timeline</b>: TEAM/ORGANIZATION は {@link #checkScopeMembership}
+     * <p><b>認可根治 Wave3-B7-timeline</b>: TEAM/ORGANIZATION は {@link #checkScopeReadAccess}
      * （非メンバーは COMMON_002・403）、VILLAGE は {@link #requireVillageMember}
      * （非メンバーは {@link VillageErrorCode#NOT_MEMBER}・IDOR 対策で 404 相当）で
      * 呼び出し元のメンバーシップを検証する。PUBLIC 等その他スコープは従来通り無検証
@@ -920,7 +941,7 @@ public class TimelinePostService {
             requireVillageMember(scopeVillageId, userId);
             posts = postRepository.findFeedByVillageId(scopeVillageId, PageRequest.of(0, feedSize));
         } else {
-            checkScopeMembership(scopeType, scopeId, userId);
+            checkScopeReadAccess(scopeType, scopeId, userId);
             posts = postRepository.findFeedByScopeType(scopeTypeEnum, scopeId, PageRequest.of(0, feedSize));
         }
         // スコープ別フィードにも著者名/アバター・投稿元名/slug・代理主体を enrich する
@@ -936,18 +957,33 @@ public class TimelinePostService {
         List<TimelinePostEntity> posts;
         if (scopeTypeEnum == PostScopeType.VILLAGE) {
             if (scopeVillageId == null) {
-                checkScopeMembership(scopeType, scopeId, userId);
+                checkScopeReadAccess(scopeType, scopeId, userId);
                 return List.of();
             }
             requireVillageMember(scopeVillageId, userId);
             posts = postRepository.findFeedPageByVillageId(
                     scopeVillageId, cursor, PageRequest.of(0, pageSize + 1));
         } else {
-            checkScopeMembership(scopeType, scopeId, userId);
+            checkScopeReadAccess(scopeType, scopeId, userId);
             posts = postRepository.findFeedPageByScopeType(
                     scopeTypeEnum, scopeId, cursor, PageRequest.of(0, pageSize + 1));
         }
         return attachMitayo(enrichPosts(timelineMapper.toPostResponseList(posts)), userId);
+    }
+
+    /**
+     * 呼び出し元が中身を読めるチームの ID（マイフィード・ユーザー投稿一覧・検索の母集団）。
+     *
+     * <p>在籍チームのうち、非公開チーム（{@code MEMBERS_AND_ABOVE}）では正式メンバー以上だけを残す
+     * （CMP-261124-0159・F00 §20.3。在籍していても上限を越える利用者の投稿は母集団に入れない）。
+     * 判定はチーム数に比例せず一括で行う（{@link ScopeContentAccessGate#filterAccessibleTeamIds}）。</p>
+     */
+    private List<Long> readableTeamIds(Long userId) {
+        List<Long> memberTeamIds = membershipService.getActiveTeamIdsByUser(userId);
+        if (memberTeamIds.isEmpty()) {
+            return memberTeamIds;
+        }
+        return List.copyOf(scopeContentAccessGate.filterAccessibleTeamIds(userId, memberTeamIds));
     }
 
     /**
@@ -1015,7 +1051,7 @@ public class TimelinePostService {
      */
     public List<PostResponse> getMyFeed(Long userId, Long cursor, int limit) {
         int feedSize = limit > 0 ? limit : DEFAULT_FEED_SIZE;
-        List<Long> teamIds = membershipService.getActiveTeamIdsByUser(userId);
+        List<Long> teamIds = readableTeamIds(userId);
         List<Long> orgIds = membershipService.getActiveOrgIdsByUser(userId);
         List<UUID> activeVillageIds = postingIdentityService.getActiveVillageIdsByUser(userId);
         List<VillageAccessGate.VisibleVillage> activeVisibleVillages =
@@ -1376,7 +1412,7 @@ public class TimelinePostService {
      */
     public List<PostResponse> getUserPosts(Long targetUserId, int size, Long callerUserId) {
         int feedSize = size > 0 ? size : DEFAULT_FEED_SIZE;
-        List<Long> teamIds = membershipService.getActiveTeamIdsByUser(callerUserId);
+        List<Long> teamIds = readableTeamIds(callerUserId);
         List<Long> orgIds = membershipService.getActiveOrgIdsByUser(callerUserId);
         List<UUID> villageIds = postingIdentityService.getActiveVillageIdsByUser(callerUserId);
         // 空リストは JPQL の IN () で構文エラーになるためダミー値で埋める（findMyFeed と同一規約）。
@@ -1423,7 +1459,7 @@ public class TimelinePostService {
     /**
      * ピン留め投稿一覧を取得する（村スコープ非対応・{@code GET /timeline/pinned} 用）。
      *
-     * <p>VILLAGE を指定した場合は {@link #checkScopeMembership} が fail-closed で拒否する。
+     * <p>VILLAGE を指定した場合は {@link #checkScopeReadAccess} が fail-closed で拒否する。
      * 村のピン留めを取得する場合は
      * {@link #getPinnedPosts(String, Long, UUID, Long)} に村 ID を渡すこと。</p>
      *
@@ -1439,7 +1475,7 @@ public class TimelinePostService {
     /**
      * ピン留め投稿一覧を取得する（村スコープ対応）。
      *
-     * <p><b>認可根治 Wave3-B7-timeline</b>: TEAM/ORGANIZATION は {@link #checkScopeMembership}
+     * <p><b>認可根治 Wave3-B7-timeline</b>: TEAM/ORGANIZATION は {@link #checkScopeReadAccess}
      * で呼び出し元のメンバーシップを検証する（非メンバーは COMMON_002・403）。</p>
      *
      * <p><b>認可根治 Wave6</b>: VILLAGE スコープのピン留めを
@@ -1447,7 +1483,7 @@ public class TimelinePostService {
      * 「{@code scope_id} が常に 0 のため全村のピン留めが種別一致だけで混在する」問題を根治した。
      * 村メンバーであることを {@link #requireVillageMember} で検証したうえで、
      * リポジトリ側でも村 ID を複合キーとして絞る（多層防御）。
-     * 村 ID が渡されない VILLAGE 指定は fail-closed（{@link #checkScopeMembership}）。</p>
+     * 村 ID が渡されない VILLAGE 指定は fail-closed（{@link #checkScopeReadAccess}）。</p>
      *
      * @param scopeType      スコープ種別
      * @param scopeId        スコープID（VILLAGE スコープでは未使用）
@@ -1463,7 +1499,7 @@ public class TimelinePostService {
             requireVillageMember(scopeVillageId, userId);
             posts = postRepository.findPinnedByVillageId(scopeVillageId);
         } else {
-            checkScopeMembership(scopeType, scopeId, userId);
+            checkScopeReadAccess(scopeType, scopeId, userId);
             posts = postRepository.findPinnedPosts(scopeTypeEnum, scopeId);
         }
         // ピン留め一覧にも著者名/アバター・投稿元名/slug・代理主体を enrich する。
@@ -1485,7 +1521,7 @@ public class TimelinePostService {
      */
     public List<PostResponse> searchPosts(String keyword, int limit, Long userId) {
         int searchLimit = limit > 0 ? limit : DEFAULT_FEED_SIZE;
-        List<Long> teamIds = membershipService.getActiveTeamIdsByUser(userId);
+        List<Long> teamIds = readableTeamIds(userId);
         List<Long> orgIds = membershipService.getActiveOrgIdsByUser(userId);
         // 空リストは native SQL の IN () で構文エラーになるためダミー値で埋める（findMyFeed と同一規約）。
         List<Long> safeTeamIds = teamIds.isEmpty() ? List.of(-1L) : teamIds;

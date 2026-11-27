@@ -26,6 +26,7 @@ import com.mannschaft.app.cms.media.BlogMediaScope;
 import com.mannschaft.app.cms.repository.BlogPostRepository;
 import com.mannschaft.app.cms.repository.BlogPostTagRepository;
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.SecurityUtils;
@@ -97,6 +98,8 @@ public class BlogPostService {
     private final TeamService teamService;
     private final OrganizationService organizationService;
     private final AccessControlService accessControlService;
+    /** チーム公開範囲の閲覧上限（CMP-261124-0159・F00 §20.3）。読み取りは門、書き込みは書き込み用の別名で書き分ける。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
     // TODO: cms ドメインが payment ドメインを参照（CLAUDE.md 原則5）。クロスドメイン FK は張らず
     //       PaymentGateService のメソッド呼び（ID 渡し）に限定する。将来はイベント駆動化を検討。
     private final PaymentGateService paymentGateService;
@@ -326,9 +329,9 @@ public class BlogPostService {
 
         // メンバーシップチェック: チームまたは組織への帰属確認（非メンバーは403）
         if (resolvedTeamId != null) {
-            accessControlService.checkMembership(userId, resolvedTeamId, "TEAM");
+            scopeContentAccessGate.checkMembershipForWrite(userId, resolvedTeamId, "TEAM");
         } else if (resolvedOrgId != null) {
-            accessControlService.checkMembership(userId, resolvedOrgId, "ORGANIZATION");
+            scopeContentAccessGate.checkMembershipForWrite(userId, resolvedOrgId, "ORGANIZATION");
         }
 
         // slug 決定: 明示指定は重複なら 409（CMS_005）、自動生成は同一スコープで一意になるまで連番を付与する

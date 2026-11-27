@@ -2,6 +2,7 @@ package com.mannschaft.app.schedule.service;
 
 import com.mannschaft.app.admin.batch.BatchEndpoint;
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.backgroundgate.BackgroundFeatureMode;
 import com.mannschaft.app.common.backgroundgate.BackgroundFeaturePolicy;
 import com.mannschaft.app.common.storage.R2StorageService;
@@ -67,6 +68,8 @@ public class ScheduleMediaQueryService {
     private final ScheduleMediaUploadRepository scheduleMediaUploadRepository;
     private final ScheduleRepository scheduleRepository;
     private final AccessControlService accessControlService;
+    /** チーム公開範囲の閲覧上限（CMP-261124-0159・F00 §20.3）。読み取りは門、書き込みは書き込み用の別名で書き分ける。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
     /** F13 Phase 4-γ: 統合ストレージクォータサービス。 */
     private final StorageQuotaService storageQuotaService;
     private final ScheduleMediaAclService mediaAclService;
@@ -302,7 +305,7 @@ public class ScheduleMediaQueryService {
         String scopeType = schedule.isTeamScope() ? "TEAM" : "ORGANIZATION";
         return scopeId != null
                 && userId.equals(media.getUploaderId())
-                && accessControlService.isMember(userId, scopeId, scopeType);
+                && scopeContentAccessGate.canAccessScopeContent(userId, scopeId, scopeType);
     }
 
     /**
