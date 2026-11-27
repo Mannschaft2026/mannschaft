@@ -522,8 +522,9 @@ public class DefaultAccessControlService implements AccessControlService {
     /**
      * ユーザーが当該スコープのADMINまたはDEPUTY_ADMINかどうかを返す。
      *
-     * <p>CMP-260920-1043: {@link #getRoleName} は表示・可視性向けにプラットフォームロールの
-     * SYSTEM_ADMINを最優先で返す。その値をスコープ認可へ流用すると、SYSTEM_ADMINと当該スコープの
+     * <p>CMP-260920-1043: {@link #getRoleName}（{@link #resolveEffectiveRoleName}）はスコープ付きの
+     * 割当と所属ロールだけを解決し、プラットフォームロールの SYSTEM_ADMIN は返さない（戦役 Z-A PR3 で最強ロール昇格を撤去）。
+     * 以前は SYSTEM_ADMINを最優先で返していたため、スコープ認可へ流用するとSYSTEM_ADMINと当該スコープの
      * ADMINを兼任する利用者まで403になるため、ここではスコープ付き{@code user_roles}だけを判定する。
      * SYSTEM_ADMIN単独をテナント管理者として扱わない既存契約は維持する。</p>
      */
@@ -540,8 +541,8 @@ public class DefaultAccessControlService implements AccessControlService {
     /**
      * ユーザーが指定スコープの ADMIN かどうかを返す。
      *
-     * <p>{@link #getRoleName} は SYSTEM_ADMIN を最強ロールとして返すため、SYSTEM_ADMIN と
-     * スコープ ADMIN を併有する利用者を厳密一致で判定すると ADMIN 資格を取りこぼす。
+     * <p>{@link #getRoleName} は SYSTEM_ADMIN を返さない（戦役 Z-A PR3 で撤去。以前は最強ロールとして返していたため、SYSTEM_ADMIN と
+     * スコープ ADMIN を併有する利用者を厳密一致で判定すると ADMIN 資格を取りこぼした）。
      * ADMIN 判定ではプラットフォームロールを混ぜず、指定スコープの割当を直接確認する。</p>
      */
     public boolean isAdmin(Long userId, Long scopeId, String scopeType) {

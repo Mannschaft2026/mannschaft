@@ -328,7 +328,8 @@ class ShiftDeletedParentConcealmentContractIT extends AbstractMySqlIntegrationTe
             callRun(role, "revoke", scheduleId, runId).andExpect(status().isNoContent());
         }
         // SYSTEM_ADMIN 単独（所属なし）の確定・破棄は共通ゲートが越境者と同一の404（SHIFT_024）で拒否する（戦役 Z-A PR3）。
-        // detail は run 専用の直書き短絡（requireRunAdminConcealed）が残るため従来どおり通る（Z-C で撤去）。
+        // detail は run 専用の直書き短絡（requireRunAdminConcealed）が残るため従来どおり 200 で通る。これは残存する素通しを
+        // そのまま固定している期待値であり、Z-C で 404 に反転予定（台帳で追跡）。反転時はこの期待値を isNotFound() へ変える。
         Long systemAdminRunId = run(scheduleId);
         callRun("SYSTEM_ADMIN", "detail", scheduleId, systemAdminRunId).andExpect(status().isOk());
         for (String operation : List.of("confirm", "revoke")) {
