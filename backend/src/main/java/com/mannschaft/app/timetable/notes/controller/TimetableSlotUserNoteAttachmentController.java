@@ -1,5 +1,6 @@
 package com.mannschaft.app.timetable.notes.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.timetable.notes.dto.AttachmentConfirmRequest;
@@ -71,6 +72,7 @@ public class TimetableSlotUserNoteAttachmentController {
                 .body(ApiResponse.of(AttachmentResponse.from(entity)));
     }
 
+    @SupportAccessDenied
     @GetMapping("/attachments/{attachmentId}/download-url")
     @Operation(summary = "ダウンロード用 Pre-signed URL 発行（5分 TTL）")
     public ResponseEntity<ApiResponse<AttachmentDownloadUrlResponse>> downloadUrl(

@@ -1,5 +1,6 @@
 package com.mannschaft.app.payment.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.payment.service.PaymentCsvExportService;
@@ -45,6 +46,7 @@ public class TeamPaymentExportController {
      * @param itemId 支払い項目 ID（パスパラメータ）
      * @return 200 OK + CSV バイト列（Content-Type: text/csv; charset=utf-8）
      */
+    @SupportAccessDenied
     @GetMapping("/payments/export")
     @Operation(summary = "支払い明細 CSV エクスポート（F08.9 P8）")
     public ResponseEntity<byte[]> exportPaymentsCsv(

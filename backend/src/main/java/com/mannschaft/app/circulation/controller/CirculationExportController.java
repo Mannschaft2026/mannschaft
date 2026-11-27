@@ -1,5 +1,6 @@
 package com.mannschaft.app.circulation.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.circulation.dto.ExportRequestResponse;
 import com.mannschaft.app.circulation.dto.ExportStatusResponse;
 import com.mannschaft.app.circulation.service.CirculationExportService;
@@ -37,6 +38,7 @@ import java.net.URI;
  * 認証主体の {@code actorId} のみを Service に渡す。</p>
  */
 @RestController
+@SupportAccessDenied
 @RequestMapping("/api/v1/circulations/{documentId}/export")
 @Tag(name = "回覧板（PDFエクスポート）", description = "F05.2 Phase 11 第四陣 4-C 押印済み証跡 PDF エクスポート")
 @RequiredArgsConstructor

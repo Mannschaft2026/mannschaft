@@ -1,6 +1,5 @@
 package com.mannschaft.app.config;
 
-import com.mannschaft.app.admin.filter.AdminImpersonationFilter;
 import com.mannschaft.app.advertising.campaign.filter.AdPublicEndpointRateLimitFilter;
 import com.mannschaft.app.analytics.filter.PageViewBeaconRateLimitFilter;
 import com.mannschaft.app.common.CommonErrorCode;
@@ -9,6 +8,7 @@ import com.mannschaft.app.common.ratelimit.ValkeyRateLimiter;
 import com.mannschaft.app.dashboard.DashboardScopeTabRateLimitFilter;
 import com.mannschaft.app.event.EventDelegationRateLimitFilter;
 import com.mannschaft.app.proxy.ProxyInputContextFilter;
+import com.mannschaft.app.supportaccess.filter.SupportAccessFilter;
 import com.mannschaft.app.publicview.filter.PublicApiRateLimitFilter;
 import com.mannschaft.app.recruitment.filter.MarketMutationRateLimitFilter;
 import com.mannschaft.app.schedule.ScheduleDelegationRateLimitFilter;
@@ -37,7 +37,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 /**
  * セキュリティ設定。JwtAuthenticationFilter を UsernamePasswordAuthenticationFilter の前に挿入し、
  * Bearer トークンによるステートレス認証を実現する。
- * ProxyInputContextFilter は JwtAuthenticationFilter の直後に実行される。
+ * ProxyInputContextFilter は JwtAuthenticationFilter の直後、SupportAccessFilter（F10.9）はその次に実行される。
  *
  * <p>{@code @EnableMethodSecurity(prePostEnabled = true)} により {@code @PreAuthorize} /
  * {@code @PostAuthorize} が有効化される（認可基盤根治 Phase 3）。</p>
@@ -59,8 +59,8 @@ public class SecurityConfig {
      * 弱結合化しているのと同じ、コードベース内で実証済みのパターンに合わせる。
      */
     private final ObjectProvider<ParentalConsentGateFilter> parentalConsentGateFilterProvider;
-    private final AdminImpersonationFilter adminImpersonationFilter;
     private final ProxyInputContextFilter proxyInputContextFilter;
+    private final SupportAccessFilter supportAccessFilter;
     private final PublicApiRateLimitFilter publicApiRateLimitFilter;
     private final AdPublicEndpointRateLimitFilter adPublicEndpointRateLimitFilter;
     private final PageViewBeaconRateLimitFilter pageViewBeaconRateLimitFilter;
@@ -73,14 +73,14 @@ public class SecurityConfig {
     private final ObjectProvider<EarlyErrorResponseWriter> earlyErrorResponseWriterProvider;
 
     /**
-     * F10.1: AdminImpersonationFilter の @Component によるサーブレットフィルター自動登録を無効化。
+     * F10.9 サポート閲覧: SupportAccessFilter の @Component によるサーブレットフィルター自動登録を無効化。
      * Spring Security フィルターチェーン経由（addFilterAfter）のみで動作させ、
-     * JWT 認証後の確定した SecurityContext を使って SYSTEM_ADMIN 判定を行う。
+     * JWT 認証後に確定した SecurityContext（運営者の ROLE_SYSTEM_ADMIN）を検証してから本人の認証へ作り直す。
      */
     @Bean
-    public FilterRegistrationBean<AdminImpersonationFilter> adminImpersonationFilterRegistration() {
-        FilterRegistrationBean<AdminImpersonationFilter> registration =
-                new FilterRegistrationBean<>(adminImpersonationFilter);
+    public FilterRegistrationBean<SupportAccessFilter> supportAccessFilterRegistration() {
+        FilterRegistrationBean<SupportAccessFilter> registration =
+                new FilterRegistrationBean<>(supportAccessFilter);
         registration.setEnabled(false);
         return registration;
     }
@@ -593,21 +593,27 @@ public class SecurityConfig {
                         .ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN)))
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
-        // F01.9 保護者同意ゲート: JWT 認証直後に動かし、確定した SecurityContext の ppc クレームを見て
+        // F14.1 代理入力 → F10.9 サポート閲覧の順に JWT 認証の直後へ置く。サポート閲覧フィルターは、
+        // 検証のうえ認証を「本人の ID ＋ 本人のロール」に作り直す（運営者の権限は引き継がない）。
+        // 本人の認証に作り直した後で保護者同意ゲート・各レートリミット・認可（AuthorizationFilter）が動くよう、
+        // それらはすべて SupportAccessFilter の後ろに登録する（本人の状態ゲートはフィルター内でも毎回判定する）。
+        http
+            .addFilterAfter(proxyInputContextFilter, JwtAuthenticationFilter.class)
+            .addFilterAfter(supportAccessFilter, ProxyInputContextFilter.class);
+
+        // F01.9 保護者同意ゲート: 確定した SecurityContext の ppc クレームを見て
         // 保護者同意待ちユーザーの許可リスト外 API を 403 AUTH_070 で遮断する（401 は返さない）。
         // ObjectProvider で遅延解決し、Bean が存在するとき（本番・フル @SpringBootTest）のみ差す。
         // スライステスト（SecurityConfig 最小構成）では Bean 不在で getIfAvailable()==null → スキップ。
-        // 呼び出し位置は従来どおり proxyInputContextFilter 等の後段フィルタ登録より前に保ち、
-        // フィルタ順序（JwtAuthenticationFilter 直後）を不変に保つ。
         ParentalConsentGateFilter gateFilter = parentalConsentGateFilterProvider.getIfAvailable();
         if (gateFilter != null) {
-            http.addFilterAfter(gateFilter, JwtAuthenticationFilter.class);
+            http.addFilterAfter(gateFilter, SupportAccessFilter.class);
         }
 
         MarketMutationRateLimitFilter marketMutationRateLimitFilter =
                 marketMutationRateLimitFilterProvider.getIfAvailable();
         if (marketMutationRateLimitFilter != null) {
-            http.addFilterAfter(marketMutationRateLimitFilter, JwtAuthenticationFilter.class);
+            http.addFilterAfter(marketMutationRateLimitFilter, SupportAccessFilter.class);
         }
 
         http
@@ -615,19 +621,16 @@ public class SecurityConfig {
             .addFilterBefore(adPublicEndpointRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
             // F10.8 計測ビーコン（IP・60req/分）。未認証を許容する公開 POST のため JWT 認証より前段で制限する。
             .addFilterBefore(pageViewBeaconRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterAfter(proxyInputContextFilter, JwtAuthenticationFilter.class)
-            // F10.1 管理者変身: JWT 認証後に動かし、SYSTEM_ADMIN 判定後に principal を置き換える
-            .addFilterAfter(adminImpersonationFilter, ProxyInputContextFilter.class)
             // F03.10 代理指定レートリミット（§6・10req/分/ユーザー）。
-            // JWT 認証後に動かし、確定した SecurityContext から userId を解決する。
-            .addFilterAfter(scheduleDelegationRateLimitFilter, JwtAuthenticationFilter.class)
-            .addFilterAfter(eventDelegationRateLimitFilter, JwtAuthenticationFilter.class)
-            // F22.1 scope-tabs 並べ替え連打防止（§5・30req/分/ユーザー）。JWT 認証後に動かす。
-            .addFilterAfter(dashboardScopeTabRateLimitFilter, JwtAuthenticationFilter.class)
-            // F17.2 ⑤相性表示（§8.4・30req/分/userId+villageId）。差分攻撃を村単位で捕捉。JWT 認証後に動かす。
-            .addFilterAfter(villageAffinityRateLimitFilter, JwtAuthenticationFilter.class)
-            // 村招待の受諾（§5.5・10req/分/ユーザー）。トークン総当たりを回数で絞る。JWT 認証後に動かす。
-            .addFilterAfter(villageInvitationAcceptRateLimitFilter, JwtAuthenticationFilter.class);
+            // 認証確定後（サポート閲覧フィルターの後）に動かし、確定した SecurityContext から userId を解決する。
+            .addFilterAfter(scheduleDelegationRateLimitFilter, SupportAccessFilter.class)
+            .addFilterAfter(eventDelegationRateLimitFilter, SupportAccessFilter.class)
+            // F22.1 scope-tabs 並べ替え連打防止（§5・30req/分/ユーザー）。認証確定後に動かす。
+            .addFilterAfter(dashboardScopeTabRateLimitFilter, SupportAccessFilter.class)
+            // F17.2 ⑤相性表示（§8.4・30req/分/userId+villageId）。差分攻撃を村単位で捕捉。認証確定後に動かす。
+            .addFilterAfter(villageAffinityRateLimitFilter, SupportAccessFilter.class)
+            // 村招待の受諾（§5.5・10req/分/ユーザー）。トークン総当たりを回数で絞る。認証確定後に動かす。
+            .addFilterAfter(villageInvitationAcceptRateLimitFilter, SupportAccessFilter.class);
         return http.build();
     }
 }

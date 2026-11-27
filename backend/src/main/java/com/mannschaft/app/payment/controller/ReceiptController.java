@@ -1,5 +1,6 @@
 package com.mannschaft.app.payment.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.security.AuthorizedInService;
@@ -60,6 +61,7 @@ public class ReceiptController {
 
     /** Stripe hosted receipt が使えない場合の、受領者名義 PDF fallback。 */
     @AuthorizedInService
+    @SupportAccessDenied
     @GetMapping("/{memberPaymentId}/receipt/pdf")
     public ResponseEntity<byte[]> downloadReceiptPdf(@PathVariable Long memberPaymentId) {
         byte[] pdf = memberPaymentReceiptPdfService.generate(memberPaymentId, SecurityUtils.getCurrentUserId());

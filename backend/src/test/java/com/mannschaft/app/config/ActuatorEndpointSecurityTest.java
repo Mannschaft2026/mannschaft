@@ -1,7 +1,10 @@
 package com.mannschaft.app.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mannschaft.app.admin.filter.AdminImpersonationFilter;
+import com.mannschaft.app.auth.service.RoleClaimResolver;
+import com.mannschaft.app.supportaccess.filter.SupportAccessFilter;
+import com.mannschaft.app.supportaccess.service.SupportAccessGrantValidator;
+import com.mannschaft.app.supportaccess.service.SupportAccessLogRecorder;
 import com.mannschaft.app.advertising.campaign.filter.AdPublicEndpointRateLimitFilter;
 import com.mannschaft.app.auth.service.AuthTokenService;
 import com.mannschaft.app.proxy.ProxyInputContext;
@@ -108,12 +111,14 @@ class ActuatorEndpointSecurityTest {
         }
 
         /**
-         * F10.1: AdminImpersonationFilter の本物インスタンス。ObjectMapper のみに依存。
-         * X-Admin-Impersonate-User-Id ヘッダーが無いリクエストでは何もせず chain に通す。
+         * F10.9: SupportAccessFilter の本物インスタンス（依存はモック）。
+         * X-Support-Access-Grant-Id ヘッダーが無いリクエストでは何もせず chain に通す。
          */
         @Bean
-        AdminImpersonationFilter adminImpersonationFilter() {
-            return new AdminImpersonationFilter(mock(ObjectMapper.class));
+        SupportAccessFilter supportAccessFilter() {
+            return new SupportAccessFilter(org.mockito.Mockito.mock(SupportAccessGrantValidator.class),
+                    org.mockito.Mockito.mock(SupportAccessLogRecorder.class),
+                    org.mockito.Mockito.mock(RoleClaimResolver.class));
         }
 
         /**

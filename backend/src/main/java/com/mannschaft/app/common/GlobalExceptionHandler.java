@@ -2640,7 +2640,6 @@ public class GlobalExceptionHandler {
             // CMP-261113-1507: F02.7 マイルストーンロック（専用ハンドラ handleMilestoneLocked と同じ 423）。
             Map.entry("MILESTONE_LOCKED", HttpStatus.LOCKED),
             // CMP-261113-1507: 早期拒否フィルタの ErrorCode 化（フィルタが書くステータスと一致させる）。
-            Map.entry("ADMIN_007", HttpStatus.FORBIDDEN),        // 管理者変身はシステム管理者のみ
             Map.entry("PROXY_INPUT_005", HttpStatus.UNAUTHORIZED),
             Map.entry("PROXY_INPUT_006", HttpStatus.FORBIDDEN),
             Map.entry("PROXY_INPUT_007", HttpStatus.FORBIDDEN),
@@ -2656,7 +2655,8 @@ public class GlobalExceptionHandler {
             Map.entry("SUPPORT_ACCESS_006", HttpStatus.CONFLICT),
             Map.entry("SUPPORT_ACCESS_007", HttpStatus.CONFLICT),
             Map.entry("SUPPORT_ACCESS_010", HttpStatus.FORBIDDEN),
-            Map.entry("SUPPORT_ACCESS_011", HttpStatus.TOO_MANY_REQUESTS)
+            Map.entry("SUPPORT_ACCESS_011", HttpStatus.TOO_MANY_REQUESTS),
+            Map.entry("SUPPORT_ACCESS_014", HttpStatus.SERVICE_UNAVAILABLE)
     );
 
     /**

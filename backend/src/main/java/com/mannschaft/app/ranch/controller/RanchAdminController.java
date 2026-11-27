@@ -1,7 +1,6 @@
 package com.mannschaft.app.ranch.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.mannschaft.app.admin.filter.AdminImpersonationFilter;
 import com.mannschaft.app.auth.UserOperationErrorCode;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.ApiResponse;
@@ -20,6 +19,8 @@ import com.mannschaft.app.ranch.dto.RanchPolicyPublicationResponse;
 import com.mannschaft.app.ranch.dto.RanchPolicySummary;
 import com.mannschaft.app.ranch.service.RanchAdminFacade;
 import com.mannschaft.app.ranch.service.RanchSourceAdminFacade;
+import com.mannschaft.app.supportaccess.SupportAccessHeaders;
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.mannschaft.app.ranch.reward.RanchRewardSourceType;
 import com.mannschaft.app.common.ranchsource.api.SourceOutboxHealthSummary;
 import com.mannschaft.app.common.ranchsource.api.SourceOutboxAdminRetryAck;
@@ -90,11 +91,13 @@ public class RanchAdminController {
                 .header(HttpHeaders.CACHE_CONTROL, "private, no-store").body(ApiResponse.of(result.response()));
     }
 
-    /** system-adminの変身filter省略時も、牧場の私的管理入口では変身指定を拒否する。 */
+    /** サポート閲覧（代理）の指定は、牧場の私的管理入口では常に拒否する（フィルターの判定漏れの多重防御）。 */
     private Long requireAdminSelfAccess(HttpServletRequest request, HttpServletResponse response) {
         Long actorId = access.requireSelfAccess(request, response);
         response.setHeader(HttpHeaders.CACHE_CONTROL, "private, no-store");
-        if (request.getHeader(AdminImpersonationFilter.HEADER_IMPERSONATE) != null) {
+        if (request.getHeader(SupportAccessHeaders.GRANT_ID) != null
+                || request.getHeader(SupportAccessHeaders.LEGACY_IMPERSONATE) != null
+                || SupportAccessContextHolder.isActive()) {
             throw new BusinessException(UserOperationErrorCode.NOT_ALLOWED);
         }
         return actorId;

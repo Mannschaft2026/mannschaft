@@ -4,6 +4,7 @@ import com.mannschaft.app.supportaccess.SupportAccessAuditAction;
 import com.mannschaft.app.supportaccess.SupportAccessEventKind;
 import com.mannschaft.app.supportaccess.context.SupportAccessContext;
 import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
+import com.mannschaft.app.supportaccess.context.SupportAccessWritable;
 import com.mannschaft.app.supportaccess.entity.SupportAccessLogEntity;
 import com.mannschaft.app.supportaccess.event.SupportAccessGrantChangedEvent;
 import com.mannschaft.app.supportaccess.repository.SupportAccessLogRepository;
@@ -23,8 +24,9 @@ import java.util.regex.Pattern;
 /**
  * F10.9 閲覧記録を業務 TX から独立して書く（MfaFailureAuditRecorder と同じ型: 別 Bean・REQUIRES_NEW）。
  *
- * <p>各 public メソッドは {@code REQUIRES_NEW}。代理中でも書込可能な接続で書く
- * （{@link SupportAccessContextHolder#callWithWritableConnection}）。業務 TX が巻き戻っても記録は残る。
+ * <p>各 public メソッドは {@code REQUIRES_NEW}。代理中でも書込可能な接続で書く。接続は TX 開始時（メソッド本体の前）に
+ * 取得されるため、{@link SupportAccessWritable}（{@code SupportAccessWritableAspect}）が TX の外側で書込可能な区間を開く。
+ * 業務 TX が巻き戻っても記録は残る。
  * 呼び出し側（SupportAccessFilter）は {@link #recordView} が失敗したら 503 で fail-closed にする。</p>
  *
  * <p><b>デッドロック注意</b>: 閲覧記録は grant への FK を持つ。呼び出し側の業務 TX が同じ grant 行を
@@ -32,6 +34,7 @@ import java.util.regex.Pattern;
  * GrantService は grant を書き換える<b>前</b>にこのクラスを呼ぶこと。</p>
  */
 @Component
+@SupportAccessWritable
 public class SupportAccessLogRecorder {
 
     private static final int MAX_PATH_LENGTH = 512;

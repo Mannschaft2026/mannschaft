@@ -1,5 +1,6 @@
 package com.mannschaft.app.service.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.PagedResponse;
 import com.mannschaft.app.common.security.AuthorizedInService;
@@ -372,6 +373,7 @@ public class ServiceRecordController {
     /**
      * CSV エクスポートする。
      */
+    @SupportAccessDenied
     @GetMapping("/teams/{teamId}/service-records/export")
     @Operation(summary = "CSVエクスポート")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "エクスポート成功")

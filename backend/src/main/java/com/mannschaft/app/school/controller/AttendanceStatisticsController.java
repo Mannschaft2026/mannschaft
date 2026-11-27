@@ -1,5 +1,6 @@
 package com.mannschaft.app.school.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.security.SelfScopedEndpoint;
@@ -77,6 +78,7 @@ public class AttendanceStatisticsController {
      * @param to     終了日（YYYY-MM-DD）
      * @return CSV ファイル（Content-Disposition: attachment）
      */
+    @SupportAccessDenied
     @GetMapping("/teams/{teamId}/attendance/export")
     @Operation(summary = "出欠 CSV エクスポート", description = "担任が指定期間のクラス出欠データを CSV 形式でエクスポートする。")
     public ResponseEntity<byte[]> exportCsv(

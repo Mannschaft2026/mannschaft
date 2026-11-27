@@ -1,10 +1,12 @@
 package com.mannschaft.app.config;
 
 import com.mannschaft.app.config.webmvc.UserZoneLocalDateTimeFormatter;
+import com.mannschaft.app.supportaccess.web.SupportAccessHandlerInterceptor;
 import java.time.LocalDateTime;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.format.FormatterRegistry;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
@@ -36,6 +38,15 @@ public class WebMvcConfig implements WebMvcConfigurer {
         this.scopeSlugIdConverter = scopeSlugIdConverter;
         this.orgScopeIdConverter = orgScopeIdConverter;
         this.teamScopeIdConverter = teamScopeIdConverter;
+    }
+
+    /**
+     * F10.9 サポート閲覧の第2層: {@code @SupportAccessDenied} の付いた handler を代理中に拒否する。
+     * 依存を持たない（状態は SupportAccessContextHolder）ため、スライステストでも追加の Bean を要しない。
+     */
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(new SupportAccessHandlerInterceptor());
     }
 
     @Override

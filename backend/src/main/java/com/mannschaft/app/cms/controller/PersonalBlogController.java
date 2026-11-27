@@ -1,5 +1,6 @@
 package com.mannschaft.app.cms.controller;
 
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.mannschaft.app.cms.dto.BlogPostResponse;
 import com.mannschaft.app.cms.dto.BlogReactionResponse;
 import com.mannschaft.app.cms.dto.BlogSettingsResponse;
@@ -168,7 +169,7 @@ public class PersonalBlogController {
             @Valid @RequestBody PublishRequest request, jakarta.servlet.http.HttpServletRequest servletRequest) {
         Long actor = SecurityUtils.getCurrentUserId();
         BlogPostResponse response = ranchNative.changeStatus(id, actor, request,
-                servletRequest.getAttribute("originalAdminId") != null)
+                SupportAccessContextHolder.isActive())
                 .orElseGet(() -> postService.changeStatus(id, actor, request));
         return ResponseEntity.ok(ApiResponse.of(scopeSlugResolver.attach(response)));
     }
@@ -212,7 +213,7 @@ public class PersonalBlogController {
             @Valid @RequestBody SelfReviewRequest request, jakarta.servlet.http.HttpServletRequest servletRequest) {
         Long actor = SecurityUtils.getCurrentUserId();
         BlogPostResponse response = ranchNative.selfReview(id, actor, request,
-                servletRequest.getAttribute("originalAdminId") != null)
+                SupportAccessContextHolder.isActive())
                 .orElseGet(() -> postService.selfReview(id, actor, request));
         return ResponseEntity.ok(ApiResponse.of(scopeSlugResolver.attach(response)));
     }

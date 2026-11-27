@@ -1,5 +1,6 @@
 package com.mannschaft.app.receipt.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.PagedResponse;
 import com.mannschaft.app.receipt.ReceiptArchiveKind;
@@ -73,6 +74,7 @@ public class ReceiptMyController {
      * {@code RECEIPT_NOT_FOUND}（404）で秘匿する。PDF 生成は引き当てた Entity にのみ適用される。</p>
      */
     @AuthorizedInService
+    @SupportAccessDenied
     @GetMapping("/{id}/pdf")
     @Operation(summary = "自分宛の領収書PDFダウンロード")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "ダウンロード成功")

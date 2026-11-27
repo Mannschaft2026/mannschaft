@@ -1,5 +1,6 @@
 package com.mannschaft.app.chat.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.chat.dto.DownloadUrlResponse;
 import com.mannschaft.app.chat.dto.UploadUrlRequest;
 import com.mannschaft.app.chat.dto.UploadUrlResponse;
@@ -104,6 +105,7 @@ public class ChatUploadController {
      * （{@link ChatMessageService#generateAttachmentDownloadUrl}）を適用する。
      * チャットが管理していないキーは fail-closed で拒否する。</p>
      */
+    @SupportAccessDenied
     @GetMapping("/{fileKey}/download-url")
     @Operation(summary = "ダウンロードURL発行")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "発行成功")

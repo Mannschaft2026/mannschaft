@@ -1,5 +1,6 @@
 package com.mannschaft.app.schedule.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.NameResolverService;
 import com.mannschaft.app.schedule.dto.AttendanceResponse;
@@ -263,6 +264,7 @@ public class TeamScheduleController {
      *
      * <p><b>認可（認可根治 Wave3-B6）</b>: getAttendances と同じく当該チームのメンバーのみ。</p>
      */
+    @SupportAccessDenied
     @GetMapping("/{scheduleId}/attendances/export")
     @Operation(summary = "チーム出欠CSVエクスポート")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "エクスポート成功")

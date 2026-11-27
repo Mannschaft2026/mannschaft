@@ -1,0 +1,44 @@
+# F10.9 サポート閲覧（戦役Z-B）: GET の副作用の洗い出し表。
+#
+# 代理閲覧は「閲覧のみ」。DB 接続は READ ONLY のため書込は例外になるが、GET が副作用（閲覧数・既読・
+# 初回作成・履歴・状態遷移）を持つ API は、代理中に 500 にしない／本人のデータを変えないよう分類して扱う。
+#
+# 書式: <src/main/java/com/mannschaft/app からの相対パス>|<SKIP|DENY|NONE>|<理由>（理由に | は使わない）
+#   SKIP … 代理中は副作用だけを行わず、閲覧結果は返す（Service が SupportAccessContextHolder で判定する）
+#   DENY … 代理中は拒否する（資格情報・書出し・請求。Service が SupportAccessContextHolder で判定、または @SupportAccessDenied）
+#   NONE … GET から副作用に到達しない／副作用が閲覧記録・メトリクスのみ。理由が必須
+#
+# 洗い出しの起点: GetMapping から呼ばれる非 readOnly の @Transactional、increment*/markAs*/record*、getOrCreate*、
+# AFTER_COMMIT の発火。番人 SupportAccessGuardTest.S14 が、ここに載らない新規の候補（Service.java 内の
+# increment*View*/markAsRead*/record*Viewed*/*_VIEWED）を検出する。分類を変えるときはこの表と実装を同時に直すこと。
+
+# --- SKIP: 代理中は副作用だけ行わない ---
+knowledgebase/service/KbPageService.java|SKIP|getPage の閲覧数加算（DB と Valkey の重複除外キー）を代理中は行わない
+payment/service/PaymentRequestService.java|SKIP|viewByTeam の SENT から VIEWED への遷移（発行側から見える状態変化）を代理中は行わない
+search/service/GlobalSearchQueryService.java|SKIP|search の検索履歴の記録を代理中は行わない
+advertising/campaign/service/UserAdPreferenceService.java|SKIP|getOrCreateForUser の既定行の作成を代理中は行わず、既定値の一時オブジェクトで応答する
+notification/confirmable/service/ConfirmableNotificationSettingsService.java|SKIP|getOrCreate の既定行の作成を代理中は行わず、既定値の一時オブジェクトで応答する
+timetable/personal/service/PersonalTimetableSettingsService.java|SKIP|getOrCreate の既定行の作成を代理中は行わず、既定値の一時オブジェクトで応答する
+
+# --- DENY: 代理中は拒否する ---
+billing/api/BillingInvoiceHistoryService.java|DENY|請求詳細は閲覧監査（BILLING_INVOICE_VIEWED）を伴う請求情報。/me/billing は PathPolicy でも拒否し、Service でも拒否する
+schedule/service/IcalService.java|DENY|getOrCreateToken は購読トークン（資格情報）の読取と未発行時の発行。recordPoll はトークン認証の公開フィードで JWT も代理ヘッダーも通らない
+receipt/service/ReceiptMyService.java|DENY|領収書 PDF の書出し（初回取得で原本を保存する書込も伴う）。Controller も @SupportAccessDenied
+
+# --- NONE: 到達しない／閲覧記録・メトリクスのみ ---
+auth/service/AuditLogService.java|NONE|監査記録そのもの。代理中も書込可能な接続で必ず書く（GET の業務副作用ではない）
+auth/service/AuthOAuthLinkService.java|NONE|OAuth 連携のコールバックはブラウザのリダイレクトでヘッダーを付けられず代理にならない。/auth/** は PathPolicy でも拒否
+bulletin/service/BulletinReadStatusService.java|NONE|既読化は POST /read（書込メソッドは SUPPORT_ACCESS_003。GET の一覧・詳細は既読化しない）
+chat/service/ChatMemberService.java|NONE|既読化は POST /read（書込メソッドは SUPPORT_ACCESS_003）
+mention/service/MentionService.java|NONE|既読化は POST /{id}/read（書込メソッドは SUPPORT_ACCESS_003）
+notification/service/NotificationService.java|NONE|既読化は POST /{id}/read と全件既読の書込メソッド（SUPPORT_ACCESS_003）
+pointcard/service/PointCardGroupService.java|NONE|提示モード開始（POINT_CARD_VIEWED の記録）は POST /presentation-start（SUPPORT_ACCESS_003）
+promotion/service/PromotionDeliveryService.java|NONE|既読化は PATCH /read（書込メソッドは SUPPORT_ACCESS_003）
+social/announcement/AnnouncementFeedService.java|NONE|既読化は POST /read と全件既読の書込メソッド（SUPPORT_ACCESS_003）
+social/announcement/AnnouncementReadCommandService.java|NONE|既読化は POST /read と全件既読の書込メソッド（SUPPORT_ACCESS_003）
+social/announcement/AnnouncementReadService.java|NONE|既読化は POST /read と全件既読の書込メソッド（SUPPORT_ACCESS_003）
+village/service/VillageAffinityService.java|NONE|getAffinity の副作用は閲覧監査のみ。AuditLogService 経由で書込可能な接続に書き、代理中は actor を運営者にする
+weather/service/WeatherForecastService.java|NONE|getForecast の副作用はキャッシュ命中率などのメトリクスのみ（DB へ書かない）
+forms/service/FormCsvExportService.java|NONE|CSV 書出しは PathPolicy（export/csv）と @SupportAccessDenied で到達しない
+payment/service/PaymentCsvExportService.java|NONE|CSV 書出しは PathPolicy（export/csv）と @SupportAccessDenied で到達しない
+resume/service/ResumeExportService.java|NONE|書出しは PathPolicy（export）と @SupportAccessDenied で到達しない

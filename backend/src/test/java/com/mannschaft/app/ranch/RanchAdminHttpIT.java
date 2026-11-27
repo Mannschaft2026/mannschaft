@@ -1,6 +1,6 @@
 package com.mannschaft.app.ranch;
 
-import com.mannschaft.app.admin.filter.AdminImpersonationFilter;
+import com.mannschaft.app.supportaccess.SupportAccessHeaders;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -256,7 +256,7 @@ class RanchAdminHttpIT extends AbstractMySqlIntegrationTest {
     @Test
     void impersonationCannotReachControlPlane() throws Exception {
         mvc.perform(get(HISTORY).with(user(administrator.toString()).roles("SYSTEM_ADMIN"))
-                        .header(AdminImpersonationFilter.HEADER_IMPERSONATE, ordinary.toString()))
-                .andExpect(status().isForbidden());
+                        .header(SupportAccessHeaders.LEGACY_IMPERSONATE, ordinary.toString()))
+                .andExpect(status().isBadRequest());
     }
 }

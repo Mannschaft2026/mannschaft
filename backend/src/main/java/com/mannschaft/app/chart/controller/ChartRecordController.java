@@ -1,5 +1,6 @@
 package com.mannschaft.app.chart.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.chart.dto.ChartRecordResponse;
 import com.mannschaft.app.chart.dto.ChartRecordSummaryResponse;
 import com.mannschaft.app.chart.dto.CopyChartRequest;
@@ -157,6 +158,7 @@ public class ChartRecordController {
      * 16. カルテPDFエクスポート
      * GET /api/v1/teams/{teamId}/charts/{id}/pdf
      */
+    @SupportAccessDenied
     @GetMapping("/{id}/pdf")
     @Operation(summary = "カルテPDFエクスポート")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "PDF生成成功")

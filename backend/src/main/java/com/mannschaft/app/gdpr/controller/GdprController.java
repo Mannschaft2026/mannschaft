@@ -1,5 +1,6 @@
 package com.mannschaft.app.gdpr.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.chart.repository.ChartRecordRepository;
 import com.mannschaft.app.chat.repository.ChatMessageRepository;
@@ -67,6 +68,7 @@ public class GdprController {
             + "（DataExportRequest はカテゴリと再認証情報のみでユーザー識別子を持たない）")
     @AlwaysReachable(category = AlwaysReachableCategory.PUBLIC_LIFELINE,
             reason = "本人のデータ可搬権をGate状態にかかわらず保障するため")
+    @SupportAccessDenied
     @PostMapping("/data-export")
     @Operation(summary = "データエクスポートリクエスト")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "202", description = "エクスポートリクエスト受付")
@@ -98,6 +100,7 @@ public class GdprController {
             + "（DataExportService#getExportStatus・エンドポイントは引数を取らない）")
     @AlwaysReachable(category = AlwaysReachableCategory.PUBLIC_LIFELINE,
             reason = "本人がデータ出力処理の進捗を継続確認できるようにするため")
+    @SupportAccessDenied
     @GetMapping("/data-export/status")
     @Operation(summary = "エクスポートステータス取得")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")
@@ -119,6 +122,7 @@ public class GdprController {
             + "（DataExportService#getDownloadUrl・エンドポイントは引数を取らない）")
     @AlwaysReachable(category = AlwaysReachableCategory.PUBLIC_LIFELINE,
             reason = "完了済みの本人データ出力をGate状態にかかわらず取得可能にするため")
+    @SupportAccessDenied
     @GetMapping("/data-export/download")
     @Operation(summary = "エクスポートダウンロードURL取得")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "URL取得成功")

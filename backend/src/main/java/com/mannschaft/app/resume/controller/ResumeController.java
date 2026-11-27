@@ -1,5 +1,6 @@
 package com.mannschaft.app.resume.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.featuregate.RequireFeature;
@@ -294,6 +295,7 @@ public class ResumeController {
      * @return presigned URL・ファイル名・有効期限
      */
     @AuthorizedInService
+    @SupportAccessDenied
     @GetMapping("/{id}/export")
     @Operation(summary = "正式出力（R2 永続保存・presigned URL 返却）")
     public ResponseEntity<ApiResponse<ResumeExportResponse>> exportResume(

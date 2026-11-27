@@ -1,6 +1,6 @@
 package com.mannschaft.app.diagnosis;
 
-import com.mannschaft.app.admin.filter.AdminImpersonationFilter;
+import com.mannschaft.app.supportaccess.SupportAccessHeaders;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
@@ -16,7 +16,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** 実 SecurityConfig/AdminImpersonationFilter 経由で本人の私有情報を保護する。 */
+/** 実 SecurityConfig/SupportAccessFilter 経由で本人の私有情報を保護する。 */
 @AutoConfigureMockMvc
 @EnabledIf("com.mannschaft.app.support.test.AbstractMySqlIntegrationTest#isDockerAvailable")
 class DiagnosisPrivateSecurityIT extends AbstractMySqlIntegrationTest {
@@ -34,18 +34,24 @@ class DiagnosisPrivateSecurityIT extends AbstractMySqlIntegrationTest {
         for(String path : new String[]{"/api/v1/me/birth-profile","/api/v1/me/diagnoses/results","/api/v1/me/diagnoses/sessions/pending"})
             mvc.perform(get(path)).andExpect(status().isUnauthorized());
     }
-    @Test @DisplayName("管理者変身は本人私有API403、本人の管理者利用は許可")
+    @Test @DisplayName("旧・管理者変身ヘッダーは400（本人私有APIへ到達しない）、本人の管理者利用は許可")
     void 管理者変身を拒否() throws Exception {
         for(String path : new String[]{"/api/v1/me/birth-profile","/api/v1/me/diagnoses/results","/api/v1/me/diagnoses/sessions/pending"}) {
             mvc.perform(get(path).with(user("999999999").roles("SYSTEM_ADMIN"))
-                    .header(AdminImpersonationFilter.HEADER_IMPERSONATE,owner)).andExpect(status().isForbidden());
+                    .header(SupportAccessHeaders.LEGACY_IMPERSONATE,owner)).andExpect(status().isBadRequest());
             mvc.perform(get(path).with(user(owner).roles("SYSTEM_ADMIN"))).andExpect(status().isOk());
         }
     }
-    @Test @DisplayName("一般ユーザーの偽装headerは403、通常本人閲覧は許可")
+    @Test @DisplayName("一般ユーザーの旧ヘッダー偽装は400、通常本人閲覧は許可")
     void 一般偽装ヘッダーを拒否() throws Exception {
         mvc.perform(get("/api/v1/me/birth-profile").with(user(owner).roles("MEMBER"))
-                .header(AdminImpersonationFilter.HEADER_IMPERSONATE,owner)).andExpect(status().isForbidden());
+                .header(SupportAccessHeaders.LEGACY_IMPERSONATE,owner)).andExpect(status().isBadRequest());
         mvc.perform(get("/api/v1/me/birth-profile").with(user(owner).roles("MEMBER"))).andExpect(status().isOk());
+    }
+    @Test @DisplayName("存在しない許可（grant）のヘッダーは404で、本人私有APIへ到達しない")
+    void 存在しないgrantは404() throws Exception {
+        for(String path : new String[]{"/api/v1/me/birth-profile","/api/v1/me/diagnoses/results","/api/v1/me/diagnoses/sessions/pending"})
+            mvc.perform(get(path).with(user("999999999").roles("SYSTEM_ADMIN"))
+                    .header(SupportAccessHeaders.GRANT_ID, java.util.UUID.randomUUID().toString())).andExpect(status().isNotFound());
     }
 }

@@ -1,5 +1,6 @@
 package com.mannschaft.app.gallery.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.PagedResponse;
 import com.mannschaft.app.gallery.dto.AlbumResponse;
@@ -166,6 +167,7 @@ public class PhotoAlbumController {
     /**
      * アルバム一括ダウンロード（ZIP）。
      */
+    @SupportAccessDenied
     @GetMapping("/{id}/download")
     @Operation(summary = "アルバム一括ダウンロード")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "ダウンロードURL生成成功")

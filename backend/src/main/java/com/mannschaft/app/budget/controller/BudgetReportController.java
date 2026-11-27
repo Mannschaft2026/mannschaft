@@ -1,5 +1,6 @@
 package com.mannschaft.app.budget.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.budget.dto.CreateReportRequest;
 import com.mannschaft.app.budget.dto.DownloadUrlResponse;
 import com.mannschaft.app.budget.dto.ReportResponse;
@@ -61,6 +62,7 @@ public class BudgetReportController {
      * @param reportId レポートID
      * @return ダウンロードURL
      */
+    @SupportAccessDenied
     @GetMapping("/reports/{reportId}/download-url")
     public ApiResponse<DownloadUrlResponse> getDownloadUrl(@PathVariable Long reportId) {
         return ApiResponse.of(budgetReportService.getDownloadUrl(reportId));

@@ -8,6 +8,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import com.mannschaft.app.supportaccess.context.SupportAccessContextTaskDecorator;
 import org.springframework.core.task.TaskDecorator;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -52,7 +53,7 @@ public class AsyncConfig {
         executor.setMaxPoolSize(5);
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("event-");
-        executor.setTaskDecorator(new MdcTaskDecorator());
+        executor.setTaskDecorator(contextPropagatingDecorator());
         // Issue #2953: 投入拒否を silent drop にしない。
         // 拒否方針そのもの（AbortPolicy = 例外送出）は 168 箇所の @Async("event-pool") 全体に効くため変更せず、
         // 「拒否が起きた事実」を構造化 ERROR ログで観測できるようにするだけに留める。
@@ -91,7 +92,7 @@ public class AsyncConfig {
         executor.setMaxPoolSize(10);
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("withdrawal-");
-        executor.setTaskDecorator(new MdcTaskDecorator());
+        executor.setTaskDecorator(contextPropagatingDecorator());
         executor.initialize();
         return executor;
     }
@@ -118,7 +119,7 @@ public class AsyncConfig {
         executor.setMaxPoolSize(10);
         executor.setQueueCapacity(500); // 100件バッチ × 6ドメイン = 600タスクに対応
         executor.setThreadNamePrefix("purge-");
-        executor.setTaskDecorator(new MdcTaskDecorator());
+        executor.setTaskDecorator(contextPropagatingDecorator());
         executor.initialize();
         return executor;
     }
@@ -170,7 +171,7 @@ public class AsyncConfig {
         executor.setMaxPoolSize(8);
         executor.setQueueCapacity(500); // SPA ユーザー 500 人同時閲覧分のバースト吸収
         executor.setThreadNamePrefix("page-view-");
-        executor.setTaskDecorator(new MdcTaskDecorator());
+        executor.setTaskDecorator(contextPropagatingDecorator());
         // DiscardPolicy 相当（飽和時は捨てる）＋捨てた数を可視化。既存プールは AbortPolicy 既定なので明示必須。
         // カウンタが無い（レジストリ欠落）環境では捨てるだけで可視化はスキップする。
         executor.setRejectedExecutionHandler((runnable, poolExecutor) -> {
@@ -221,7 +222,7 @@ public class AsyncConfig {
         executor.setMaxPoolSize(8);
         executor.setQueueCapacity(500); // purge-pool / page-view-pool 前例に揃える
         executor.setThreadNamePrefix("notification-fanout-");
-        executor.setTaskDecorator(new MdcTaskDecorator());
+        executor.setTaskDecorator(contextPropagatingDecorator());
         // 通知は欠損許容でない。飽和時は AbortPolicy（silent drop）ではなく CallerRuns で取りこぼさず実行し、
         // 飽和回数だけをカウンタで可視化する（レジストリ欠落環境では実行のみ・可視化はスキップ）。
         executor.setRejectedExecutionHandler((runnable, poolExecutor) -> {
@@ -304,7 +305,7 @@ public class AsyncConfig {
         executor.setMaxPoolSize(8);
         executor.setQueueCapacity(500); // notification-fanout-pool / purge-pool の前例に揃える
         executor.setThreadNamePrefix("notification-dispatch-");
-        executor.setTaskDecorator(new MdcTaskDecorator());
+        executor.setTaskDecorator(contextPropagatingDecorator());
         // 通知は欠損許容ではない。飽和時も捨てず・例外も投げず、呼び出し元スレッドで実行する（CallerRuns）。
         // 例外を投げないことが本質: 投げると sendOne の REQUIRES_NEW ごとロールバックし通知行が消える。
         executor.setRejectedExecutionHandler((runnable, poolExecutor) -> {
@@ -353,7 +354,7 @@ public class AsyncConfig {
         executor.setMaxPoolSize(4);
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("notification-outbox-");
-        executor.setTaskDecorator(new MdcTaskDecorator());
+        executor.setTaskDecorator(contextPropagatingDecorator());
         executor.setRejectedExecutionHandler((runnable, poolExecutor) -> {
             if (rejectedCounter != null) {
                 rejectedCounter.increment();
@@ -410,7 +411,7 @@ public class AsyncConfig {
         executor.setMaxPoolSize(2);
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("ai-analysis-");
-        executor.setTaskDecorator(new MdcTaskDecorator());
+        executor.setTaskDecorator(contextPropagatingDecorator());
         // 拒否は「静かに捨てる」ではなく可視化する。欠落はしない（後追いバッチが拾う）が、
         // 恒常的に拒否が出るならプール幅か AI 呼び出し頻度の見直しが要るためログで観測できるようにする。
         executor.setRejectedExecutionHandler((runnable, poolExecutor) -> {
@@ -436,9 +437,21 @@ public class AsyncConfig {
         executor.setMaxPoolSize(4);
         executor.setQueueCapacity(50);
         executor.setThreadNamePrefix("job-");
-        executor.setTaskDecorator(new MdcTaskDecorator());
+        executor.setTaskDecorator(contextPropagatingDecorator());
         executor.initialize();
         return executor;
+    }
+
+    /**
+     * 全プール共通の {@link TaskDecorator}: MDC と、F10.9 サポート閲覧（代理）の文脈を非同期スレッドへ伝播する。
+     *
+     * <p>代理中に publish されたイベントの受け手（@Async・AFTER_COMMIT）でも DB 接続が READ ONLY のままになり、
+     * 書込系の副作用が成立しない（受け手側で拒否）。代理でなければ {@link SupportAccessContextTaskDecorator} は何もしない。</p>
+     */
+    static TaskDecorator contextPropagatingDecorator() {
+        MdcTaskDecorator mdc = new MdcTaskDecorator();
+        SupportAccessContextTaskDecorator supportAccess = new SupportAccessContextTaskDecorator();
+        return runnable -> supportAccess.decorate(mdc.decorate(runnable));
     }
 
     /**

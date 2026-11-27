@@ -1,5 +1,6 @@
 package com.mannschaft.app.cms.controller;
 
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.mannschaft.app.cms.dto.AutoSaveRequest;
 import com.mannschaft.app.cms.dto.BlogPostResponse;
 import com.mannschaft.app.cms.dto.UpdatePublicVisibleRequest;
@@ -179,7 +180,7 @@ public class BlogPostController {
             @Valid @RequestBody PublishRequest request, jakarta.servlet.http.HttpServletRequest servletRequest) {
         Long actor = SecurityUtils.getCurrentUserId();
         BlogPostResponse response = ranchNative.changeStatus(id, actor, request,
-                servletRequest.getAttribute("originalAdminId") != null)
+                SupportAccessContextHolder.isActive())
                 .orElseGet(() -> postService.changeStatus(id, actor, request));
         return ResponseEntity.ok(ApiResponse.of(scopeSlugResolver.attach(response)));
     }
@@ -206,9 +207,7 @@ public class BlogPostController {
     public ResponseEntity<ApiResponse<BulkActionResponse>> bulkAction(
             @Valid @RequestBody BulkActionRequest request) {
         Long actor=SecurityUtils.getCurrentUserId();
-        var attributes=org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
-        boolean impersonated=attributes instanceof org.springframework.web.context.request.ServletRequestAttributes servlet
-                && servlet.getRequest().getAttribute("originalAdminId")!=null;
+        boolean impersonated=SupportAccessContextHolder.isActive();
         BulkActionResponse response = ranchNative.bulk(request,actor,impersonated)
                 .orElseGet(() -> postService.bulkAction(request,actor));
         return ResponseEntity.ok(ApiResponse.of(response));

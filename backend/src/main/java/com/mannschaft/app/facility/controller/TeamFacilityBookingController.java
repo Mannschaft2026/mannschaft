@@ -1,5 +1,6 @@
 package com.mannschaft.app.facility.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.PagedResponse;
 import com.mannschaft.app.common.SecurityUtils;
@@ -238,6 +239,7 @@ public class TeamFacilityBookingController {
     /**
      * 確認用PDFを取得する。
      */
+    @SupportAccessDenied
     @GetMapping("/{bookingId}/confirmation-pdf")
     @Operation(summary = "確認PDF")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "PDF生成成功",

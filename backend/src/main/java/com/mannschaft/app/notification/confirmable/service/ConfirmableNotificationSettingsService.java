@@ -1,5 +1,6 @@
 package com.mannschaft.app.notification.confirmable.service;
 
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.mannschaft.app.membership.ScopeType;
 import com.mannschaft.app.notification.confirmable.entity.ConfirmableNotificationSettingsEntity;
 import com.mannschaft.app.notification.confirmable.entity.UnconfirmedVisibility;
@@ -42,6 +43,10 @@ public class ConfirmableNotificationSettingsService {
                                     // defaultSecondReminderMinutes: NULL = リマインドなし（デフォルト）
                                     // senderAlertThresholdPercent: 80%（Entity の @Builder.Default で設定済み）
                                     .build();
+                    // F10.9 サポート閲覧中は、未作成の既定行を DB に作らず既定値の一時オブジェクトで応答する。
+                    if (SupportAccessContextHolder.isActive()) {
+                        return defaultSettings;
+                    }
                     ConfirmableNotificationSettingsEntity saved = settingsRepository.save(defaultSettings);
                     log.info("確認通知設定を新規作成: scopeType={}, scopeId={}", scopeType, scopeId);
                     return saved;

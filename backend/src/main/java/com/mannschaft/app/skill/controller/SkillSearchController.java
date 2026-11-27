@@ -1,5 +1,6 @@
 package com.mannschaft.app.skill.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.skill.SkillStatus;
@@ -52,6 +53,7 @@ public class SkillSearchController {
      * スコープ内の全資格データをCSVとして非同期エクスポートする。
      * 認可: ADMIN・SYSTEM_ADMIN・MANAGE_MEMBER を持つ DEPUTY_ADMIN（F07.5 §2。CMP-261012-0313）
      */
+    @SupportAccessDenied
     @GetMapping("/export")
     public ResponseEntity<ApiResponse<Void>> exportCsv(@PathVariable Long teamId) {
         Long userId = SecurityUtils.getCurrentUserId();

@@ -1,5 +1,6 @@
 package com.mannschaft.app.timetable.personal.service;
 
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -42,6 +43,10 @@ public class PersonalTimetableSettingsService {
     @Transactional
     public PersonalTimetableSettingsEntity getOrCreate(Long userId) {
         return repository.findById(userId).orElseGet(() -> {
+            // F10.9 サポート閲覧中は、未作成の既定行を DB に作らず既定値の一時オブジェクトで応答する。
+            if (SupportAccessContextHolder.isActive()) {
+                return PersonalTimetableSettingsEntity.builder().userId(userId).build();
+            }
             PersonalTimetableSettingsEntity created = repository.save(
                     PersonalTimetableSettingsEntity.builder()
                             .userId(userId)

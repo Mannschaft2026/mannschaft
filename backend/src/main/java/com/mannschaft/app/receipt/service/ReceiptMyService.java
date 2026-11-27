@@ -1,5 +1,7 @@
 package com.mannschaft.app.receipt.service;
 
+import com.mannschaft.app.supportaccess.SupportAccessErrorCode;
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.PagedResponse;
 import com.mannschaft.app.receipt.ReceiptArchiveKind;
@@ -103,6 +105,10 @@ public class ReceiptMyService {
      */
     @Transactional
     public byte[] getMyReceiptPdf(Long userId, Long receiptId, ReceiptArchiveKind kind) {
+        // F10.9 書出し（PDF）はサポート閲覧中は拒否する（初回取得で原本を保存する書込も伴う）。
+        if (SupportAccessContextHolder.isActive()) {
+            throw new BusinessException(SupportAccessErrorCode.OPERATION_FORBIDDEN);
+        }
         ReceiptEntity receipt = receiptRepository.findByIdAndRecipientUserId(receiptId, userId)
                 .orElseThrow(() -> new BusinessException(ReceiptErrorCode.RECEIPT_NOT_FOUND));
 

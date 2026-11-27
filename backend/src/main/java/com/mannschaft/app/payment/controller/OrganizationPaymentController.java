@@ -1,5 +1,6 @@
 package com.mannschaft.app.payment.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.PagedResponse;
@@ -149,6 +150,7 @@ public class OrganizationPaymentController {
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 
+    @SupportAccessDenied
     @GetMapping("/payments/export")
     @Operation(summary = "組織支払い状況 CSV エクスポート")
     public ResponseEntity<byte[]> exportPayments(

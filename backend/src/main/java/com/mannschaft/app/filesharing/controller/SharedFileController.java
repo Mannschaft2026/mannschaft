@@ -1,5 +1,6 @@
 package com.mannschaft.app.filesharing.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.PagedResponse;
 import com.mannschaft.app.common.SecurityUtils;
@@ -130,6 +131,7 @@ public class SharedFileController {
      * @param fileId ファイル ID
      * @return {@code { data: { downloadUrl, expiresInSeconds } }}
      */
+    @SupportAccessDenied
     @GetMapping("/{fileId}/download-url")
     @Operation(summary = "ファイルダウンロード用 presigned URL 発行")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "発行成功")

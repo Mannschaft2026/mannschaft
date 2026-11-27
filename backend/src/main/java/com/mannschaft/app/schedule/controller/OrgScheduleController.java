@@ -1,5 +1,6 @@
 package com.mannschaft.app.schedule.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.NameResolverService;
@@ -240,6 +241,7 @@ public class OrgScheduleController {
      *
      * <p><b>認可（認可根治 Wave3-B6）</b>: getAttendances と同じく当該組織のメンバーのみ。</p>
      */
+    @SupportAccessDenied
     @GetMapping("/{scheduleId}/attendances/export")
     @Operation(summary = "組織出欠CSVエクスポート")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "エクスポート成功")
@@ -286,6 +288,7 @@ public class OrgScheduleController {
      *
      * <p><b>認可</b>: 集計 EP と同じく当該組織の ADMIN / DEPUTY_ADMIN のみ。非 ADMIN は 403。</p>
      */
+    @SupportAccessDenied
     @GetMapping("/{scheduleId}/attendances/team-breakdown/export")
     @Operation(summary = "組織出欠チーム別内訳CSVエクスポート")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "エクスポート成功")

@@ -127,7 +127,7 @@ public class ModuleEventConfiguration {
                     @Override public void finished(ModuleEventExecutionFrame frame) {
                         registry.getObject().finished(frame);
                     }
-                }, 200, new AsyncConfig.MdcTaskDecorator());
+                }, 200, AsyncConfig.contextPropagatingDecorator());
         executor.setCorePoolSize(4);
         executor.setMaxPoolSize(4);
         executor.setQueueCapacity(200);

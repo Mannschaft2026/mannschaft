@@ -1,5 +1,6 @@
 package com.mannschaft.app.reflection.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.cms.dto.BlogPostResponse;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
@@ -111,6 +112,7 @@ public class ReflectionEntryController {
      * null で作成する）なので、両 slug が常に null であることが正しい。チーム・組織への輸出を足すときは
      * slug の付与も併せて行うこと。</p>
      */
+    @SupportAccessDenied
     @PostMapping("/entries/{entryId}/export-to-blog")
     @Operation(summary = "ブログ輸出（元エントリ残存）")
     public ResponseEntity<ApiResponse<BlogPostResponse>> exportToBlog(

@@ -1,5 +1,6 @@
 package com.mannschaft.app.activity.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.activity.ActivityScopeType;
 import com.mannschaft.app.activity.dto.ActivityFieldStatsResponse;
 import com.mannschaft.app.activity.dto.ActivityStatsResponse;
@@ -85,6 +86,7 @@ public class ActivityStatsController {
     /**
      * 活動記録をCSVエクスポートする。
      */
+    @SupportAccessDenied
     @GetMapping("/export")
     @Operation(summary = "CSVエクスポート")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "エクスポート成功")

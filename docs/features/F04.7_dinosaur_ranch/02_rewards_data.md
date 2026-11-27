@@ -273,7 +273,7 @@ V242.20261004202135__blog_native_history_and_ranch_transport.sql は既存全記
 
 ### CMS本人公開のnative/transport接続境界
 
-- 本人の `changeStatus` / `selfReview` は、既存の同じ純粋遷移規則を使用する。追加auth受付の開始前失敗、非本人、管理者変身、既存外側TXは従来業務へ戻り、ゲーム資格を理由にeditor/SYSTEMの公開可能範囲を狭めない。
+- 本人の `changeStatus` / `selfReview` は、既存の同じ純粋遷移規則を使用する。追加auth受付の開始前失敗、非本人、サポート閲覧（代理。`SupportAccessContextHolder`）、既存外側TXは従来業務へ戻り、ゲーム資格を理由にeditor/SYSTEMの公開可能範囲を狭めない。
 - users current lockを保持した本人操作では、別CMS TXで記事を最初のEntity取得前にcurrent lockする。変更前のknown/nonhistorical/notObservedを確定し、最終PUBLISHEDの場合だけ初公開metadataとobservedを同じ記事保存で凍結する。本文由来の有限HMAC captureは私有メモリだけに保持し、本体TXへwitness・winner・outboxを書かない。
 - native proxyと外auth proxyの正常commit復帰後だけbounded queueへofferする。callback開始後の業務失敗は再実行せず伝播する。本体commit後に追加auth/記録が失敗した場合は元ACKを保持し、捕捉lossとして報酬受付を行わない。queue容量0は意図的OFF、負値/1000超は固定分類警告を伴う非稼働で、測定済み容量を捏造しない。
 - 別CMS transport TX内で、native不変初公開metadataと保護中captureを照合し、witness/AC67完全一致winner/outboxを原子受付する。V242.20261004202135__blog_native_history_and_ranch_transport.sqlの私有content_week/version/key_id/digestは本文を含まず、HTTP/payload/log/exportへ出さない。recipient/UTC週/version/digestのUNIQUEに最初に耐久受付した一件をwinnerとし、後着occurredAtが早くても置換しない。native captureの取りこぼしがあるため最古投稿の保証はしない。

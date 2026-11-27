@@ -99,7 +99,8 @@ public class AuditLogService {
                     .sessionHash(sessionHash)
                     .metadata(metadata)
                     .build();
-            auditLogRepository.save(entity);
+            // 監査は代理中（DB 接続が READ ONLY）でも必ず残す。書込可能な接続で書く（F10.9）。
+            SupportAccessContextHolder.callWithWritableConnection(() -> auditLogRepository.save(entity));
         } catch (Exception e) {
             log.error("監査ログ書き込み失敗: eventType={}, userId={}", eventType, userId, e);
         }

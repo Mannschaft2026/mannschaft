@@ -1,5 +1,6 @@
 package com.mannschaft.app.tournament.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.pdf.PdfFileNameBuilder;
@@ -56,6 +57,7 @@ public class TournamentPdfController {
     private final RankingsCalculationService rankingsCalculationService;
     private final ContentVisibilityChecker contentVisibilityChecker;
 
+    @SupportAccessDenied
     @GetMapping("/divisions/{divId}/standings/pdf")
     @Operation(summary = "順位表PDF")
     public ResponseEntity<byte[]> getStandingsPdf(
@@ -82,6 +84,7 @@ public class TournamentPdfController {
         return PdfResponseHelper.toResponse(pdfBytes, fileName);
     }
 
+    @SupportAccessDenied
     @GetMapping("/bracket/pdf")
     @Operation(summary = "トーナメント表PDF")
     public ResponseEntity<byte[]> getBracketPdf(
@@ -106,6 +109,7 @@ public class TournamentPdfController {
         return PdfResponseHelper.toResponse(pdfBytes, fileName);
     }
 
+    @SupportAccessDenied
     @GetMapping("/rankings/{statKey}/pdf")
     @Operation(summary = "個人ランキングPDF")
     public ResponseEntity<byte[]> getRankingsPdf(
@@ -142,6 +146,7 @@ public class TournamentPdfController {
         return PdfResponseHelper.toResponse(pdfBytes, fileName);
     }
 
+    @SupportAccessDenied
     @GetMapping("/divisions/{divId}/matrix/pdf")
     @Operation(summary = "対戦マトリクスPDF")
     public ResponseEntity<byte[]> getMatrixPdf(
