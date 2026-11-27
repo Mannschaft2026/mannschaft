@@ -60,6 +60,13 @@ vi.mock('primevue/useconfirm', () => ({ useConfirm: () => ({ require: vi.fn() })
 mockNuxtImport('useNotification', () => () => ({
   success: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), showSuccess: vi.fn(), showError: vi.fn(), showInfo: vi.fn(), showWarn: vi.fn(),
 }))
+// index.vue は親シェル（pages/teams/[slug].vue）の provide を inject する。単体では親が無いので空のコンテキストを返す。
+vi.mock('~/composables/useTeamShellContext', () => ({
+  useTeamShellContext: () => ({
+    team: { value: null }, displayName: { value: '' }, effectiveViewerRole: { value: null },
+    adminLens: { value: false }, isAdminOrDeputy: { value: false }, widgetVisibilitySettings: { value: null },
+  }),
+}))
 mockNuxtImport('useApi', () => () => Object.assign(mocks.api, { raw: mocks.api }))
 
 const pageModules = import.meta.glob<{ default: Component }>('../../../app/pages/teams/*/**/*.vue')

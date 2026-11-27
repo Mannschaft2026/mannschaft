@@ -3,6 +3,8 @@ import { mountSuspended, mockNuxtImport } from '@nuxt/test-utils/runtime'
 import { useNuxtApp } from '#app'
 import NewMatchPage from '~/pages/teams/[slug]/matches/new.vue'
 
+mockNuxtImport('useTeamApi', () => () => ({ getTeam: vi.fn().mockResolvedValue({ data: { id: 'x', numericId: 1 } }) }))
+
 /**
  * F01.2.1 §9.2 F1（3-E・AC-N12）試合作成ページの組織指定。
  *

@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
 import FriendFoldersPage from '~/pages/teams/[slug]/friend-folders.vue'
 
+mockNuxtImport('useTeamApi', () => () => ({ getTeam: vi.fn().mockResolvedValue({ data: { id: 'x', numericId: 1 } }) }))
+
 const state = vi.hoisted(() => ({ role: 'ADMIN', permitted: false, count: 19 }))
 mockNuxtImport('useRoute', () => () => ({ params: { slug: 't' } }))
 mockNuxtImport('useI18n', () => () => ({ t: (key: string, params?: { remaining?: number }) => key + (params ? ':' + params.remaining : '') }))

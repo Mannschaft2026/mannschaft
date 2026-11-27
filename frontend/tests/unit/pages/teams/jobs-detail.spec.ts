@@ -2,6 +2,8 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
 import TeamJobDetailPage from '~/pages/teams/[slug]/jobs/[jobId]/index.vue'
 
+mockNuxtImport('useTeamApi', () => () => ({ getTeam: vi.fn().mockResolvedValue({ data: { id: 'x', numericId: 1 } }) }))
+
 /**
  * CMP-260922-2045 の根治テスト。
  *

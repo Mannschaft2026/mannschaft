@@ -17,6 +17,8 @@ import FriendFeedPostCard from '~/components/friends/FriendFeedPostCard.vue'
 import FriendForwardModal from '~/components/friends/FriendForwardModal.vue'
 import FriendForwardExportList from '~/components/friends/FriendForwardExportList.vue'
 
+mockNuxtImport('useTeamApi', () => () => ({ getTeam: vi.fn().mockResolvedValue({ data: { id: 'x', numericId: 1 } }) }))
+
 const apiMock = vi.fn()
 const handleApiError = vi.fn()
 
