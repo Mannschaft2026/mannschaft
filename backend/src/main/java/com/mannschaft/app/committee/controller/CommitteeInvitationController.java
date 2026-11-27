@@ -1,5 +1,6 @@
 package com.mannschaft.app.committee.controller;
 
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 import com.mannschaft.app.committee.dto.CommitteeInvitationIssuedResponse;
 import com.mannschaft.app.committee.dto.CommitteeInvitationResponse;
 import com.mannschaft.app.committee.dto.CommitteeInviteRequest;
@@ -41,6 +42,8 @@ import java.util.stream.Collectors;
 public class CommitteeInvitationController {
 
     private final CommitteeInvitationService committeeInvitationService;
+    /** 運営アカウントの所属禁止の判定を取引の外で済ませる（committee の取引を role へ越境させない。D-3T）。 */
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
     private final NameResolverService nameResolverService;
 
     /**
@@ -71,7 +74,11 @@ public class CommitteeInvitationController {
             @PathVariable Long committeeId,
             @Valid @RequestBody CommitteeInviteRequest request) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
-        SendInvitationsResult result = committeeInvitationService.sendInvitations(committeeId, request, currentUserId);
+        // 宛先の判定（取引の外）。拒否は認可の後の従来の位置で取引が投げる。
+        List<Long> invitees = request.getInviteeUserIds() == null ? List.of() : request.getInviteeUserIds();
+        SendInvitationsResult result = PlatformAccountAffiliationPolicy.callJudged(
+                platformAccountAffiliationPolicy.judge(invitees),
+                () -> committeeInvitationService.sendInvitations(committeeId, request, currentUserId));
 
         List<CommitteeInvitationIssuedResponse> invitations = result.sentInvitations().stream()
                 .map(issued -> new CommitteeInvitationIssuedResponse(
@@ -128,8 +135,9 @@ public class CommitteeInvitationController {
     public ApiResponse<CommitteeMemberResponse> acceptInvitation(
             @Valid @RequestBody InviteByTokenRequest request) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
-        CommitteeMemberEntity member =
-                committeeInvitationService.acceptInvitation(request.getInviteToken(), currentUserId);
+        CommitteeMemberEntity member = PlatformAccountAffiliationPolicy.callJudged(
+                platformAccountAffiliationPolicy.judge(List.of(currentUserId)),
+                () -> committeeInvitationService.acceptInvitation(request.getInviteToken(), currentUserId));
 
         String displayName = nameResolverService.resolveUserFullName(member.getUserId());
         String avatarUrl = nameResolverService.resolveUserAvatarUrls(List.of(member.getUserId()))

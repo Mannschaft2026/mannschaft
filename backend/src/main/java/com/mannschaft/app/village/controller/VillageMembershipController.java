@@ -1,5 +1,6 @@
 package com.mannschaft.app.village.controller;
 
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.security.AuthorizedInService;
@@ -8,6 +9,7 @@ import com.mannschaft.app.village.dto.MembershipJoinRequest;
 import com.mannschaft.app.village.dto.MembershipListResponse;
 import com.mannschaft.app.village.dto.MembershipResponse;
 import com.mannschaft.app.village.dto.RoleChangeRequest;
+import com.mannschaft.app.village.entity.enums.VillageSubjectType;
 import com.mannschaft.app.village.service.VillageMembershipService;
 import com.mannschaft.app.village.service.VillageSubjectAuthorization;
 import com.mannschaft.app.village.service.VillageSubjectAuthorizationGuard;
@@ -27,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -50,6 +53,8 @@ import java.util.UUID;
 public class VillageMembershipController {
 
     private final VillageMembershipService membershipService;
+    /** 運営アカウントの所属禁止の判定を取引の外で済ませる（村の取引を role へ越境させない。D-3T）。 */
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
     /** 主体の代表権限を取引の外で判定する（村の取引を role ドメインへ越境させないため。D-3T）。 */
     private final VillageSubjectAuthorizationGuard subjectAuthorizationGuard;
 
@@ -61,7 +66,12 @@ public class VillageMembershipController {
         Long actorUserId = SecurityUtils.getCurrentUserId();
         VillageSubjectAuthorization authorization =
                 subjectAuthorizationGuard.judge(actorUserId, request.subjectType(), request.subjectId());
-        MembershipResponse response = membershipService.join(villageId, actorUserId, request, authorization);
+        // 操作者（と USER 名義の主体）を取引の外で判定する。主体の一致は取引の中の authorization が確かめる。
+        List<Long> judged = request.subjectType() == VillageSubjectType.USER && request.subjectId() != null
+                ? List.of(actorUserId, request.subjectId()) : List.of(actorUserId);
+        MembershipResponse response = PlatformAccountAffiliationPolicy.callJudged(
+                platformAccountAffiliationPolicy.judge(judged),
+                () -> membershipService.join(villageId, actorUserId, request, authorization));
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
     }
 

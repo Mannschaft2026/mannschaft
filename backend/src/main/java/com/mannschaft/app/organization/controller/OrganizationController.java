@@ -28,6 +28,7 @@ import com.mannschaft.app.role.service.InviteService;
 import com.mannschaft.app.role.service.PermissionGroupService;
 import com.mannschaft.app.common.security.AuthorizedInService;
 import com.mannschaft.app.role.service.RoleService;
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 import com.mannschaft.app.role.dto.BlockRequest;
 import com.mannschaft.app.role.dto.BlockResponse;
 import com.mannschaft.app.role.dto.CreateInviteTokenRequest;
@@ -95,6 +96,8 @@ public class OrganizationController {
     private final PermissionGroupService permissionGroupService;
     private final BlockService blockService;
     private final SupporterService supporterService;
+    /** 運営アカウントの所属禁止の判定を取引の外で済ませる（organization / supporter の取引を role へ越境させない。D-3T）。 */
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
     private final ContentVisibilityChecker contentVisibilityChecker;
     private final MemberSubtabVisibilityService memberSubtabVisibilityService;
 
@@ -139,7 +142,9 @@ public class OrganizationController {
             accessControlService.checkAdminOrAbove(userId, parentOrgId, SCOPE_TYPE);
         }
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(organizationService.createOrganization(userId, req));
+                .body(PlatformAccountAffiliationPolicy.callJudged(
+                        platformAccountAffiliationPolicy.judge(List.of(userId)),
+                        () -> organizationService.createOrganization(userId, req)));
     }
 
     /**
@@ -332,7 +337,9 @@ public class OrganizationController {
         // 運営者が受け入れを無効化している組織への自己登録は拒否する。
         organizationService.assertSupporterEnabled(id);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(supporterService.follow(userId, SCOPE_TYPE, id));
+                .body(PlatformAccountAffiliationPolicy.callJudged(
+                        platformAccountAffiliationPolicy.judge(List.of(userId)),
+                        () -> supporterService.follow(userId, SCOPE_TYPE, id)));
     }
 
     // SupporterService#unfollow が SecurityUtils.getCurrentUserId() のみを対象ユーザーとして
@@ -395,7 +402,9 @@ public class OrganizationController {
             @PathVariable String slug, @PathVariable Long applicationId) {
         Long id = organizationService.resolveOrgId(slug);
         accessControlService.checkAdminOrAbove(SecurityUtils.getCurrentUserId(), id, SCOPE_TYPE);
-        supporterService.approve(applicationId, SCOPE_TYPE, id);
+        PlatformAccountAffiliationPolicy.runJudged(
+                platformAccountAffiliationPolicy.judge(supporterService.findApplicantUserIds(List.of(applicationId))),
+                () -> supporterService.approve(applicationId, SCOPE_TYPE, id));
         return ResponseEntity.noContent().build();
     }
 
@@ -417,7 +426,10 @@ public class OrganizationController {
             @PathVariable String slug, @Valid @RequestBody BulkApproveRequest request) {
         Long id = organizationService.resolveOrgId(slug);
         accessControlService.checkAdminOrAbove(SecurityUtils.getCurrentUserId(), id, SCOPE_TYPE);
-        supporterService.bulkApprove(request, SCOPE_TYPE, id);
+        PlatformAccountAffiliationPolicy.runJudged(
+                platformAccountAffiliationPolicy.judge(
+                        supporterService.findApplicantUserIds(request.getApplicationIds())),
+                () -> supporterService.bulkApprove(request, SCOPE_TYPE, id));
         return ResponseEntity.noContent().build();
     }
 

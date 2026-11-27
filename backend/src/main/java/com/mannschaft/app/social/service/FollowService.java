@@ -33,7 +33,6 @@ public class FollowService {
     private final FollowRepository followRepository;
     private final SocialMapper socialMapper;
     private final UserRepository userRepository;
-    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     /**
      * フォローする。
@@ -46,7 +45,8 @@ public class FollowService {
     @Transactional
     public FollowResponse follow(String followedType, Long followedId, Long userId) {
         // 運営アカウント（SYSTEM_ADMIN）は個人としてのフォローもできない（戦役 Z-A PR2。マスター決定 2026-11-26）。
-        platformAccountAffiliationPolicy.assertAffiliatable(userId);
+        // 判定は FollowController が取引の外で済ませる（social の取引を role へ越境させない。D-3T）。
+        PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(userId);
         FollowerType targetType = FollowerType.valueOf(followedType);
 
         // 自分自身のフォロー防止

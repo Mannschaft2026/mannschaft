@@ -44,7 +44,6 @@ public class CommitteeInvitationService {
 
     /** 委員会メンバーシップ・委員会内ロール・招集状の宛先本人性に基づく認可判定の一元窓口。 */
     private final CommitteeAccessGuard committeeAccessGuard;
-    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     /** デフォルト有効期間（日数） */
     private static final int DEFAULT_EXPIRES_IN_DAYS = 7;
@@ -90,8 +89,9 @@ public class CommitteeInvitationService {
 
         // 運営アカウント（SYSTEM_ADMIN）宛ての招集は発行時点で拒否する（戦役 Z-A PR2。1 人でも運営なら全体を 403）。
         // 宛先の判定は認可の後に置く（認可の無い者へ、宛先が運営アカウントかどうかを漏らさない）。
+        // 判定は CommitteeInvitationController が取引の外で済ませる（committee の取引を role へ越境させない。D-3T）。
         for (Long inviteeUserId : request.getInviteeUserIds()) {
-            platformAccountAffiliationPolicy.assertAffiliatable(inviteeUserId);
+            PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(inviteeUserId);
         }
 
         CommitteeRole proposedRole = request.getProposedRole() != null
@@ -198,7 +198,8 @@ public class CommitteeInvitationService {
         // 組織脱退は user → committee → member → invitation の順にロックするため、同じ順序に揃える。
         userRowLockService.lockAll(currentUserId);
         // 運営アカウント（SYSTEM_ADMIN）は委員会に所属できない（戦役 Z-A PR2。発行済みの招集も受諾させない）。
-        platformAccountAffiliationPolicy.assertAffiliatable(currentUserId);
+        // 判定は CommitteeInvitationController が取引の外で済ませる（D-3T）。
+        PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(currentUserId);
 
         CommitteeInvitationEntity initialInvitation = committeeInvitationRepository
                 .findByInviteTokenHash(vault.hash(inviteToken))

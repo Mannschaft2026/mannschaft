@@ -60,7 +60,6 @@ public class VillageCreationRequestService {
     private final VillageMembershipSlotService slotService;
     private final EntityManager entityManager;
     private final AccessControlService accessControlService;
-    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     // ------------------------------------------------------------------
     // 申請者向け
@@ -84,8 +83,9 @@ public class VillageCreationRequestService {
         // 例外はこの作成時の所属だけで、通常村の作成・他経路の所属は引き続き 403。
         boolean officialVillage = req.type() == VillageType.OFFICIAL;
         // 公式村は入村時に admitOfficialVillageCreator が村の種別・作成者・村長を確認する（非運営の申請は下で拒否）。
+        // 判定は VillageCreationRequestController が村の取引の外で済ませる（村の取引を role へ越境させない。D-3T）。
         if (!officialVillage) {
-            platformAccountAffiliationPolicy.assertAffiliatable(requesterUserId);
+            PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(requesterUserId);
         }
 
         // 一般ユーザーは OFFICIAL を申請できない
@@ -212,6 +212,15 @@ public class VillageCreationRequestService {
     }
 
     /**
+     * 承認の対象になる申請者のユーザー ID（申請が無ければ空）。申請者は申請の作成後に変わらない。
+     * {@code VillageCreationRequestController} が承認の取引の外で運営アカウントの判定に使う（戦役 Z-A PR2・D-3T）。
+     */
+    @Transactional(readOnly = true)
+    public java.util.Optional<Long> findRequesterUserId(UUID requestId) {
+        return requestRepository.findAdmissionRequesterId(requestId);
+    }
+
+    /**
      * 運営による承認。村レコードを自動作成し、申請者を HEADMAN として membership に追加する。
      */
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -224,7 +233,8 @@ public class VillageCreationRequestService {
             throw new BusinessException(CommonErrorCode.COMMON_002);
         }
         // 申請者が運営アカウント（SYSTEM_ADMIN）なら承認しても村長行を作れない（戦役 Z-A PR2）。
-        platformAccountAffiliationPolicy.assertAffiliatable(requesterUserId);
+        // 判定は VillageCreationRequestController が村の取引の外で済ませる（{@link #findRequesterUserId}。D-3T）。
+        PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(requesterUserId);
         VillageCreationRequestEntity request = loadRequestForUpdate(requestId);
         if (!requesterUserId.equals(request.getRequesterUserId())) {
             throw new IllegalStateException("村作成申請の申請者が変更されています");

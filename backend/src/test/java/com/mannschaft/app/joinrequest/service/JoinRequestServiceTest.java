@@ -1,5 +1,7 @@
 package com.mannschaft.app.joinrequest.service;
 
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.judged;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.general;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.joinrequest.JoinRequestErrorCode;
@@ -105,8 +107,8 @@ class JoinRequestServiceTest {
             given(joinRequestRepository.saveAndFlush(any(JoinRequestEntity.class)))
                     .willAnswer(inv -> inv.getArgument(0));
 
-            JoinRequestResponse response = service.createRequest(
-                    "TEAM", TEAM_ID, USER_ID, new JoinRequestCreateRequest("よろしくお願いします"));
+            JoinRequestResponse response = judged(general(USER_ID), () -> service.createRequest(
+                    "TEAM", TEAM_ID, USER_ID, new JoinRequestCreateRequest("よろしくお願いします")));
 
             assertThat(response.status()).isEqualTo(JoinRequestStatus.PENDING);
             assertThat(response.scopeType()).isEqualTo("TEAM");
@@ -120,7 +122,7 @@ class JoinRequestServiceTest {
         void 異常_チーム不存在() {
             given(teamService.findJoinabilitySummary(TEAM_ID)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> service.createRequest("TEAM", TEAM_ID, USER_ID, null))
+            assertThatThrownBy(() -> judged(general(USER_ID), () -> service.createRequest("TEAM", TEAM_ID, USER_ID, null)))
                     .isInstanceOfSatisfying(BusinessException.class, e -> {
                         assertThat(e.getErrorCode()).isEqualTo(JoinRequestErrorCode.SCOPE_NOT_FOUND);
                         assertThat(e.getHttpStatusOverride()).isEqualTo(HttpStatus.NOT_FOUND);
@@ -133,7 +135,7 @@ class JoinRequestServiceTest {
             given(teamService.findJoinabilitySummary(TEAM_ID))
                     .willReturn(Optional.of(new TeamService.JoinabilitySummary("チームB", false, false, false)));
 
-            assertThatThrownBy(() -> service.createRequest("TEAM", TEAM_ID, USER_ID, null))
+            assertThatThrownBy(() -> judged(general(USER_ID), () -> service.createRequest("TEAM", TEAM_ID, USER_ID, null)))
                     .isInstanceOfSatisfying(BusinessException.class, e ->
                             assertThat(e.getErrorCode()).isEqualTo(JoinRequestErrorCode.SCOPE_NOT_FOUND));
         }
@@ -144,7 +146,7 @@ class JoinRequestServiceTest {
             given(teamService.findJoinabilitySummary(TEAM_ID))
                     .willReturn(Optional.of(new TeamService.JoinabilitySummary("チームC", false, true, true)));
 
-            assertThatThrownBy(() -> service.createRequest("TEAM", TEAM_ID, USER_ID, null))
+            assertThatThrownBy(() -> judged(general(USER_ID), () -> service.createRequest("TEAM", TEAM_ID, USER_ID, null)))
                     .isInstanceOfSatisfying(BusinessException.class, e ->
                             assertThat(e.getErrorCode()).isEqualTo(JoinRequestErrorCode.SCOPE_NOT_FOUND));
         }
@@ -155,7 +157,7 @@ class JoinRequestServiceTest {
             given(teamService.findJoinabilitySummary(TEAM_ID))
                     .willReturn(Optional.of(new TeamService.JoinabilitySummary("チームD", true, true, false)));
 
-            assertThatThrownBy(() -> service.createRequest("TEAM", TEAM_ID, USER_ID, null))
+            assertThatThrownBy(() -> judged(general(USER_ID), () -> service.createRequest("TEAM", TEAM_ID, USER_ID, null)))
                     .isInstanceOfSatisfying(BusinessException.class, e ->
                             assertThat(e.getErrorCode()).isEqualTo(JoinRequestErrorCode.SCOPE_NOT_FOUND));
         }
@@ -166,7 +168,7 @@ class JoinRequestServiceTest {
             given(teamService.findJoinabilitySummary(TEAM_ID)).willReturn(Optional.of(publicActiveTeam()));
             given(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
 
-            assertThatThrownBy(() -> service.createRequest("TEAM", TEAM_ID, USER_ID, null))
+            assertThatThrownBy(() -> judged(general(USER_ID), () -> service.createRequest("TEAM", TEAM_ID, USER_ID, null)))
                     .isInstanceOfSatisfying(BusinessException.class, e -> {
                         assertThat(e.getErrorCode()).isEqualTo(JoinRequestErrorCode.ALREADY_MEMBER);
                         assertThat(e.getHttpStatusOverride()).isEqualTo(HttpStatus.CONFLICT);
@@ -182,7 +184,7 @@ class JoinRequestServiceTest {
             given(joinRequestRepository.findByTeamIdAndRequesterUserIdAndStatus(
                     TEAM_ID, USER_ID, JoinRequestStatus.PENDING)).willReturn(Optional.of(existing));
 
-            JoinRequestResponse response = service.createRequest("TEAM", TEAM_ID, USER_ID, null);
+            JoinRequestResponse response = judged(general(USER_ID), () -> service.createRequest("TEAM", TEAM_ID, USER_ID, null));
 
             assertThat(response.requesterUserId()).isEqualTo(USER_ID);
             verify(joinRequestRepository, never()).saveAndFlush(any(JoinRequestEntity.class));
@@ -202,7 +204,7 @@ class JoinRequestServiceTest {
             given(joinRequestRepository.saveAndFlush(any(JoinRequestEntity.class)))
                     .willThrow(new org.springframework.dao.DataIntegrityViolationException("uk_jr_team_pending"));
 
-            JoinRequestResponse response = service.createRequest("TEAM", TEAM_ID, USER_ID, null);
+            JoinRequestResponse response = judged(general(USER_ID), () -> service.createRequest("TEAM", TEAM_ID, USER_ID, null));
 
             assertThat(response.requesterUserId()).isEqualTo(USER_ID);
             verify(eventPublisher, never()).publishEvent(any(JoinRequestCreatedEvent.class));
@@ -218,7 +220,7 @@ class JoinRequestServiceTest {
             given(joinRequestRepository.saveAndFlush(any(JoinRequestEntity.class)))
                     .willAnswer(inv -> inv.getArgument(0));
 
-            JoinRequestResponse response = service.createRequest("ORGANIZATION", ORG_ID, USER_ID, null);
+            JoinRequestResponse response = judged(general(USER_ID), () -> service.createRequest("ORGANIZATION", ORG_ID, USER_ID, null));
 
             assertThat(response.scopeType()).isEqualTo("ORGANIZATION");
             assertThat(response.scopeId()).isEqualTo(ORG_ID);
@@ -227,7 +229,7 @@ class JoinRequestServiceTest {
         @Test
         @DisplayName("異常系: 不正な scopeType は 400 INVALID_SCOPE_TYPE")
         void 異常_不正スコープ種別() {
-            assertThatThrownBy(() -> service.createRequest("VILLAGE", 1L, USER_ID, null))
+            assertThatThrownBy(() -> judged(general(USER_ID), () -> service.createRequest("VILLAGE", 1L, USER_ID, null)))
                     .isInstanceOfSatisfying(BusinessException.class, e ->
                             assertThat(e.getErrorCode()).isEqualTo(JoinRequestErrorCode.INVALID_SCOPE_TYPE));
         }

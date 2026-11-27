@@ -1,5 +1,6 @@
 package com.mannschaft.app.village.controller;
 
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.PagedResponse;
 import com.mannschaft.app.common.SecurityUtils;
@@ -53,6 +54,8 @@ import java.util.UUID;
 public class VillageJoinRequestController {
 
     private final VillageJoinRequestService service;
+    /** 運営アカウントの所属禁止の判定を取引の外で済ませる（村の取引を role へ越境させない。D-3T）。 */
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
     /** 主体の代表権限を取引の外で判定する（村の取引を role ドメインへ越境させないため。D-3T）。 */
     private final VillageSubjectAuthorizationGuard subjectAuthorizationGuard;
 
@@ -89,7 +92,9 @@ public class VillageJoinRequestController {
         Long actorUserId = SecurityUtils.getCurrentUserId();
         VillageSubjectAuthorization authorization =
                 subjectAuthorizationGuard.judge(actorUserId, request.subjectType(), request.subjectId());
-        JoinRequestResponse response = service.createRequest(villageId, actorUserId, request, authorization);
+        JoinRequestResponse response = PlatformAccountAffiliationPolicy.callJudged(
+                platformAccountAffiliationPolicy.judge(List.of(actorUserId)),
+                () -> service.createRequest(villageId, actorUserId, request, authorization));
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
     }
 
@@ -145,7 +150,10 @@ public class VillageJoinRequestController {
             @PathVariable("id") UUID id,
             @Valid @RequestBody(required = false) JoinRequestReviewRequest review) {
         Long actorUserId = SecurityUtils.getCurrentUserId();
-        JoinRequestResponse response = service.approve(villageId, id, actorUserId, review);
+        // 入村する USER 主体を取引の外で判定する（拒否は承認の取引の中の入村枠割当が従来の位置で投げる）。
+        JoinRequestResponse response = PlatformAccountAffiliationPolicy.callJudged(
+                platformAccountAffiliationPolicy.judge(service.findAdmissionUserId(villageId, id).stream().toList()),
+                () -> service.approve(villageId, id, actorUserId, review));
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 

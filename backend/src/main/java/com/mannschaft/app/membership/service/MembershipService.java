@@ -79,7 +79,6 @@ public class MembershipService {
     private final AdminRoleMutationLockService adminRoleMutationLockService;
     private final EntityManager entityManager;
     private final RolePermissionCleanupService rolePermissionCleanupService;
-    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     /**
      * 入会処理。
@@ -100,7 +99,9 @@ public class MembershipService {
         Objects.requireNonNull(req.getScopeId(), "scopeId must not be null");
         lockUser(req.getUserId());
         // 運営アカウント（SYSTEM_ADMIN）はテナントに所属できない（戦役 Z-A PR2）。全入会経路の合流点で拒否する。
-        platformAccountAffiliationPolicy.assertAffiliatable(req.getUserId());
+        // 判定は呼び出し側が取引の外（role ドメインでは自ドメインの取引）で済ませる（membership の取引を
+        // role へ越境させない。D-3T）。判定漏れの経路は IllegalStateException で止まる。
+        PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(req.getUserId());
         validateScope(req.getScopeType(), req.getScopeId());
 
         // 冪等性チェック（§13.7）

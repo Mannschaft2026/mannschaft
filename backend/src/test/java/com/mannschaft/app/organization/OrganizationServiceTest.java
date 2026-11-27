@@ -1,5 +1,7 @@
 package com.mannschaft.app.organization;
 
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.judged;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.general;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.event.PersonalInviteScopeClosedEvent;
@@ -159,7 +161,7 @@ class OrganizationServiceTest {
                     .willAnswer(inv -> inv.getArgument(0));
 
             ApiResponse<OrganizationResponse> response =
-                    organizationService.createOrganization(USER_ID, req);
+                    judged(general(USER_ID), () -> organizationService.createOrganization(USER_ID, req));
 
             assertThat(response.getData().getBasicInfo().name()).isEqualTo("テスト組織");
             assertThat(response.getData().getHierarchy().orgType()).isEqualTo("SCHOOL");
@@ -183,7 +185,7 @@ class OrganizationServiceTest {
             CreateOrganizationRequest req = new CreateOrganizationRequest(
                     "テスト組織", "CLUB", "東京都", "渋谷区", "PUBLIC", null, null);
 
-            assertThatThrownBy(() -> organizationService.createOrganization(USER_ID, req))
+            assertThatThrownBy(() -> judged(general(USER_ID), () -> organizationService.createOrganization(USER_ID, req)))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(CommonErrorCode.COMMON_001));
@@ -208,7 +210,7 @@ class OrganizationServiceTest {
                     .checkForCreateAndRun(eq(DuplicateNameScopeKind.ORGANIZATION), eq("既存組織"), eq(USER_ID),
                             eq(false), org.mockito.ArgumentMatchers.isNull(), any(), any());
 
-            assertThatThrownBy(() -> organizationService.createOrganization(USER_ID, req))
+            assertThatThrownBy(() -> judged(general(USER_ID), () -> organizationService.createOrganization(USER_ID, req)))
                     .isSameAs(expected);
             // 作成処理（save/ADMIN紐付け）まで到達していないことを確認する。
             verify(organizationRepository, org.mockito.Mockito.never()).save(any(OrganizationEntity.class));
@@ -231,7 +233,7 @@ class OrganizationServiceTest {
                     .willAnswer(inv -> inv.getArgument(0));
 
             ApiResponse<OrganizationResponse> response =
-                    organizationService.createOrganization(USER_ID, req);
+                    judged(general(USER_ID), () -> organizationService.createOrganization(USER_ID, req));
 
             assertThat(response.getData().getBasicInfo().name()).isEqualTo("既存組織");
             verify(duplicateNameGuardService).checkForCreateAndRun(
@@ -262,7 +264,7 @@ class OrganizationServiceTest {
             org.mockito.ArgumentCaptor<java.util.function.Supplier<java.util.List<DuplicateNameCandidate>>>
                     supplierCaptor = org.mockito.ArgumentCaptor.forClass(java.util.function.Supplier.class);
 
-            organizationService.createOrganization(USER_ID, req);
+            judged(general(USER_ID), () -> organizationService.createOrganization(USER_ID, req));
 
             verify(duplicateNameGuardService).checkForCreateAndRun(
                     eq(DuplicateNameScopeKind.ORGANIZATION), eq("既存組織"), eq(USER_ID),
@@ -287,7 +289,7 @@ class OrganizationServiceTest {
 
             given(adminRoleMutationLockService.lockAdminRoleIdForCreation(USER_ID)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> organizationService.createOrganization(USER_ID, req))
+            assertThatThrownBy(() -> judged(general(USER_ID), () -> organizationService.createOrganization(USER_ID, req)))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("ORG_005"));
@@ -307,7 +309,7 @@ class OrganizationServiceTest {
                     .willAnswer(inv -> inv.getArgument(0));
 
             ApiResponse<OrganizationResponse> response =
-                    organizationService.createOrganization(USER_ID, req);
+                    judged(general(USER_ID), () -> organizationService.createOrganization(USER_ID, req));
 
             assertThat(response.getData().getVisibility().visibility()).isEqualTo("PRIVATE");
         }
@@ -330,7 +332,7 @@ class OrganizationServiceTest {
                     });
 
             ApiResponse<OrganizationResponse> response =
-                    organizationService.createOrganization(USER_ID, req);
+                    judged(general(USER_ID), () -> organizationService.createOrganization(USER_ID, req));
 
             assertThat(response.getData().getBasicInfo().name()).isEqualTo("子組織");
         }

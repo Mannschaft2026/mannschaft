@@ -42,7 +42,6 @@ public class VillageMembershipSlotService {
     private final VillageUserAdmissionLockRepository admissionLockRepository;
     private final VillageMembershipRepository membershipRepository;
     private final VillageParticipationLimitProvider limitProvider;
-    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     /**
      * USER単位の入村ロックを取り、呼出側の取引の終わりまで保持する。
@@ -86,7 +85,9 @@ public class VillageMembershipSlotService {
      */
     public Allocation allocate(Long userId) {
         // 運営アカウント（SYSTEM_ADMIN）は村に所属できない（戦役 Z-A PR2）。入村枠を割り当てない。
-        platformAccountAffiliationPolicy.assertAffiliatable(userId);
+        // 判定は入村の各入口の Controller が村の取引の外で済ませる（村の取引を role へ越境させない。D-3T）。
+        // 判定漏れの入口は IllegalStateException で止まる。
+        PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(userId);
         return allocateSlot(userId);
     }
 
@@ -138,7 +139,7 @@ public class VillageMembershipSlotService {
     VillageMembershipEntity admit(VillageMembershipEntity membership) {
         // 運営アカウント（SYSTEM_ADMIN）は村に所属できない（戦役 Z-A PR2）。五入口の共通保存点での最終防衛線。
         if (membership.getSubjectType() == VillageSubjectType.USER) {
-            platformAccountAffiliationPolicy.assertAffiliatable(membership.getSubjectId());
+            PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(membership.getSubjectId());
         }
         return saveAdmission(membership);
     }
@@ -150,7 +151,7 @@ public class VillageMembershipSlotService {
     VillageMembershipEntity admitOfficialVillageCreator(VillageMembershipEntity membership, VillageEntity village) {
         if (membership.getSubjectType() == VillageSubjectType.USER) {
             // 村の種別・作成者・ロールの一致を自前で確認する（呼び出し元の申告を信用しない）。
-            platformAccountAffiliationPolicy.assertAffiliatableAsOfficialVillageCreator(
+            PlatformAccountAffiliationPolicy.assertJudgedAffiliatableAsOfficialVillageCreator(
                     membership.getSubjectId(), village.getType() == VillageType.OFFICIAL,
                     village.getCreatedByUserId(), membership.getRole() == VillageRole.HEADMAN);
         }

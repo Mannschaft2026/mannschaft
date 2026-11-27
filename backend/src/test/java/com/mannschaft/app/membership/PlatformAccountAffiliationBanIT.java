@@ -1,5 +1,6 @@
 package com.mannschaft.app.membership;
 
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.membership.domain.MembershipBasisErrorCode;
 import com.mannschaft.app.membership.domain.RoleKind;
@@ -36,6 +37,10 @@ class PlatformAccountAffiliationBanIT extends AbstractMySqlIntegrationTest {
 
     private static final Long PLATFORM_USER_ID = 9_260_001L;
     private static final Long GENERAL_USER_ID = 9_260_002L;
+
+    /** 運営アカウントの判定（取引の外）。本番の Controller と同じく判定してから呼ぶ（戦役 Z-A PR2・D-3T）。 */
+    @Autowired
+    private PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     @Autowired
     private MembershipService membershipService;
@@ -86,7 +91,8 @@ class PlatformAccountAffiliationBanIT extends AbstractMySqlIntegrationTest {
     @Test
     @DisplayName("P1: 運営アカウントのチーム入会（MEMBER）は 403 で、memberships を 1 件も作らない")
     void P1_運営アカウントはチームに入会できない() {
-        assertThatThrownBy(() -> membershipService.join(join(PLATFORM_USER_ID, RoleKind.MEMBER)))
+        assertThatThrownBy(() -> PlatformAccountAffiliationPolicy.callJudged(platformAccountAffiliationPolicy.judge(java.util.List.of(PLATFORM_USER_ID)),
+                () -> membershipService.join(join(PLATFORM_USER_ID, RoleKind.MEMBER))))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN);
@@ -97,7 +103,8 @@ class PlatformAccountAffiliationBanIT extends AbstractMySqlIntegrationTest {
     @Test
     @DisplayName("P1: 運営アカウントのサポーター（フォロー）登録は 403 で、memberships を 1 件も作らない")
     void P1_運営アカウントはサポーターになれない() {
-        assertThatThrownBy(() -> membershipService.join(join(PLATFORM_USER_ID, RoleKind.SUPPORTER)))
+        assertThatThrownBy(() -> PlatformAccountAffiliationPolicy.callJudged(platformAccountAffiliationPolicy.judge(java.util.List.of(PLATFORM_USER_ID)),
+                () -> membershipService.join(join(PLATFORM_USER_ID, RoleKind.SUPPORTER))))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN);
@@ -108,7 +115,8 @@ class PlatformAccountAffiliationBanIT extends AbstractMySqlIntegrationTest {
     @Test
     @DisplayName("P4: 一般利用者のチーム入会は従来どおり成功する（回帰）")
     void P4_一般利用者は従来どおり入会できる() {
-        membershipService.join(join(GENERAL_USER_ID, RoleKind.MEMBER));
+        PlatformAccountAffiliationPolicy.callJudged(platformAccountAffiliationPolicy.judge(java.util.List.of(GENERAL_USER_ID)),
+                () -> membershipService.join(join(GENERAL_USER_ID, RoleKind.MEMBER)));
         em.flush();
         assertThat(countMemberships(GENERAL_USER_ID)).isEqualTo(1);
     }

@@ -1,5 +1,7 @@
 package com.mannschaft.app.team;
 
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.judged;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.general;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.BusinessException;
@@ -108,7 +110,7 @@ class TeamServiceTest {
             given(membershipRepository.countActiveByScopeAndRoleKind(any(), any(), any())).willReturn(0L);
 
             // When
-            ApiResponse<TeamResponse> result = service.createTeam(USER_ID, req);
+            ApiResponse<TeamResponse> result = judged(general(USER_ID), () -> service.createTeam(USER_ID, req));
 
             // Then
             assertThat(result.getData().getBasicInfo().name()).isEqualTo("テストチーム");
@@ -140,7 +142,7 @@ class TeamServiceTest {
                     .checkForCreateAndRun(eq(DuplicateNameScopeKind.TEAM), eq("既存チーム"), eq(USER_ID),
                             eq(false), org.mockito.ArgumentMatchers.isNull(), any(), any());
 
-            assertThatThrownBy(() -> service.createTeam(USER_ID, req))
+            assertThatThrownBy(() -> judged(general(USER_ID), () -> service.createTeam(USER_ID, req)))
                     .isSameAs(expected);
             verify(teamRepository, org.mockito.Mockito.never()).save(any(TeamEntity.class));
         }
@@ -157,7 +159,7 @@ class TeamServiceTest {
             given(teamFriendRepository.countFriendsByTeamId(any())).willReturn(0L);
             given(membershipRepository.countActiveByScopeAndRoleKind(any(), any(), any())).willReturn(0L);
 
-            ApiResponse<TeamResponse> result = service.createTeam(USER_ID, req);
+            ApiResponse<TeamResponse> result = judged(general(USER_ID), () -> service.createTeam(USER_ID, req));
 
             assertThat(result.getData().getBasicInfo().name()).isEqualTo("既存チーム");
             verify(duplicateNameGuardService).checkForCreateAndRun(

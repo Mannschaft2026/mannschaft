@@ -67,7 +67,6 @@ public class JoinRequestService {
     private final AccessControlService accessControlService;
     private final MembershipGrantService membershipGrantService;
     private final ApplicationEventPublisher eventPublisher;
-    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     // ========================================================================
     // 申請作成
@@ -86,7 +85,8 @@ public class JoinRequestService {
     public JoinRequestResponse createRequest(String scopeType, Long scopeId, Long actorUserId,
                                               JoinRequestCreateRequest request) {
         // 運営アカウント（SYSTEM_ADMIN）の参加申請は作成時点で拒否する（戦役 Z-A PR2）。
-        platformAccountAffiliationPolicy.assertAffiliatable(actorUserId);
+        // 判定は JoinRequestController が取引の外で済ませる（joinrequest の取引を role へ越境させない。D-3T）。
+        PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(actorUserId);
         String normalizedScopeType = validateScopeType(scopeType);
         ScopeJoinability joinability = loadJoinableScope(normalizedScopeType, scopeId);
 

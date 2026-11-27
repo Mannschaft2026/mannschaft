@@ -172,7 +172,8 @@ public class VillageInvitationService {
             throw foldToAbsent();
         }
         // 運営アカウント（SYSTEM_ADMIN）は村に所属できない（戦役 Z-A PR2）。招待の使用回数・入村ロックの前に拒否する。
-        platformAccountAffiliationPolicy.assertAffiliatable(actorUserId);
+        // 判定は VillageInvitationController が村の取引の外で済ませる（村の取引を role へ越境させない。D-3T）。
+        PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(actorUserId);
         if (!slotService.lockUser(actorUserId)) {
             throw foldToAbsent();
         }

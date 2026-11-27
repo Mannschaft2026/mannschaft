@@ -70,16 +70,17 @@ class PlatformAccountAffiliationOfficialVillageExceptionTest {
 
     VillageMembershipSlotService slots;
     VillageCreationRequestService service;
+    PlatformAccountAffiliationPolicy policy;
 
     @BeforeEach
     void setUp() {
-        PlatformAccountAffiliationPolicy policy = new PlatformAccountAffiliationPolicy(userRoleRepository);
+        policy = new PlatformAccountAffiliationPolicy(userRoleRepository);
         given(userRoleRepository.existsPlatformAdminRoleByUserId(PLATFORM_USER_ID)).willReturn(1L);
         slots = new VillageMembershipSlotService(
-                admissionLockRepository, membershipRepository, new VillageParticipationLimitProvider(null), policy);
+                admissionLockRepository, membershipRepository, new VillageParticipationLimitProvider(null));
         service = new VillageCreationRequestService(
                 requestRepository, villageRepository, membershipRepository, slots, entityManager,
-                accessControlService, policy);
+                accessControlService);
         given(requestRepository.countByRequesterUserIdAndCreatedAtAfter(eq(PLATFORM_USER_ID), any())).willReturn(0L);
         given(villageRepository.existsBySlug(any())).willReturn(false);
         given(requestRepository.save(any())).willAnswer(inv -> {
@@ -119,6 +120,11 @@ class PlatformAccountAffiliationOfficialVillageExceptionTest {
         return v;
     }
 
+    /** Controller と同じく、取引の外で本物の Policy に運営アカウントを判定させてから呼ぶ。 */
+    private <T> T asController(java.util.function.Supplier<T> work) {
+        return PlatformAccountAffiliationPolicy.callJudged(policy.judge(java.util.List.of(PLATFORM_USER_ID)), work);
+    }
+
     private static void assertPlatformForbidden(ThrowingCallable call) {
         assertThatThrownBy(call)
                 .isInstanceOf(BusinessException.class)
@@ -131,7 +137,7 @@ class PlatformAccountAffiliationOfficialVillageExceptionTest {
     void 運営アカウントは公式村を作成し村長になれる() {
         given(accessControlService.isSystemAdmin(PLATFORM_USER_ID)).willReturn(true);
 
-        VillageCreationRequestResponse res = service.createRequest(PLATFORM_USER_ID, request(VillageType.OFFICIAL));
+        VillageCreationRequestResponse res = asController(() -> service.createRequest(PLATFORM_USER_ID, request(VillageType.OFFICIAL)));
 
         assertThat(res.status()).isEqualTo(VillageRequestStatus.APPROVED);
         ArgumentCaptor<VillageEntity> village = ArgumentCaptor.forClass(VillageEntity.class);
@@ -147,7 +153,7 @@ class PlatformAccountAffiliationOfficialVillageExceptionTest {
     @Test
     @DisplayName("通常村（COMMUNITY）の作成申請は運営アカウントなら 403 のまま・村も村長行も作らない")
     void 通常村の作成申請は403のまま() {
-        assertPlatformForbidden(() -> service.createRequest(PLATFORM_USER_ID, request(VillageType.COMMUNITY)));
+        assertPlatformForbidden(() -> asController(() -> service.createRequest(PLATFORM_USER_ID, request(VillageType.COMMUNITY))));
         verify(villageRepository, never()).save(any());
         verify(membershipRepository, never()).save(any());
     }
@@ -157,7 +163,7 @@ class PlatformAccountAffiliationOfficialVillageExceptionTest {
     void 運営の認可を満たさなければ公式村も作れない() {
         given(accessControlService.isSystemAdmin(PLATFORM_USER_ID)).willReturn(false);
 
-        assertThatThrownBy(() -> service.createRequest(PLATFORM_USER_ID, request(VillageType.OFFICIAL)))
+        assertThatThrownBy(() -> asController(() -> service.createRequest(PLATFORM_USER_ID, request(VillageType.OFFICIAL))))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(VillageErrorCode.OFFICIAL_VILLAGE_FORBIDDEN);
@@ -168,16 +174,16 @@ class PlatformAccountAffiliationOfficialVillageExceptionTest {
     @Test
     @DisplayName("別経路（通常の admit・allocate）では、村長の所属行でも運営アカウントは 403（招待受諾・参加申請・承認は例外にならない）")
     void 通常のadmitでは村長でも403() {
-        assertPlatformForbidden(() -> slots.admit(userMembership(VillageRole.HEADMAN)));
-        assertPlatformForbidden(() -> slots.admit(userMembership(VillageRole.VILLAGER)));
-        assertPlatformForbidden(() -> slots.allocate(PLATFORM_USER_ID));
+        assertPlatformForbidden(() -> asController(() -> slots.admit(userMembership(VillageRole.HEADMAN))));
+        assertPlatformForbidden(() -> asController(() -> slots.admit(userMembership(VillageRole.VILLAGER))));
+        assertPlatformForbidden(() -> asController(() -> slots.allocate(PLATFORM_USER_ID)));
         verify(membershipRepository, never()).save(any());
     }
 
     @Test
     @DisplayName("公式村の作成者の例外は村長（HEADMAN）の所属行に限る（村人の行は 403）")
     void 例外の入口でも村長以外の所属行は403() {
-        assertPlatformForbidden(() -> slots.admitOfficialVillageCreator(userMembership(VillageRole.VILLAGER), officialVillage()));
+        assertPlatformForbidden(() -> asController(() -> slots.admitOfficialVillageCreator(userMembership(VillageRole.VILLAGER), officialVillage())));
         verify(membershipRepository, never()).save(any());
     }
 }
