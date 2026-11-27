@@ -1,0 +1,18 @@
+[
+  {
+    "path": "pages/system-admin/",
+    "reason": "運営コンソール本体の画面群。/system-admin/** は middleware/system-admin.ts と BE の SecurityConfig で SYSTEM_ADMIN 専用（テナント業務画面ではない）"
+  },
+  {
+    "path": "middleware/system-admin.ts",
+    "reason": "運営コンソールへの入口ガード。SYSTEM_ADMIN 以外をダッシュボードへ戻す拒否型"
+  },
+  {
+    "path": "composables/useAppNavGroups.ts",
+    "reason": "ナビ導線の振り分け。代理入力業務の導線から SYSTEM_ADMIN を除外する拒否型（維持必須）と運営導線の表示"
+  },
+  {
+    "path": "stores/useAuthStore.ts",
+    "reason": "isSystemAdmin getter の定義元（systemRole の判定の正本）"
+  }
+]
