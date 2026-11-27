@@ -36,9 +36,6 @@
     "loadError": "Freigabelinks konnten nicht geladen werden",
     "existingTitle": "Erstellte Links",
     "empty": "Noch keine Freigabelinks",
-    "copied": "Link kopiert",
-    "copyError": "Kopieren fehlgeschlagen",
-    "copyButton": "Link kopieren",
     "revoked": "Freigabelink widerrufen",
     "revokeError": "Widerruf fehlgeschlagen",
     "revokeButton": "Link widerrufen",
@@ -53,7 +50,12 @@
       "passwordInvalid": "Das Passwort ist falsch",
       "downloadNotAllowed": "Dieser Freigabelink erlaubt keine Downloads",
       "expiryInvalid": "Ein Ablaufdatum ist erforderlich und darf höchstens 30 Tage in der Zukunft liegen"
-    }
+    },
+    "createdAtLabel": "Erstellt am",
+    "accessCountLabel": "Zugriffe",
+    "reissueButton": "Neu ausstellen",
+    "reissueNotice": "Die Einstellungen des alten Links sind eingetragen. Geben Sie ein eventuelles Passwort erneut ein und klicken Sie auf „Freigabelink erstellen“, um einen neuen Link auszustellen und den alten zu löschen.",
+    "reissueDeleteError": "Der neue Link wurde ausgestellt, der alte Link konnte jedoch nicht gelöscht werden. Bitte löschen Sie ihn manuell in der Liste."
   },
   "guide": {
     "title": "So funktioniert die Dateifreigabe",

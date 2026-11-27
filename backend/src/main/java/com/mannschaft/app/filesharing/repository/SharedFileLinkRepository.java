@@ -12,9 +12,9 @@ import java.util.Optional;
 public interface SharedFileLinkRepository extends JpaRepository<SharedFileLinkEntity, Long> {
 
     /**
-     * トークンで共有リンクを取得する。
+     * トークンのハッシュ（{@code SecretTokenVault#hash}）で共有リンクを取得する。
      */
-    Optional<SharedFileLinkEntity> findByToken(String token);
+    Optional<SharedFileLinkEntity> findByTokenHash(String tokenHash);
 
     /**
      * ファイルの共有リンク一覧を取得する。

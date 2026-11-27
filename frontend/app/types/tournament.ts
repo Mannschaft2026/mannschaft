@@ -431,6 +431,8 @@ export interface TournamentHistoryEntryRecord {
 
 export interface TournamentHistoryEntry {
   organizationId?: number
+  /** 主催組織の slug（組織ページ URL の正準識別子）。取得できないときは null */
+  organizationSlug?: string | null
   meta?: TournamentHistoryEntryMeta
   identifiers?: TournamentHistoryEntryIdentifiers
   record?: TournamentHistoryEntryRecord
