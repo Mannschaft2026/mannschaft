@@ -22,7 +22,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -165,10 +164,11 @@ class SharedFileLinkFlywayColumnIT {
 
         // given: is_active=false かつ downloadAllowed=true のリンクを作成
         // (active=false は deactivate()、downloadAllowed=true は builder で設定)
-        String token = UUID.randomUUID().toString();
+        // 保存するのはハッシュ（hex64）。列名・型の検証が目的のため、乱数のハッシュ形の文字列を直接置く。
+        String token = new com.mannschaft.app.common.token.SecretTokenVault().issue().hash();
         SharedFileLinkEntity link = SharedFileLinkEntity.builder()
                 .fileId(99999L)  // FK チェック無効のため存在しない file_id でよい
-                .token(token)
+                .tokenHash(token)
                 .expiresAt(LocalDateTime.now().plusDays(7))
                 .downloadAllowed(true)
                 .accessCount(0)
@@ -182,7 +182,7 @@ class SharedFileLinkFlywayColumnIT {
         em.clear();  // 1次キャッシュをクリアして DB から再ロードさせる
 
         // when: JPA 往復確認（findByToken）
-        Optional<SharedFileLinkEntity> loaded = linkRepository.findByToken(token);
+        Optional<SharedFileLinkEntity> loaded = linkRepository.findByTokenHash(token);
 
         // then-1: JPA 往復で is_active=false が正しく取得できること
         // (@Column(name="is_active") が欠落していると INSERT 段階で SQLSyntaxErrorException)
@@ -200,7 +200,7 @@ class SharedFileLinkFlywayColumnIT {
         //   is_active / download_allowed の列名で SELECT できれば、Flyway スキーマが正しいことも確認できる
         @SuppressWarnings("unchecked")
         List<Object[]> rows = em.createNativeQuery(
-                        "SELECT is_active, download_allowed FROM shared_file_links WHERE token = :token")
+                        "SELECT is_active, download_allowed FROM shared_file_links WHERE token_hash = :token")
                 .setParameter("token", token)
                 .getResultList();
 

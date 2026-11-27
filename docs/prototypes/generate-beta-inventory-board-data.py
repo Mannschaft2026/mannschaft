@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """正本からローカル棚卸ボード用のJavaScriptデータを生成する。
 
-外部サービスへ送信せず、feature-inventory.yaml と task-list.md の相対パスを
-読み込んで beta-inventory-board-data.js を上書きする。B段階やGate前提工事は
+外部サービスへ送信せず、feature-inventory.yaml と台帳（docs/task-list.md。新配置では
+docs/task-list/*.md も。task_list_ledger.py）の相対パスを読み込んで beta-inventory-board-data.js を上書きする。B段階やGate前提工事は
 正本に軸がないため、推測で補完しない。
 """
 
@@ -14,8 +14,12 @@ import json
 import os
 import re
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import task_list_ledger  # noqa: E402  台帳の両配置の読み取り（CMP-261124-1222）
 
 ROOT = Path(__file__).resolve().parents[2]
 INVENTORY_PATH = ROOT / "docs" / "inventory" / "feature-inventory.yaml"
@@ -75,10 +79,10 @@ if os.environ.get("B0_INCLUDE_LOCAL_OVERLAY") == "true" and B0_LOCAL_DIR.exists(
     if run_files:
         B0_RUN_OVERLAY = json.loads(run_files[0].read_text(encoding="utf-8"))
 
-def git_commit_for(path: Path) -> str:
+def git_commit_for(*paths: Path) -> str:
     try:
         return subprocess.check_output(
-            ["git", "log", "-1", "--format=%H", "--", path.relative_to(ROOT).as_posix()],
+            ["git", "log", "-1", "--format=%H", "--", *[path.relative_to(ROOT).as_posix() for path in paths]],
             cwd=ROOT,
             text=True,
             stderr=subprocess.DEVNULL,
@@ -195,7 +199,7 @@ def split_table_row(line: str) -> list[str]:
     return [cell.strip() for cell in cells]
 
 
-def parse_campaigns(markdown: str) -> list[dict]:
+def parse_campaigns(markdown: str, source: str = "docs/task-list.md") -> list[dict]:
     campaigns = []
     for line in markdown.splitlines():
         if not re.match(r"^\|\s*CMP(?:-|$)", line):
@@ -230,13 +234,21 @@ def parse_campaigns(markdown: str) -> list[dict]:
                 "prs": [evidence or "未設定"],
                 "ci": "正本に記載された証拠を確認してください。",
                 "refs": [refs] if refs else [],
-                "source": "docs/task-list.md",
+                "source": source,
                 "sourceTokens": feature_refs,
                 "tags": tags,
                 "githubRefs": github_refs,
                 "github": [],
             }
         )
+    return campaigns
+
+
+def parse_ledger_campaigns(root: Path) -> list[dict]:
+    """台帳の全ファイル（旧配置は docs/task-list.md、新配置は索引＋月別・legacy）から CMP 行を読む。source は行の所在ファイル。"""
+    campaigns = []
+    for path in task_list_ledger.ledger_files(root):
+        campaigns.extend(parse_campaigns(path.read_text(encoding="utf-8"), task_list_ledger.relative(root, path)))
     return campaigns
 
 
@@ -338,10 +350,10 @@ def build_data() -> dict:
     inventory_source = INVENTORY_PATH.read_text(encoding="utf-8")
     inventory = parse_inventory(inventory_source)
     records = inventory.get("records") or []
-    task_list = TASK_LIST_PATH.read_text(encoding="utf-8")
+    task_list = task_list_ledger.read_ledger_text(ROOT)
     features = [feature_view(record) for record in records]
     capabilities = [capability for record in records for capability in capability_views(record)]
-    campaigns = parse_campaigns(task_list)
+    campaigns = parse_ledger_campaigns(ROOT)
     github_snapshot = json.loads(GITHUB_PATH.read_text(encoding="utf-8")) if GITHUB_PATH.exists() else {"status": "unsynced", "items": {}, "references": {}}
     github_status = json.loads(GITHUB_STATUS_PATH.read_text(encoding="utf-8")) if GITHUB_STATUS_PATH.exists() else {"status": "unsynced", "error": None, "synchronizedAt": None}
     for campaign in campaigns:
@@ -469,15 +481,15 @@ def build_data() -> dict:
         "generatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "sources": {
             "inventory": "docs/inventory/feature-inventory.yaml",
-            "taskList": "docs/task-list.md",
+            "taskList": "docs/task-list.md" if task_list_ledger.ledger_layout(ROOT) == "single" else "docs/task-list.md + docs/task-list/*.md",
             "decisions": "docs/prototypes/beta-inventory-board-decisions.json",
             "b0Alicization": "docs/prototypes/beta-inventory-board-b0-alicization.json",
             "b0Coverage": "docs/prototypes/beta-inventory-board-b0-coverage.json",
             "gate": "docs/prototypes/beta-inventory-board-gate.json",
             "inventoryCommit": git_commit_for(INVENTORY_PATH),
-            "taskListCommit": git_commit_for(TASK_LIST_PATH),
+            "taskListCommit": git_commit_for(*task_list_ledger.ledger_files(ROOT)),
             "inventorySha256": hashlib.sha256(INVENTORY_PATH.read_bytes()).hexdigest(),
-            "taskListSha256": hashlib.sha256(TASK_LIST_PATH.read_bytes()).hexdigest(),
+            "taskListSha256": task_list_ledger.ledger_sha256(ROOT),
             "decisionsSha256": hashlib.sha256(DECISIONS_PATH.read_bytes()).hexdigest(),
             "gateSha256": hashlib.sha256(GATE_PATH.read_bytes()).hexdigest(),
             "githubSnapshot": "docs/prototypes/beta-inventory-board-github.json",

@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-260826-1457",
+  "scope": "app",
+  "implementation": {
+    "pr": 4953,
+    "sha": "e4fd4a73db257daa0a58006e3aedf114787707a5"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "招待・共有6系統（contact・event・filesharing・committee・pointcard・signage）のトークンが DB に平文で保存されず、token_hash だけが保存される（招待 invite_tokens と承諾型は W1 で済み）",
+      "tests": [
+        {
+          "name": "6系統のハッシュ保存化（PR-0 #4887、committee #4878、event #4875、contact #4870、signage #4871、filesharing #4872、pointcard #4874）と実機E2E（DB・ログ・全テーブル dump に平文0件）",
+          "evidence": "docs/evidence/CMP-260826-1457-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "平文は発行時に1回だけ返り、一覧では返らない。照合は成功し、他テナント・権限なし・未認証・改ざん・失効・期限切れは拒否される",
+      "tests": [
+        {
+          "name": "実機E2E（6系統）",
+          "evidence": "docs/evidence/CMP-260826-1457-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "新規のトークン実装が平文保存へ戻らないことを番人（CMP-260826-1457 の平文債務が0件）で禁じる",
+      "tests": [
+        {
+          "name": "PlaintextSecretTokenGuardArchTest（PR-Z）",
+          "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4953"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 45960380422 },
+    { "runId": 45960380428 },
+    { "runId": 45960380434 },
+    { "runId": 45960380427 },
+    { "runId": 45960377752 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4953"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-260826-1457-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-260826-1457-real.md"
+    }
+  },
+  "regressions": []
+}

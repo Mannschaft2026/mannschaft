@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261123-2128",
+  "scope": "app",
+  "implementation": {
+    "pr": 4905,
+    "sha": "f8ab7e01a5a27831fccc066ddbaef47327307744"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "committees.vue の作成フォームで、BE 必須の初代委員長（initialChairUserId）を候補（ADMIN/DEPUTY_ADMIN/MEMBER）から選べ、目的タグは BE の enum（TOURNAMENT/GOVERNANCE/ELECTION/PROJECT/OTHER）から選べて、委員会を設立できる",
+      "tests": [
+        {
+          "name": "committees-create.spec.ts",
+          "evidence": "frontend/tests/unit/pages/committees/committees-create.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "400 のとき fieldErrors から不正な欄が示され、送信中は二重押しでも POST が重複しない",
+      "tests": [
+        {
+          "name": "committees-create.spec.ts",
+          "evidence": "frontend/tests/unit/pages/committees/committees-create.spec.ts"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 45607288491 },
+    { "runId": 45607288466 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4905"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261123-2128-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261123-2128-exploratory.md"
+    }
+  },
+  "regressions": []
+}

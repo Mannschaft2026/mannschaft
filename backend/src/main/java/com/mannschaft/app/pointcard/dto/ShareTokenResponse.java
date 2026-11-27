@@ -15,7 +15,7 @@ import java.time.OffsetDateTime;
  * <p>TTL は 5 分（Valkey の {@code SET NX EX 300}）で固定。
  * {@code deepLinkUrl} は店主アプリ側でディープリンクとして直接読み取らせる用途も想定する。
  *
- * @param token       一時トークン（UUID v4 / 5 分後に Valkey 上から自動消滅）
+ * @param token       一時トークン（Base64URL 43 字 / 5 分後に Valkey 上から自動消滅。平文はこの発行応答でだけ返す）
  * @param expiresAt   トークン失効日時（生成時刻 + 5 分、ISO 8601 / UTC）
  * @param deepLinkUrl 店主アプリ用ディープリンク URL（{@code mannschaft://wallet/share?token=...}）
  */
