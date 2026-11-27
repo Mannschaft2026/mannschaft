@@ -4,6 +4,7 @@ import com.mannschaft.app.bulletin.ScopeType;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.role.service.RoleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -32,7 +33,7 @@ import org.springframework.stereotype.Component;
  * </ul>
  *
  * <h2>fail-closed 方針（重要）</h2>
- * <p>{@link #checkMembership(Long, ScopeType, Long)} は<b>全スコープ種別を網羅し、
+ * <p>{@link #checkScopeContentAccess(Long, ScopeType, Long)} / {@link #checkMembershipForWrite(Long, ScopeType, Long)} は<b>全スコープ種別を網羅し、
  * 本ガードで判定できない種別は素通しせず拒否する</b>。委譲は「呼び出し側で分岐済み」を
  * 前提にしてよいが、<b>分岐漏れは素通しではなく拒否として現れる</b>ようにする。</p>
  *
@@ -43,11 +44,18 @@ import org.springframework.stereotype.Component;
  * <p>他のロール判定メソッド（{@link #isAdmin} / {@link #isAdminOrAbove} / {@link #isSupporter} /
  * {@link #requireManageContent} / {@link #requireCanCreateThread}）は従来どおり
  * TEAM / ORGANIZATION のみを実効判定する。これらはいずれも
- * {@link #checkMembership(Long, ScopeType, Long)} の後に呼ばれる設計であり、
+ * {@link #checkScopeContentAccess(Long, ScopeType, Long)} / {@link #checkMembershipForWrite(Long, ScopeType, Long)} の後に呼ばれる設計であり、
  * PERSONAL では本人であることが先に保証されているため「本人＝自スコープの管理者」として
  * 素通りさせてよい（個人掲示板の所有者が自分の投稿を管理できる従来挙動を維持する）。</p>
  *
  * <p>認可違反は共通 403（{@link CommonErrorCode#COMMON_002}）を流用する（bulletin 専用認可エラーは作らない）。</p>
+ *
+ * <h2>親チーム上限（CMP-261124-0159・F00 §20）</h2>
+ * <p>TEAM / ORGANIZATION の在籍確認は共通の門 {@link ScopeContentAccessGate} を通す。非公開チーム
+ * （{@code MEMBERS_AND_ABOVE}）の中身は、そのチームの正式メンバー以上にだけ見せる。中身を返す読み取り（および応答に
+ * 既存の投稿・カテゴリ等を含む更新）は {@link #checkScopeContentAccess}、中身を返さない書き込み（作成・削除・既読化）は
+ * {@link #checkMembershipForWrite}。どちらも拒否は従来の非所属拒否と同一の 403（COMMON_002）。
+ * {@code AccessControlService#checkMembership} / {@code #isMember} は直接呼ばない（番人 ScopeContentAccessGateCoverageTest）。</p>
  */
 @Component
 @RequiredArgsConstructor
@@ -58,6 +66,7 @@ public class BulletinAccessGuard {
 
     private final AccessControlService accessControlService;
     private final RoleService roleService;
+    private final ScopeContentAccessGate scopeContentAccessGate;
 
     /**
      * 当該スコープが {@link AccessControlService} のロール/メンバーシップ基盤で
@@ -88,14 +97,36 @@ public class BulletinAccessGuard {
      * @throws BusinessException アクセス資格なし、または本ガードで判定できないスコープ種別
      *                           （{@link CommonErrorCode#COMMON_002}）
      */
-    public void checkMembership(Long userId, ScopeType scopeType, Long scopeId) {
+    public void checkScopeContentAccess(Long userId, ScopeType scopeType, Long scopeId) {
         if (scopeType == null) {
             throw new BusinessException(CommonErrorCode.COMMON_002);
         }
         switch (scopeType) {
-            case TEAM, ORGANIZATION -> accessControlService.checkMembership(userId, scopeId, scopeType.name());
+            case TEAM, ORGANIZATION ->
+                    scopeContentAccessGate.checkScopeContentAccess(userId, scopeId, scopeType.name());
             case PERSONAL -> checkPersonalOwner(userId, scopeId);
             // VILLAGE を含むそれ以外は本ガードでは判定できない。素通しせず拒否する（fail-closed）。
+            default -> throw new BusinessException(CommonErrorCode.COMMON_002);
+        }
+    }
+
+    /**
+     * 中身を返さない書き込み（作成・削除・既読化）のためのアクセス資格の検証。判定は
+     * {@link #checkScopeContentAccess} と同じスコープ網羅（fail-closed）で、TEAM / ORGANIZATION の在籍確認だけが
+     * 共通の門の {@code checkMembershipForWrite}（従来の在籍確認と同一）になる。非公開チームにサポーター・ゲストが
+     * 在籍しない不変条件に依拠する（F00 §20.3）。
+     *
+     * @throws BusinessException アクセス資格なし、または本ガードで判定できないスコープ種別
+     *                           （{@link CommonErrorCode#COMMON_002}）
+     */
+    public void checkMembershipForWrite(Long userId, ScopeType scopeType, Long scopeId) {
+        if (scopeType == null) {
+            throw new BusinessException(CommonErrorCode.COMMON_002);
+        }
+        switch (scopeType) {
+            case TEAM, ORGANIZATION ->
+                    scopeContentAccessGate.checkMembershipForWrite(userId, scopeId, scopeType.name());
+            case PERSONAL -> checkPersonalOwner(userId, scopeId);
             default -> throw new BusinessException(CommonErrorCode.COMMON_002);
         }
     }

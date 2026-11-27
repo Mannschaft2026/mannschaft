@@ -334,7 +334,7 @@ class SurveyBulletinThreadServiceTest {
                     SURVEY_SOURCE_TYPE, SURVEY_ID))
                     .willReturn(Optional.of(thread));
             doThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .when(accessGuard).checkMembership(currentUserId, ScopeType.TEAM, SCOPE_ID);
+                    .when(accessGuard).checkScopeContentAccess(currentUserId, ScopeType.TEAM, SCOPE_ID);
 
             // when / then: 認可違反が伝播する。enrichSingle は呼ばれない
             assertThatThrownBy(() -> service.findThreadResponseBySurveyId(SURVEY_ID, currentUserId))
@@ -364,7 +364,7 @@ class SurveyBulletinThreadServiceTest {
             assertThat(result).isPresent();
             assertThat(result.get()).isSameAs(enriched);
             // スレッド自身の scopeType/scopeId でガードされること
-            verify(accessGuard).checkMembership(currentUserId, ScopeType.TEAM, SCOPE_ID);
+            verify(accessGuard).checkScopeContentAccess(currentUserId, ScopeType.TEAM, SCOPE_ID);
         }
 
         @Test
@@ -381,7 +381,8 @@ class SurveyBulletinThreadServiceTest {
 
             // then: 存在しないものは gate 前 → empty（コントローラで 404）。ガードは踏まない
             assertThat(result).isEmpty();
-            verify(accessGuard, never()).checkMembership(any(), any(), any());
+            verify(accessGuard, never()).checkScopeContentAccess(any(), any(), any());
+            verify(accessGuard, never()).checkMembershipForWrite(any(), any(), any());
             verify(bulletinThreadService, never()).enrichSingle(any(), any());
         }
     }

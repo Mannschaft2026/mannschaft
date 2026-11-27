@@ -167,7 +167,7 @@ class BulletinAttachmentServiceTest {
                 .willReturn(List.of(dangerousAttachment()));
         assertThat(service.listThreadAttachments(THREAD_ID, USER_ID)).isEmpty();
         verify(storageAccessService).generateDownloadUrlsForList(eq(List.of()), any());
-        verify(accessGuard).checkMembership(USER_ID, ScopeType.TEAM, TEAM_ID);
+        verify(accessGuard).checkScopeContentAccess(USER_ID, ScopeType.TEAM, TEAM_ID);
     }
 
     @Test
@@ -236,7 +236,7 @@ class BulletinAttachmentServiceTest {
 
             assertThat(res.uploadUrl()).isEqualTo("https://r2/put");
             assertThat(res.fileKey()).startsWith("bulletin/TEAM/" + TEAM_ID + "/THREAD/" + THREAD_ID + "/");
-            verify(accessGuard).checkMembership(USER_ID, ScopeType.TEAM, TEAM_ID);
+            verify(accessGuard).checkScopeContentAccess(USER_ID, ScopeType.TEAM, TEAM_ID);
             verify(storageQuotaService).checkQuota(StorageScopeType.TEAM, TEAM_ID, 1024L);
             verify(storageAclService).registerPending(
                     org.mockito.ArgumentMatchers.startsWith("bulletin/TEAM/"), eq(USER_ID),
@@ -259,7 +259,7 @@ class BulletinAttachmentServiceTest {
             AttachmentPresignResponse res = service.generateUploadUrl(presignReq(TargetType.REPLY, REPLY_ID), USER_ID);
 
             assertThat(res.fileKey()).contains("/REPLY/" + REPLY_ID + "/");
-            verify(accessGuard).checkMembership(USER_ID, ScopeType.TEAM, TEAM_ID);
+            verify(accessGuard).checkScopeContentAccess(USER_ID, ScopeType.TEAM, TEAM_ID);
         }
 
         @Test
@@ -267,7 +267,7 @@ class BulletinAttachmentServiceTest {
         void nonMemberForbidden() {
             given(threadRepository.findById(THREAD_ID)).willReturn(Optional.of(teamThread()));
             doThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .when(accessGuard).checkMembership(OTHER_USER_ID, ScopeType.TEAM, TEAM_ID);
+                    .when(accessGuard).checkScopeContentAccess(OTHER_USER_ID, ScopeType.TEAM, TEAM_ID);
 
             assertThatThrownBy(() -> service.generateUploadUrl(presignReq(TargetType.THREAD, THREAD_ID), OTHER_USER_ID))
                     .isInstanceOf(BusinessException.class)
@@ -377,7 +377,7 @@ class BulletinAttachmentServiceTest {
             AttachmentResponse res = service.confirmAttachment(createReq(TargetType.THREAD, THREAD_ID), USER_ID);
 
             assertThat(res.getId()).isEqualTo(ATTACHMENT_ID);
-            verify(accessGuard).checkMembership(USER_ID, ScopeType.ORGANIZATION, ORG_ID);
+            verify(accessGuard).checkScopeContentAccess(USER_ID, ScopeType.ORGANIZATION, ORG_ID);
             verify(storageQuotaService).recordUpload(
                     eq(StorageScopeType.ORGANIZATION), eq(ORG_ID), eq(1024L),
                     eq(StorageFeatureType.BULLETIN), any(), eq(ATTACHMENT_ID), eq(USER_ID));
@@ -392,7 +392,7 @@ class BulletinAttachmentServiceTest {
         void confirmNonMemberForbidden() {
             given(threadRepository.findById(THREAD_ID)).willReturn(Optional.of(teamThread()));
             doThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .when(accessGuard).checkMembership(OTHER_USER_ID, ScopeType.TEAM, TEAM_ID);
+                    .when(accessGuard).checkScopeContentAccess(OTHER_USER_ID, ScopeType.TEAM, TEAM_ID);
 
             assertThatThrownBy(() -> service.confirmAttachment(createReq(TargetType.THREAD, THREAD_ID), OTHER_USER_ID))
                     .isInstanceOf(BusinessException.class);
@@ -420,7 +420,7 @@ class BulletinAttachmentServiceTest {
             List<AttachmentResponse> res = service.listThreadAttachments(THREAD_ID, USER_ID);
 
             assertThat(res).hasSize(1);
-            verify(accessGuard).checkMembership(USER_ID, ScopeType.TEAM, TEAM_ID);
+            verify(accessGuard).checkScopeContentAccess(USER_ID, ScopeType.TEAM, TEAM_ID);
         }
 
         @Test
@@ -434,7 +434,7 @@ class BulletinAttachmentServiceTest {
                     .willReturn(List.of());
             service.listReplyAttachments(REPLY_ID, USER_ID);
 
-            verify(accessGuard).checkMembership(USER_ID, ScopeType.ORGANIZATION, ORG_ID);
+            verify(accessGuard).checkScopeContentAccess(USER_ID, ScopeType.ORGANIZATION, ORG_ID);
         }
     }
 
@@ -455,7 +455,7 @@ class BulletinAttachmentServiceTest {
 
             assertThat(res.downloadUrl()).isEqualTo("https://r2/get?sig=x");
             assertThat(res.expiresInSeconds()).isPositive();
-            verify(accessGuard).checkMembership(USER_ID, ScopeType.TEAM, TEAM_ID);
+            verify(accessGuard).checkScopeContentAccess(USER_ID, ScopeType.TEAM, TEAM_ID);
         }
 
         @Test
@@ -475,7 +475,7 @@ class BulletinAttachmentServiceTest {
             given(attachmentRepository.findById(ATTACHMENT_ID)).willReturn(Optional.of(attachment(USER_ID)));
             given(threadRepository.findById(THREAD_ID)).willReturn(Optional.of(teamThread()));
             doThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .when(accessGuard).checkMembership(OTHER_USER_ID, ScopeType.TEAM, TEAM_ID);
+                    .when(accessGuard).checkScopeContentAccess(OTHER_USER_ID, ScopeType.TEAM, TEAM_ID);
 
             assertThatThrownBy(() -> service.generateDownloadUrl(ATTACHMENT_ID, OTHER_USER_ID))
                     .isInstanceOf(BusinessException.class);
@@ -609,7 +609,8 @@ class BulletinAttachmentServiceTest {
             service.listThreadAttachments(THREAD_ID, USER_ID);
 
             verify(tournamentContactAccessService, never()).checkView(any(), any(), any(), any());
-            verify(accessGuard, never()).checkMembership(any(), any(), any());
+            verify(accessGuard, never()).checkScopeContentAccess(any(), any(), any());
+            verify(accessGuard, never()).checkMembershipForWrite(any(), any(), any());
         }
 
         @Test
@@ -625,7 +626,8 @@ class BulletinAttachmentServiceTest {
 
             verify(tournamentContactAccessService).checkPost(
                     eq(com.mannschaft.app.tournament.ContactSpaceScopeType.TOURNAMENT), eq(T_SCOPE_ID), eq(USER_ID));
-            verify(accessGuard, never()).checkMembership(any(), any(), any());
+            verify(accessGuard, never()).checkScopeContentAccess(any(), any(), any());
+            verify(accessGuard, never()).checkMembershipForWrite(any(), any(), any());
         }
 
         @Test
@@ -638,7 +640,8 @@ class BulletinAttachmentServiceTest {
 
             assertThatThrownBy(() -> service.generateUploadUrl(presignReq(TargetType.THREAD, THREAD_ID), OTHER_USER_ID))
                     .isInstanceOf(BusinessException.class);
-            verify(accessGuard, never()).checkMembership(any(), any(), any());
+            verify(accessGuard, never()).checkScopeContentAccess(any(), any(), any());
+            verify(accessGuard, never()).checkMembershipForWrite(any(), any(), any());
         }
 
         @Test

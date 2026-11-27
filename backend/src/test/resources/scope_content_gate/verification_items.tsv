@@ -22,4 +22,5 @@ V-0159-10-1	AC-0159-10	掲示板（スレッド一覧・詳細・返信・既読
 V-0159-10-2	AC-0159-10	掲示板のグローバル方式（threadId・scope_id 指定）でも同じ上限が効く	PR-D1	BulletinGlobalScopeContentAccessMatrixIT	実装済み
 V-0159-11-1	AC-0159-11	ファイル共有（チームフォルダの一覧・子一覧・詳細）の閲覧上限	PR-D1	FilesharingScopeContentAccessMatrixIT#表に全読み取り経路が載っている	実装済み
 V-0159-11-2	AC-0159-11	ファイル詳細・版一覧・コメント一覧・フォルダ詳細の閲覧上限（folderId / fileId 指定）	PR-D1	FilesharingFileScopeContentAccessMatrixIT	実装済み
+V-0159-10-3	AC-0159-10	掲示板の認可ガードが TEAM / ORGANIZATION の在籍確認を共通の門へ委ね、判定できないスコープは拒否する（単体）	PR-D1	BulletinAccessGuardScopeContentGateTest#読み取りと書き込みは門へ委譲する	実装済み
 V-0159-11-3	AC-0159-11	権限なしにはダウンロード URL が返らず、部外者と同一応答	PR-D1	FilesharingFileScopeContentAccessMatrixIT#権限なしにはダウンロードURLが返らない	実装済み

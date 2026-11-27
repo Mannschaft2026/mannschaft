@@ -116,7 +116,7 @@ public class BulletinReadFacade {
         if (!isManaged(metadata)) return;
         ScopeType type = ScopeType.valueOf(metadata.scopeType());
         try {
-            accessGuard.checkMembership(viewer, type, metadata.scopeId());
+            accessGuard.checkScopeContentAccess(viewer, type, metadata.scopeId());
             if ((type == ScopeType.TEAM && teamService.isProvisioned(metadata.scopeId()))
                     || (type == ScopeType.ORGANIZATION && organizationService.isProvisioned(metadata.scopeId()))) throw notFound();
             visibilityChecker.assertCanView(ReferenceType.BULLETIN_THREAD, metadata.threadId(), viewer);

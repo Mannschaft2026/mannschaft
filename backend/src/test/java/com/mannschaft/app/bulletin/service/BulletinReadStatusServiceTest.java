@@ -217,7 +217,8 @@ class BulletinReadStatusServiceTest {
             bulletinReadStatusService.markAsReadGlobal(THREAD_ID, USER_ID);
 
             verify(readStatusRepository).save(any());
-            verify(accessGuard, never()).checkMembership(any(), any(), any());
+            verify(accessGuard, never()).checkScopeContentAccess(any(), any(), any());
+            verify(accessGuard, never()).checkMembershipForWrite(any(), any(), any());
         }
 
         @Test
@@ -242,7 +243,8 @@ class BulletinReadStatusServiceTest {
             bulletinReadStatusService.listTournamentReadUsers(THREAD_ID, false, null);
 
             verify(readStatusRepository).findByThreadIdOrderByReadAtDesc(THREAD_ID);
-            verify(accessGuard, never()).checkMembership(any(), any(), any());
+            verify(accessGuard, never()).checkScopeContentAccess(any(), any(), any());
+            verify(accessGuard, never()).checkMembershipForWrite(any(), any(), any());
         }
 
         @Test

@@ -102,7 +102,7 @@ class BulletinCategoryServiceTest {
 
             // Then
             assertThat(result).hasSize(1);
-            verify(accessGuard).checkMembership(USER_ID, SCOPE_TYPE, SCOPE_ID);
+            verify(accessGuard).checkScopeContentAccess(USER_ID, SCOPE_TYPE, SCOPE_ID);
         }
 
         @Test
@@ -110,7 +110,7 @@ class BulletinCategoryServiceTest {
         void カテゴリ一覧取得_非メンバー_403() {
             // Given
             doThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .when(accessGuard).checkMembership(USER_ID, SCOPE_TYPE, SCOPE_ID);
+                    .when(accessGuard).checkScopeContentAccess(USER_ID, SCOPE_TYPE, SCOPE_ID);
 
             // When & Then
             assertThatThrownBy(() -> bulletinCategoryService.listCategories(SCOPE_TYPE, SCOPE_ID, USER_ID))

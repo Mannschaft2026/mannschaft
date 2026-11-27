@@ -165,7 +165,7 @@ public class BulletinReactionService {
             villageBulletinAccessService.checkVillageBulletinViewAccess(thread.getScopeVillageId(), userId);
             return;
         }
-        accessGuard.checkMembership(userId, thread.getScopeType(), thread.getScopeId());
+        accessGuard.checkScopeContentAccess(userId, thread.getScopeType(), thread.getScopeId());
     }
 
     /** リアクション対象スレッドが大会/ディビジョン連絡スペースか。 */

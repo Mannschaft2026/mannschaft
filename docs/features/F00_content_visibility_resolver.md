@@ -3258,7 +3258,7 @@ Resolver を通らない読み取り経路（スコープ単位の一覧・集�
 | `auth` | 2 | PendingInviteService(2) | 対象外（入口表） | PendingInviteService は入口。F01.2 03 の入口表で TEAM_073 |
 | `billing` | 1 | BillingEntitlementQueryService(1) | 対象外 | 課金・権利の照会。中身でなく契約情報で、既存の管理者判定に従う |
 | `budget` | 7 | BudgetCategoryService(1)、BudgetReportService(2)、BudgetTransactionService(4) | 門 | 予算・取引・報告の読み取り |
-| `bulletin` | 39 | BulletinAccessGuard(4)、BulletinArchiveFolderService(4)、BulletinAttachmentService(1)、BulletinCategoryService(5)、BulletinReactionService(1)、BulletinReadFacade(1)、BulletinReadStatusService(4)、BulletinReplyService(4)、BulletinThreadService(14)、SurveyBulletinThreadService(1) | 門 | 掲示板（F05.1） |
+| `bulletin` | 39 | BulletinAccessGuard(4)、BulletinArchiveFolderService(4)、BulletinAttachmentService(1)、BulletinCategoryService(5)、BulletinReactionService(1)、BulletinReadFacade(1)、BulletinReadStatusService(4)、BulletinReplyService(4)、BulletinThreadService(14)、SurveyBulletinThreadService(1) | 門 | 掲示板（F05.1）。**移行済み（PR-D1）**: `BulletinAccessGuard` が `ScopeContentAccessGate` の `checkScopeContentAccess`（読み取り・既存の投稿を返す更新）/ `checkMembershipForWrite`（作成・削除・既読化）へ委譲。Matrix: `scope_content_matrix/bulletin.yaml`・`_bulletin_global.yaml`（グローバル方式。台帳対象外） |
 | `chart` | 9 | ChartFormulaService(1)、ChartIntakeFormService(1)、ChartRecordService(3)、ChartSettingsService(4) | 門 | カルテ・記録の読み取り |
 | `chat` | 4 | ChatChannelAccessGuard(4) | 門 | チャンネル・メッセージ（F04.2）。**成功経路にも上限を AND する**: `ChatChannelAccessGuard#requireMembershipRowOrConceal`（チャンネルメンバー行があれば即許可）で、チャンネルがチーム系（`TEAM_PUBLIC` / `TEAM_PRIVATE`）なら許可の前に門を通す（存在認知判定の `isMember` の置換だけでは止まらない）。自分のチャンネル一覧 `ChatChannelService#listMyChannels`（メンバー行から直接取得）は、チーム系チャンネルのチーム ID を集めて `filterAccessibleTeamIds` で一括フィルタする。WebSocket は §20.5.5 |
 | `circulation` | 2 | CirculationService(2) | 門 | 回覧（受信者 ACL と AND） |
@@ -3275,7 +3275,7 @@ Resolver を通らない読み取り経路（スコープ単位の一覧・集�
 | `event` | 2 | EventScopeAccessGuard(2) | 門 | イベント（チケット含む）の読み取り。公開 EP は §20.5.2 |
 | `facility` | 3 | FacilityAccessGuard(3) | 門 | 施設予約の読み取り |
 | `family` | 30 | AnniversaryService(5)、CoinTossService(3)、DutyRotationService(2)、PresenceIconService(1)、PresenceService(4)、RoleAliasService(1)、ShoppingListService(13)、WallpaperService(1) | 門 | 家族チーム（記念日・当番・買い物リスト等）。TEAM スコープのため同じ規則 |
-| `filesharing` | 10 | SharedFolderAccessGuard(2)、SharedFolderQueryService(2)、SharedFolderService(6) | 門 | ファイル共有（F05.5）。公開リンクは §20.5.2 |
+| `filesharing` | 10 | SharedFolderAccessGuard(2)、SharedFolderQueryService(2)、SharedFolderService(6) | 門 | ファイル共有（F05.5）。公開リンクは §20.5.2。**移行済み（PR-D1）**: `SharedFolderAccessGuard#authorizeBaseView`（フォルダ・ファイル・版・コメント等の閲覧、ダウンロード URL 発行の入口）・`SharedFolderQueryService#authorizeScopeView`・`SharedFolderService`（ルート一覧・フォルダ閲覧は門、作成は `checkMembershipForWrite`）。Matrix: `filesharing.yaml`・`_filesharing_files.yaml` |
 | `forms` | 6 | FormPresetCatalogController(1)、FormSubmissionService(3)、FormTemplateService(2) | 門 | フォーム（F05.7） |
 | `gallery` | 5 | GalleryMediaUploadService(1)、PhotoService(4) | 門 | ギャラリー（F06.2）。画像 URL 発行を含む |
 | `gamification` | 7 | GamificationBadgeController(2)、GamificationPointController(2)、GamificationRankingController(1)、GamificationSettingController(2) | 門 | バッジ・ポイント・ランキング・設定の読み取り |

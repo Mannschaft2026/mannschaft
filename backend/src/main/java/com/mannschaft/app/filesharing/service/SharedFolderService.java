@@ -1,6 +1,7 @@
 package com.mannschaft.app.filesharing.service;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.filesharing.FileScopeType;
 import com.mannschaft.app.filesharing.FileSharingErrorCode;
@@ -56,6 +57,7 @@ public class SharedFolderService {
     private final FolderScopeAccessGuard folderScopeAccessGuard;
     /** 認可根治 Wave7: TEAM / ORGANIZATION スコープの per-scope 認可（メンバー / 管理者）。 */
     private final AccessControlService accessControlService;
+    private final ScopeContentAccessGate scopeContentAccessGate;
     private final SharedFolderAccessGuard folderAccessGuard;
 
     /**
@@ -69,7 +71,7 @@ public class SharedFolderService {
      * @return フォルダレスポンスリスト
      */
     public List<FolderResponse> listTeamRootFolders(Long teamId, Long userId) {
-        accessControlService.checkMembership(userId, teamId, "TEAM");
+        scopeContentAccessGate.checkScopeContentAccess(userId, teamId, "TEAM");
         List<SharedFolderEntity> folders = folderRepository.findByTeamIdAndParentIdIsNullOrderByNameAsc(teamId);
         return fileSharingMapper.toFolderResponseList(folders);
     }
@@ -84,7 +86,7 @@ public class SharedFolderService {
      * @return フォルダレスポンスリスト
      */
     public List<FolderResponse> listOrgRootFolders(Long organizationId, Long userId) {
-        accessControlService.checkMembership(userId, organizationId, "ORGANIZATION");
+        scopeContentAccessGate.checkScopeContentAccess(userId, organizationId, "ORGANIZATION");
         List<SharedFolderEntity> folders = folderRepository.findByOrganizationIdAndParentIdIsNullOrderByNameAsc(organizationId);
         return fileSharingMapper.toFolderResponseList(folders);
     }
@@ -147,7 +149,7 @@ public class SharedFolderService {
      */
     @Transactional
     public FolderResponse createTeamFolder(Long teamId, Long userId, CreateFolderRequest request) {
-        accessControlService.checkMembership(userId, teamId, "TEAM");
+        scopeContentAccessGate.checkMembershipForWrite(userId, teamId, "TEAM");
         checkParentWithinScope(request.getParentId(), FileScopeType.TEAM, teamId);
         validateFolderNameUnique(request.getParentId(), request.getName());
 
@@ -180,7 +182,7 @@ public class SharedFolderService {
      */
     @Transactional
     public FolderResponse createOrgFolder(Long organizationId, Long userId, CreateFolderRequest request) {
-        accessControlService.checkMembership(userId, organizationId, "ORGANIZATION");
+        scopeContentAccessGate.checkMembershipForWrite(userId, organizationId, "ORGANIZATION");
         checkParentWithinScope(request.getParentId(), FileScopeType.ORGANIZATION, organizationId);
         validateFolderNameUnique(request.getParentId(), request.getName());
 
@@ -415,9 +417,9 @@ public class SharedFolderService {
     private void checkFolderViewAccess(SharedFolderEntity folder, Long userId) {
         switch (folder.getScopeType()) {
             case PERSONAL -> checkPersonalOwner(folder, userId);
-            case TEAM -> accessControlService.checkMembership(userId, folder.getTeamId(), "TEAM");
+            case TEAM -> scopeContentAccessGate.checkScopeContentAccess(userId, folder.getTeamId(), "TEAM");
             case ORGANIZATION ->
-                    accessControlService.checkMembership(userId, folder.getOrganizationId(), "ORGANIZATION");
+                    scopeContentAccessGate.checkScopeContentAccess(userId, folder.getOrganizationId(), "ORGANIZATION");
             case TOURNAMENT, TOURNAMENT_DIVISION ->
                     folderScopeAccessGuard.checkFolderViewByFolderId(folder.getId(), userId);
         }

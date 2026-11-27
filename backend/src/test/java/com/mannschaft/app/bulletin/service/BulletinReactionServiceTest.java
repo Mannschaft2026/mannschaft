@@ -108,7 +108,7 @@ class BulletinReactionServiceTest {
             // Then
             assertThat(result).isNotNull();
             assertThat(result.getEmoji()).isEqualTo(VALID_EMOJI);
-            verify(accessGuard).checkMembership(USER_ID, SCOPE_TYPE, SCOPE_ID);
+            verify(accessGuard).checkScopeContentAccess(USER_ID, SCOPE_TYPE, SCOPE_ID);
         }
 
         @Test
@@ -132,7 +132,7 @@ class BulletinReactionServiceTest {
             CreateReactionRequest request = new CreateReactionRequest("THREAD", TARGET_ID, VALID_EMOJI);
             given(threadRepository.findById(TARGET_ID)).willReturn(Optional.of(thread()));
             doThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .when(accessGuard).checkMembership(USER_ID, SCOPE_TYPE, SCOPE_ID);
+                    .when(accessGuard).checkScopeContentAccess(USER_ID, SCOPE_TYPE, SCOPE_ID);
 
             // When & Then
             assertThatThrownBy(() -> bulletinReactionService.addReaction(USER_ID, request))
@@ -166,7 +166,7 @@ class BulletinReactionServiceTest {
 
             // Then
             assertThat(result).isNotNull();
-            verify(accessGuard).checkMembership(USER_ID, SCOPE_TYPE, SCOPE_ID);
+            verify(accessGuard).checkScopeContentAccess(USER_ID, SCOPE_TYPE, SCOPE_ID);
         }
 
         @Test

@@ -440,7 +440,7 @@ public class BulletinAttachmentService {
         } else if (thread.getScopeType() == ScopeType.PERSONAL) {
             checkPersonalOwner(thread, userId);
         } else {
-            accessGuard.checkMembership(userId, thread.getScopeType(), thread.getScopeId());
+            accessGuard.checkScopeContentAccess(userId, thread.getScopeType(), thread.getScopeId());
         }
     }
 
