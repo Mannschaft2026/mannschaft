@@ -1,21 +1,33 @@
 package com.mannschaft.app.common.architecture;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mannschaft.app.common.architecture.TaskListLedger.Kind;
+import com.mannschaft.app.common.architecture.TaskListLedger.Ledger;
+import com.mannschaft.app.common.architecture.TaskListLedger.Row;
+import com.mannschaft.app.common.architecture.TaskListLedger.Violation;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 番人: {@code docs/task-list.md}（戦役横断の課題正本）に登録された CMP-ID が重複しないこと。
@@ -44,6 +56,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p><b>本番人の検出を緩めて通す（重複IDを許容リストに追加する等）ことは禁止</b>する。
  * CMP-ID は他の記憶ファイルからの参照キーであり、重複を許すと索引が壊れる。</p>
  *
+ * <h2>台帳の両配置（2026-11-25 CMP-261124-1222 段A）</h2>
+ * <p>台帳は旧配置（{@code docs/task-list.md} 1ファイル）と新配置（索引 {@code docs/task-list.md}＋
+ * {@code docs/task-list/YYYY-MM.md}・{@code docs/task-list/legacy.md}）のどちらでも読めるよう、読み取りと判定を
+ * {@link TaskListLedger} に集約した。重複はファイル跨ぎも数え、新配置のときだけ配置違反（月違い・legacy 違い・
+ * 不正なファイル名・索引の CMP 行）も検出する。Node 側（{@code scripts/task-list-structure-check.mjs}）と同じ判定であることを
+ * 共有 fixture {@code scripts/fixtures/task-list-ledger-cases.json} で固定する。</p>
+ *
  * <h2>本テストは ArchUnit ではない</h2>
  * <p>Markdown ドキュメントの走査であり、ソースコードのバイトコード解析ではないため、
  * {@link PagingTotalCountSizeGuardTest} と同じ<b>ソース（ドキュメント）走査型</b>で書いた。
@@ -65,285 +84,224 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("番人: docs/task-list.md のCMP-IDが重複していないこと")
 class TaskListCmpIdDuplicateGuardTest {
 
-    /** {@code docs/task-list.md} のリポジトリルートからの相対パス。 */
-    private static final Path TASK_LIST_RELATIVE = Paths.get("docs", "task-list.md");
-
-    /**
-     * CMP-ID の形。旧・連番形式 {@code CMP-028} と新・日時形式 {@code CMP-260819-2131} の両方を表す。
-     *
-     * <p>日時形式を先に並べるのが要点である。{@code \d+} を先に置くと {@code CMP-260819-2131} から
-     * {@code CMP-260819} だけを拾ってしまい、同日の別 ID を誤って重複と判定する。</p>
-     */
-    private static final String CMP_ID_FORM = "CMP-\\d{6}-\\d{4}|CMP-\\d+";
-
-    /** 表の行頭に現れる CMP-ID（例: {@code | CMP-028 | ...}）を抽出する。 */
-    private static final Pattern CMP_ID_ROW =
-            Pattern.compile("(?m)^\\|\\s*(" + CMP_ID_FORM + ")\\s*\\|");
-
-    /**
-     * 走査経路の自己検証用。「CMP-ID を含む表の行」を、ID 抽出用より<b>緩い</b>条件で数える。
-     *
-     * <p>{@link #CMP_ID_ROW} が取りこぼしなく抽出できているかを、この緩い計数との一致で確かめる。
-     * <b>件数のしきい値を持たない</b>のが要点である。当初は「30件以上あること」で自己検証していたが、
-     * それは<b>現在の状態を数字で焼き付ける</b>形であり、行のアーカイブ等で件数が減れば重複が無くても
-     * 誤って落ちる。件数ではなく<b>抽出の網羅性</b>を見れば、母数が何件でも成立する。</p>
-     */
-    private static final Pattern CMP_ID_ROW_LOOSE =
-            Pattern.compile("(?m)^\\|.*?(" + CMP_ID_FORM + ")");
-
-    /** 表の行から ID・状態列（第3列）を取り出す。 */
+    /** 表の行から ID・状態列（第3列）を取り出す（状態別件数の表示用）。 */
     private static final Pattern CMP_ROW_WITH_STATUS = Pattern.compile(
-            "(?m)^\\|\\s*(" + CMP_ID_FORM + ")\\s*\\|([^|]*)\\|([^|]*)\\|");
+            "(?m)^\\|\\s*(" + TaskListLedger.CMP_ID_FORM + ")\\s*\\|([^|]*)\\|([^|]*)\\|");
 
     /** {@code docs/task-list.md} の「状態の語彙」節に定義された値。 */
     private static final List<String> STATUS_VOCABULARY =
             List.of("未着手", "設計中", "実装中", "実機検証待ち", "完了", "凍結");
 
-    @Test
-    @DisplayName("CMP-IDに重複が無く、かつ走査自体が機能していること")
-    void cmpIdは重複しない() throws IOException {
-        Path taskList = resolveTaskListPath();
+    private static final String HEADER = "| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|";
 
-        assertThat(Files.isRegularFile(taskList))
-                .as("docs/task-list.md が見つからない: " + taskList.toAbsolutePath()
-                        + "（CWD=" + Paths.get("").toAbsolutePath() + "）。"
-                        + "リポジトリ構成が変わった場合は resolveTaskListPath() の候補パスを見直すこと。")
-                .isTrue();
-
-        String content = Files.readString(taskList, StandardCharsets.UTF_8);
-
-        Map<String, Integer> occurrences = new LinkedHashMap<>();
-        Matcher m = CMP_ID_ROW.matcher(content);
-        while (m.find()) {
-            String id = m.group(1);
-            occurrences.merge(id, 1, Integer::sum);
-        }
-
-        // 走査経路が生きていることの自己検証。
-        //
-        // ⚠️ 「重複が見つからない」と「そもそも CMP-ID を抽出できていない」は別事象である。
-        // 抽出0件で「重複なし」を返すと、ファイルパスの解決ミスや table 形式の変更で走査が
-        // 壊れていても気づけない偽の緑になる。よって抽出の網羅性を重複判定とは独立に検証する。
-        int totalIds = occurrences.values().stream().mapToInt(Integer::intValue).sum();
-
-        int looseCount = 0;
-        Matcher loose = CMP_ID_ROW_LOOSE.matcher(content);
-        while (loose.find()) {
-            looseCount++;
-        }
-
-        printStatusBreakdown(content);
-
-        // 走査そのものが成立しているか（ファイルが空・パス誤りで 0 件になっていないか）。
-        assertThat(looseCount)
-                .as("docs/task-list.md から CMP-ID を含む行を 1 件も見つけられなかった"
-                        + "（読んだファイル: " + taskList.toAbsolutePath() + "）。"
-                        + "ファイルパスの解決ミス、または台帳の表形式そのものが変わった可能性がある。"
-                        + "『重複なし』という判定自体が信用できない状態であり、重複ゼロとは別事象である。")
-                .isPositive();
-
-        // 抽出が網羅的か（厳密パターンが緩いパターンの取りこぼしを生んでいないか）。
-        // 件数のしきい値を置かないため、行がアーカイブされて減っても誤検知しない。
-        assertThat(totalIds)
-                .as("CMP-ID を含む行は " + looseCount + " 件見つかったが、"
-                        + "厳密パターンで抽出できたのは " + totalIds + " 件だった。"
-                        + "CMP_ID_ROW（\"| CMP-N |\" / \"| CMP-YYMMDD-HHMM |\" 形式）が実際の表フォーマットを"
-                        + "取りこぼしており、取りこぼした行の重複を見逃す。CMP_ID_ROW と docs/task-list.md の"
-                        + "実際の行を突き合わせて正規表現を修正すること。"
-                        + "（検出を緩めて通すのではなく、抽出を正しくすること）")
-                .isEqualTo(looseCount);
-
-        List<Map.Entry<String, Integer>> duplicates = occurrences.entrySet().stream()
-                .filter(e -> e.getValue() > 1)
-                .toList();
-
-        if (duplicates.isEmpty()) {
-            return;
-        }
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("docs/task-list.md に重複した CMP-ID が見つかりました。\n")
-                .append("原因: 同一の ID が二重に登録されている。旧・連番形式では、並行セッションが")
-                .append("同時に origin/main を fetch すると双方が同じ最大番号を採ってしまい、")
-                .append("挿入位置の違いから git が競合検知できずに両方が自動マージされた")
-                .append("（2026-08-14 CMP-028 消失事故と同根）。\n")
-                .append("対処: 後から origin/main へ merge された側が採番し直すこと。")
-                .append("新形式 CMP-YYMMDD-HHMM（JST・date '+%y%m%d-%H%M'）を採り直し、")
-                .append("行の内容（戦役名・状態・証拠）はそのまま ID のみ振り直して commit・PR を作成すること。")
-                .append("新規行は必ず表の末尾に追加すること（同じ位置に追記されていれば、"
-                        + "重複は git の競合として必ず表面化する）。\n")
-                .append("本番人の検出を緩めて通す（重複IDをそのまま許容する等）ことは禁止。\n")
-                .append("重複ID一覧:\n");
-        for (Map.Entry<String, Integer> e : duplicates) {
-            sb.append("  ✗✗ ").append(e.getKey()).append(" : ").append(e.getValue()).append("回出現\n");
-        }
-        assertThat(duplicates).as(sb.toString()).isEmpty();
+    private static List<Violation> realViolations(Set<Kind> kinds) {
+        Ledger ledger = TaskListLedger.readRepository(false);
+        return TaskListLedger.check(ledger).stream().filter(v -> kinds.contains(v.kind())).toList();
     }
 
-    /** 表の1行が持つべき列数（ID / 戦役 / 状態 / 依存 / 完了条件 / 証拠(PR/テスト) / 台帳）。 */
-    private static final int EXPECTED_COLUMN_COUNT = 7;
+    private static String describe(String headline, String guidance, List<Violation> violations) {
+        StringBuilder sb = new StringBuilder(headline).append("\n").append(guidance).append("\n違反一覧:\n");
+        for (Violation v : violations) {
+            sb.append("  ✗✗ ").append(v.message()).append("\n");
+        }
+        return sb.toString();
+    }
+
+    @Test
+    @DisplayName("CMP-IDに重複が無く（ファイル跨ぎを含む）、かつ走査自体が機能していること")
+    void cmpIdは重複しない() {
+        Ledger ledger = TaskListLedger.readRepository(false);
+        printStatusBreakdown(TaskListLedger.concatenatedContent(ledger));
+        List<Violation> violations = realViolations(EnumSet.of(Kind.MISSING, Kind.EMPTY, Kind.SCAN, Kind.DUPLICATE));
+        assertThat(violations).as(describe(
+                "台帳（" + ledger.layout() + " 配置）に重複した CMP-ID、または走査経路の破損が見つかりました。",
+                "原因: 同一の ID が二重に登録されている（旧・連番形式では並行セッションが同じ最大番号を採り、git が競合検知できずに"
+                        + "両方が自動マージされた。2026-08-14 CMP-028 消失事故と同根）。または、緩い計数と厳密抽出の件数が一致せず"
+                        + "「重複なし」の判定自体が信用できない（ファイルパスの解決ミス・表形式の変更）。\n"
+                        + "対処: 後から origin/main へ merge された側が採番し直すこと（新形式 CMP-YYMMDD-HHMM（JST・date '+%y%m%d-%H%M'）を"
+                        + "採り直し、行の内容はそのまま ID のみ振り直す）。新規行は必ず表の末尾に追加すること。"
+                        + "本番人の検出を緩めて通す（重複IDをそのまま許容する等）ことは禁止。",
+                violations)).isEmpty();
+    }
 
     @Test
     @DisplayName("CMP-IDを持つ表の行がすべて7列であること（列ズレ検出）")
-    void cmpIdの行は列数が7である() throws IOException {
-        Path taskList = resolveTaskListPath();
-        assertThat(Files.isRegularFile(taskList))
-                .as("docs/task-list.md が見つからない: " + taskList.toAbsolutePath())
-                .isTrue();
-
-        String content = Files.readString(taskList, StandardCharsets.UTF_8);
-
-        List<String> mismatches = new ArrayList<>();
-        int rowCount = 0;
-        for (String line : content.split("\n", -1)) {
-            if (!line.startsWith("|")) {
-                continue;
-            }
-            List<String> cells = splitTableRow(line);
-            // 先頭・末尾は行頭/行末の "|" が作る空セル。実列数はその内側。
-            if (cells.size() < 2) {
-                continue;
-            }
-            String firstCell = cells.get(1).trim();
-            if (!Pattern.compile("^(" + CMP_ID_FORM + ")").matcher(firstCell).find()) {
-                continue;
-            }
-            rowCount++;
-            int actualColumns = cells.size() - 2;
-            if (actualColumns != EXPECTED_COLUMN_COUNT) {
-                mismatches.add(firstCell + "（実測列数=" + actualColumns + "）");
-            }
-        }
-
-        assertThat(rowCount)
-                .as("docs/task-list.md から CMP-ID を持つ表の行を1件も見つけられなかった。"
-                        + "走査経路（splitTableRow / CMP_ID_FORM）が壊れている可能性がある。")
-                .isPositive();
-
-        if (mismatches.isEmpty()) {
-            return;
-        }
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("docs/task-list.md に列数が7でない行が見つかりました（期待列数: ID / 戦役 / 状態 / 依存 / ")
-                .append("完了条件 / 証拠(PR/テスト) / 台帳 の7列）。\n")
-                .append("原因: セル内に書いた `|` をエスケープ（`\\|`）せずに書いた、指示文の「注記」を")
-                .append("そのまま列として書き足した、証拠の追記で列区切りの `|` を余分に増やした等。\n")
-                .append("対処: 内容を消さずに正しい7列へ戻す。余った列の文章は意味の合う既存列（多くは")
-                .append("「証拠(PR/テスト)」）へ畳み込み、セル内で本物の `|` を使う場合は `\\|` へ")
-                .append("エスケープすること（コードスパン \\` ... \\` の中でも `\\|` へのエスケープが必要）。\n")
-                .append("列ズレ行一覧:\n");
-        for (String m : mismatches) {
-            sb.append("  ✗✗ ").append(m).append("\n");
-        }
-        assertThat(mismatches).as(sb.toString()).isEmpty();
+    void cmpIdの行は列数が7である() {
+        assertThat(TaskListLedger.readRepository(true).rows()).isNotEmpty();
+        List<Violation> violations = realViolations(EnumSet.of(Kind.COLUMNS));
+        assertThat(violations).as(describe(
+                "台帳に列数が7でない行が見つかりました（期待列数: ID / 戦役 / 状態 / 依存 / 完了条件 / 証拠(PR/テスト) / 台帳 の7列）。",
+                "原因: セル内に書いた `|` をエスケープ（`\\|`）せずに書いた、指示文の「注記」をそのまま列として書き足した等。\n"
+                        + "対処: 内容を消さずに正しい7列へ戻す。余った列の文章は意味の合う既存列（多くは「証拠(PR/テスト)」）へ畳み込み、"
+                        + "セル内で本物の `|` を使う場合は `\\|` へエスケープすること（コードスパンの中でも必要）。",
+                violations)).isEmpty();
     }
-
-    /** 状態セルが優先度を持たなくてよい「完了系」の語（前方一致）。未完との境目が曖昧な語（実機検証待ち等）は含めない。 */
-    private static final Pattern STATUS_PRIORITY_OR_DONE = Pattern.compile(
-            "^(P[1-5] |完了|取り下げ|取下げ|取下|重複|不要|対応不要|検証済み|対応済み|合格)");
 
     @Test
     @DisplayName("CMP-IDを持つ行の状態セルが P1〜P5 で始まる、または完了系の語で始まること（優先度必須）")
-    void cmp行の状態セルは優先度か完了系で始まる() throws IOException {
-        Path taskList = resolveTaskListPath();
-        assertThat(Files.isRegularFile(taskList))
-                .as("docs/task-list.md が見つからない: " + taskList.toAbsolutePath())
-                .isTrue();
+    void cmp行の状態セルは優先度か完了系で始まる() {
+        List<Violation> violations = realViolations(EnumSet.of(Kind.PRIORITY));
+        assertThat(violations).as(describe(
+                "台帳に、優先度の無い未完の行が見つかりました。",
+                "規約: 未完の行は状態セルの先頭に P1〜P5 を必ず付ける（例: `P1 未着手`、`P3 保留（理由…）`）。完了系の行は付けなくてよい。\n"
+                        + "基準（利用者への被害の大きさ）: P1 認可漏れ・情報漏えい（存在オラクル含む）・データ破損/消失・課金/金額の誤り / "
+                        + "P2 主要機能が動かない・画面から到達できない（回避策なし） / P3 機能の不備・誤表示・未実装（回避策あり） / "
+                        + "P4 技術負債・番人テスト・性能・開発基盤・CI・運用インフラ / P5 文言や見た目の軽微な崩れ・将来構想・調査メモ・方針の検討。\n"
+                        + "対処: 該当行の状態セルの先頭に優先度を書き足すこと。検出を緩めて通すことは禁止。",
+                violations)).isEmpty();
+    }
 
-        String content = Files.readString(taskList, StandardCharsets.UTF_8);
+    @Test
+    @DisplayName("新配置では各行が自分の月のファイル（旧形式は legacy.md）にあり、索引に CMP 行が無いこと")
+    void 新配置の配置違反が無い() {
+        List<Violation> violations = realViolations(EnumSet.of(Kind.PLACEMENT));
+        assertThat(violations).as(describe(
+                "台帳の配置違反が見つかりました。",
+                "規約: ID CMP-YYMMDD-HHMM の行は docs/task-list/20YY-MM.md、旧形式 ID は docs/task-list/legacy.md に置く。"
+                        + "索引 docs/task-list.md には行を置かない。docs/task-list/ には YYYY-MM.md と legacy.md 以外を置かない。",
+                violations)).isEmpty();
+    }
 
-        List<String> violations = new ArrayList<>();
-        int rowCount = 0;
-        for (String line : content.split("\n", -1)) {
-            if (!line.startsWith("|")) {
-                continue;
+    @TestFactory
+    @DisplayName("共有 fixture（scripts/fixtures/task-list-ledger-cases.json）で Node の構造検査と同じ判定を返す")
+    Stream<DynamicTest> 共有fixtureでNodeと同じ判定() throws IOException {
+        JsonNode root = new ObjectMapper().readTree(Files.readString(
+                TaskListLedger.resolveRepoRoot().resolve("scripts/fixtures/task-list-ledger-cases.json"), StandardCharsets.UTF_8));
+        List<DynamicTest> tests = new ArrayList<>();
+        for (JsonNode c : root.get("cases")) {
+            String name = c.get("name").asText();
+            tests.add(DynamicTest.dynamicTest(name, () -> {
+                Map<String, String> files = new LinkedHashMap<>();
+                c.get("files").fields().forEachRemaining(e -> files.put(e.getKey(), e.getValue().asText()));
+                Ledger ledger = TaskListLedger.read(TaskListLedger.inMemory(files), false);
+                List<String> messages = TaskListLedger.check(ledger).stream().map(Violation::message).toList();
+                boolean expectOk = c.get("expectOk").asBoolean();
+                assertThat(messages.isEmpty()).as(name + " → " + messages).isEqualTo(expectOk);
+                if (!expectOk && c.hasNonNull("reason")) {
+                    assertThat(String.join("\n", messages)).as(name).contains(c.get("reason").asText());
+                }
+                if (c.hasNonNull("expectRows")) {
+                    List<List<String>> expected = new ArrayList<>();
+                    c.get("expectRows").forEach(r -> expected.add(List.of(r.get(0).asText(), r.get(1).asText())));
+                    assertThat(ledger.rows().stream().map(r -> List.of(r.id(), r.file())).toList()).as(name).isEqualTo(expected);
+                }
+            }));
+        }
+        assertThat(tests).hasSizeGreaterThanOrEqualTo(40);
+        return tests.stream();
+    }
+
+    @Test
+    @DisplayName("取得失敗と0件・不在を区別する（失敗は空にしない）")
+    void 取得失敗と0件を区別する() {
+        TaskListLedger.Source failing = new TaskListLedger.Source() {
+            @Override
+            public List<String> listDir(String dir) throws IOException {
+                throw new IOException("disk error");
             }
-            List<String> cells = splitTableRow(line);
-            if (cells.size() < 4) {
-                continue;
+
+            @Override
+            public String readFile(String path) {
+                return "";
             }
-            String id = cells.get(1).trim();
-            if (!Pattern.compile("^(" + CMP_ID_FORM + ")$").matcher(id).find()) {
-                continue;
-            }
-            rowCount++;
-            String status = cells.get(3).replace("*", "").trim();
-            if (!STATUS_PRIORITY_OR_DONE.matcher(status).find()) {
-                String head = status.length() > 30 ? status.substring(0, 30) + "…" : status;
-                violations.add(id + " → \"" + head + "\"");
+        };
+        assertThatThrownBy(() -> TaskListLedger.read(failing, true)).hasMessageContaining("取得に失敗").hasMessageContaining("disk error");
+        assertThatThrownBy(() -> TaskListLedger.read(TaskListLedger.inMemory(Map.of()), true)).hasMessageContaining("存在しない");
+        assertThatThrownBy(() -> TaskListLedger.read(TaskListLedger.inMemory(Map.of("docs/task-list.md", "# 台帳\n")), true))
+                .hasMessageContaining("1件も読めなかった");
+        assertThat(TaskListLedger.expectedFile("CMP-261130-2359")).isEqualTo("docs/task-list/2026-11.md");
+        assertThat(TaskListLedger.expectedFile("CMP-261201-0000")).isEqualTo("docs/task-list/2026-12.md");
+        assertThat(TaskListLedger.expectedFile("CMP-003")).isEqualTo("docs/task-list/legacy.md");
+    }
+
+    /** 旧配置の検体（実台帳から独立。月境界・旧形式・証拠リンク・エスケープを含む）。 */
+    static final String SAMPLE_SINGLE = "# 台帳\n\n前置き\n\n" + HEADER + "\n"
+            + "| CMP-003 | 旧 | 完了 | — | 条件 | 証拠 | l |\n"
+            + "| CMP-261130-2359 | 月末 | 完了 | — | `a \\| b` | [証拠](evidence/CMP-261130-2359.json) | l |\n"
+            + "| CMP-261201-0000 | 月初 | P2 実装中 | — | 条件 | [証拠](./evidence/CMP-261201-0000.json) | l |\n"
+            + "| CMP-260101-0101 | 年初 | P5 未着手 | — | 条件 | 証拠 | l |\n";
+
+    @Test
+    @DisplayName("独立した旧配置の検体と、そこから生成した新配置が同じ行集合・同じ債務注釈の登録判定を返す")
+    void 検体の両配置で同じ行集合と登録判定() {
+        Ledger split = assertSameRows(SAMPLE_SINGLE, splitForTest(SAMPLE_SINGLE));
+        assertThat(split.rows().stream().map(r -> List.of(r.id(), r.file())).toList()).containsExactly(
+                List.of("CMP-260101-0101", "docs/task-list/2026-01.md"),
+                List.of("CMP-261130-2359", "docs/task-list/2026-11.md"),
+                List.of("CMP-261201-0000", "docs/task-list/2026-12.md"),
+                List.of("CMP-003", "docs/task-list/legacy.md"));
+    }
+
+    @Test
+    @DisplayName("実リポジトリの台帳（配置は問わない）をもう一方の配置に写しても同じ行集合・同じ債務注釈の登録判定を返す")
+    void 実台帳の両配置で同じ行集合と登録判定() {
+        Ledger real = TaskListLedger.readRepository(true);
+        assertThat(real.layout()).isIn("single", "split");
+        assertThat(TaskListLedger.check(real)).isEmpty();
+        Map<String, String> files = new LinkedHashMap<>();
+        real.files().forEach(f -> files.put(f.path(), f.content()));
+        String singleText = real.split() ? joinForTest(files) : files.get(TaskListLedger.INDEX_PATH);
+        Map<String, String> splitFiles = real.split() ? files : splitForTest(singleText);
+        assertSameRows(singleText, splitFiles);
+    }
+
+    /** 旧配置の本文と新配置の files が同じ行集合・同じ検査結果・同じ債務注釈の登録判定を返すことを確かめる。 */
+    private static Ledger assertSameRows(String singleText, Map<String, String> splitFiles) {
+        Ledger single = TaskListLedger.read(TaskListLedger.inMemory(Map.of(TaskListLedger.INDEX_PATH, singleText)), true);
+        Ledger split = TaskListLedger.read(TaskListLedger.inMemory(splitFiles), true);
+        assertThat(single.layout()).isEqualTo("single");
+        assertThat(split.layout()).isEqualTo("split");
+        assertThat(TaskListLedger.check(single)).isEmpty();
+        assertThat(TaskListLedger.check(split)).isEmpty();
+        Map<String, String> singleLines = single.rows().stream().collect(Collectors.toMap(Row::id, r -> normalizeEvidence(r.line())));
+        assertThat(split.rows()).hasSameSizeAs(single.rows());
+        for (Row r : split.rows()) {
+            assertThat(normalizeEvidence(r.line())).as(r.id()).isEqualTo(singleLines.get(r.id()));
+            assertThat(r.file()).as(r.id()).isEqualTo(TaskListLedger.expectedFile(r.id()));
+        }
+        // 債務注釈の登録判定（PlaintextSecretTokenGuardRules）の両配置一致は ArchUnit タグ付きの PlaintextSecretTokenGuardConditionTest で検証する
+        return split;
+    }
+
+    /** 試験専用: 新配置の files から旧配置の docs/task-list.md 1ファイルを一時生成する（../evidence/ は evidence/ に戻す）。 */
+    static String joinForTest(Map<String, String> files) {
+        String index = files.getOrDefault(TaskListLedger.INDEX_PATH, "");
+        List<String> lines = new ArrayList<>();
+        files.keySet().stream().filter(p -> !TaskListLedger.INDEX_PATH.equals(p)).sorted().forEach(p ->
+                TaskListLedger.extractRows(files.get(p), p).forEach(r -> lines.add(r.line().replace("](../evidence/", "](evidence/"))));
+        return (index.endsWith("\n") ? index : index + "\n") + "\n" + HEADER + "\n" + String.join("\n", lines) + "\n";
+    }
+
+    private static String normalizeEvidence(String line) {
+        return line.replaceAll("\\]\\((?:\\.\\.?/)?evidence/", "](evidence/");
+    }
+
+    /** 試験専用: 旧配置の本文から新配置（索引＋月別・legacy）を一時生成する（本番の移行は段Bで作る）。 */
+    static Map<String, String> splitForTest(String single) {
+        List<Row> rows = TaskListLedger.extractRows(single, TaskListLedger.INDEX_PATH);
+        Set<Integer> rowLines = rows.stream().map(Row::lineNumber).collect(Collectors.toSet());
+        String[] lines = single.split("\n", -1);
+        StringBuilder index = new StringBuilder();
+        for (int i = 0; i < lines.length; i++) {
+            if (!rowLines.contains(i + 1)) {
+                index.append(lines[i]).append(i + 1 < lines.length ? "\n" : "");
             }
         }
-
-        assertThat(rowCount)
-                .as("docs/task-list.md から CMP-ID を持つ表の行を1件も見つけられなかった。走査経路が壊れている可能性がある。")
-                .isPositive();
-
-        if (violations.isEmpty()) {
-            return;
+        Map<String, List<String>> groups = new TreeMap<>();
+        for (Row r : rows) {
+            groups.computeIfAbsent(TaskListLedger.expectedFile(r.id()), k -> new ArrayList<>())
+                    .add(r.line().replaceAll("\\]\\((?:\\./)?evidence/", "](../evidence/"));
         }
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("docs/task-list.md に、優先度の無い未完の行が見つかりました。\n")
-                .append("規約: 未完の行は状態セルの先頭に P1〜P5 を必ず付ける（例: `P1 未着手`、`P3 保留（理由…）`）。")
-                .append("完了・取り下げ・重複・不要等の完了系の行は付けなくてよい。\n")
-                .append("基準（利用者への被害の大きさ）: P1 認可漏れ・情報漏えい（存在オラクル含む）・データ破損/消失・課金/金額の誤り / ")
-                .append("P2 主要機能が動かない・画面から到達できない（回避策なし） / P3 機能の不備・誤表示・未実装（回避策あり） / ")
-                .append("P4 技術負債・番人テスト・性能・開発基盤・CI・運用インフラ / P5 文言や見た目の軽微な崩れ・将来構想・調査メモ・方針の検討。\n")
-                .append("対処: 該当行の状態セルの先頭に優先度を書き足すこと。検出を緩めて通すことは禁止。\n")
-                .append("優先度の無い行一覧:\n");
-        for (String v : violations) {
-            sb.append("  ✗✗ ").append(v).append("\n");
-        }
-        assertThat(violations).as(sb.toString()).isEmpty();
+        Map<String, String> files = new LinkedHashMap<>();
+        files.put(TaskListLedger.INDEX_PATH, index.toString());
+        groups.forEach((file, group) -> files.put(file, "# 台帳 " + file.substring(file.lastIndexOf('/') + 1, file.length() - 3)
+                + "\n\n" + HEADER + "\n" + String.join("\n", group) + "\n"));
+        return files;
     }
 
     /**
-     * Markdown 表の1行を GFM（GitHub Flavored Markdown）のレンダリングに合わせてセル分割する。
-     *
-     * <h2>2026-09-24 是正（Codex検分指摘）</h2>
-     * <p>GFM の表仕様では、セル内でパイプを区切りにしないためには <b>{@code \|} エスケープが必須</b>であり、
-     * それは<b>コードスパン（バッククォート）の中でも変わらない</b>。コードスパン内の未エスケープ {@code |} は
-     * 実際には<b>列の区切りとして扱われる</b>（GitHub上で表が崩れる）。旧実装は「コードスパン内の {@code |}
-     * は区切りにしない」という誤った仮定を置いており、コードスパン内に未エスケープ {@code |} を含む
-     * 実在の列ズレ行（例: {@code `scopeType` を `'team'` または `'organization'` ...} のような、
-     * バッククォート内に生の {@code |} を書いた行）を見逃していた。本メソッドは
-     * <b>{@code \|} のみを区切りにしない特殊扱いとし、それ以外の {@code |} はコードスパンの内外を問わず
-     * すべて区切りとして数える</b>（バッククォート自体のペアリングは追跡しない）。</p>
-     */
-    private static List<String> splitTableRow(String line) {
-        List<String> result = new ArrayList<>();
-        StringBuilder buf = new StringBuilder();
-        int i = 0;
-        int n = line.length();
-        while (i < n) {
-            char c = line.charAt(i);
-            if (c == '\\' && i + 1 < n && line.charAt(i + 1) == '|') {
-                buf.append('|');
-                i += 2;
-                continue;
-            }
-            if (c == '|') {
-                result.add(buf.toString());
-                buf.setLength(0);
-                i++;
-                continue;
-            }
-            buf.append(c);
-            i++;
-        }
-        result.add(buf.toString());
-        return result;
-    }
-
-    /**
-     * 状態列ごとの件数を標準出力に出す（<b>合否条件にはしない</b>）。
-     *
-     * <p>しきい値を固定すると行の増減で壊れるため、判定には使わない。ID が連番でなくなり
-     * 「番号を見れば規模が分かる」性質が失われた分を、この集計で補うのが目的である。</p>
-     *
-     * <p>状態列には「完了（2026-08-18・PR #2749…）」のように注記が付く値が多数あるため、
-     * 語彙の<b>前方一致</b>で分類し、どの語彙にも当てはまらない行は「その他」として出す。</p>
+     * 状態列ごとの件数を標準出力に出す（<b>合否条件にはしない</b>）。しきい値を固定すると行の増減で壊れるため判定には使わない。
+     * 状態列には注記が付く値が多いため、語彙の前方一致で分類し、どれにも当てはまらない行は「その他」として出す。
      */
     private static void printStatusBreakdown(String content) {
         Map<String, Integer> counts = new LinkedHashMap<>();
@@ -351,8 +309,7 @@ class TaskListCmpIdDuplicateGuardTest {
             counts.put(vocabulary, 0);
         }
         counts.put("その他", 0);
-        List<String> unclassified = new java.util.ArrayList<>();
-
+        List<String> unclassified = new ArrayList<>();
         Matcher row = CMP_ROW_WITH_STATUS.matcher(content);
         int total = 0;
         while (row.find()) {
@@ -362,10 +319,7 @@ class TaskListCmpIdDuplicateGuardTest {
             String matched = STATUS_VOCABULARY.stream()
                     .filter(status::startsWith)
                     .findFirst()
-                    .orElseGet(() -> STATUS_VOCABULARY.stream()
-                            .filter(status::contains)
-                            .findFirst()
-                            .orElse(null));
+                    .orElseGet(() -> STATUS_VOCABULARY.stream().filter(status::contains).findFirst().orElse(null));
             if (matched == null) {
                 counts.merge("その他", 1, Integer::sum);
                 unclassified.add(id + " → \"" + status + "\"");
@@ -373,8 +327,7 @@ class TaskListCmpIdDuplicateGuardTest {
                 counts.merge(matched, 1, Integer::sum);
             }
         }
-
-        System.out.println("=== docs/task-list.md 状態別件数（合否条件ではない・規模の把握用） ===");
+        System.out.println("=== 台帳 状態別件数（合否条件ではない・規模の把握用） ===");
         System.out.println("  総行数: " + total + " 件");
         counts.forEach((status, count) -> System.out.println("  " + status + ": " + count + " 件"));
         if (!unclassified.isEmpty()) {
@@ -382,19 +335,5 @@ class TaskListCmpIdDuplicateGuardTest {
             unclassified.forEach(entry -> System.out.println("    - " + entry));
         }
         System.out.println("=== ここまで ===");
-    }
-
-    /** {@code docs/task-list.md} を backend/ 実行・リポジトリルート実行の両方に対応して解決する。 */
-    private static Path resolveTaskListPath() {
-        for (Path candidate : new Path[]{
-                TASK_LIST_RELATIVE,
-                Paths.get("..").resolve(TASK_LIST_RELATIVE),
-                Paths.get("backend").resolve(TASK_LIST_RELATIVE),
-        }) {
-            if (Files.isRegularFile(candidate)) {
-                return candidate;
-            }
-        }
-        return TASK_LIST_RELATIVE; // 見つからなければそのまま返し、テスト内で存在チェックに失敗させる
     }
 }

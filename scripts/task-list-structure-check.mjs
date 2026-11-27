@@ -1,22 +1,39 @@
 #!/usr/bin/env node
-// 台帳 docs/task-list.md の構造検査器（CMP-261121-1114）。
+// 台帳 docs/task-list.md（と新配置の docs/task-list/*.md）の構造検査器（CMP-261121-1114 / 両配置対応 CMP-261124-1222）。
 //
 // Task-List PR Gate の merge queue（merge_group）経路で、合成コミットの台帳を検査するために使う。
 // 判定規則は Java 番人 backend/src/test/java/com/mannschaft/app/common/architecture/TaskListCmpIdDuplicateGuardTest.java
 // の3テスト（CMP-ID 重複＋走査経路の自己検証 / 列数7 / 未完行の優先度 P1〜P5）を移植したもの。
-// 規則を変えるときは Java 番人と本スクリプト、scripts/task-list-structure-check.test.mjs の共通 fixture を同時に直すこと。
+// 規則を変えるときは Java 番人（と共有ヘルパ TaskListLedger.java）と本スクリプト、共有 fixture
+// scripts/fixtures/task-list-ledger-cases.json を同時に直すこと。
+//
+// 両配置（旧: docs/task-list.md 1ファイル / 新: 索引＋docs/task-list/YYYY-MM.md・legacy.md）は scripts/task-list-ledger.mjs の
+// readLedger で読み、全ファイルを横断して検査する。新配置のときだけ配置違反（月違い・legacy 違い・不正なファイル名・
+// 索引の CMP 行）も赤にする。規則と試験データは Java 番人と共有する（scripts/fixtures/task-list-ledger-cases.json）。
 //
 // 使い方: node scripts/task-list-structure-check.mjs <task-list.md のパス>
+//   月別ファイルは索引と同じディレクトリの task-list/ から読む。
 // 違反・ファイル不在・空・走査不能はすべて理由を出力して exit 1（例外の stack で落とさない）。
 // 依存パッケージなし（GitHub ランナー既定の Node で動く）。
 
-import { readFileSync, statSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import {
+  CMP_ID_FORM,
+  LEDGER_INDEX_PATH,
+  LEGACY_FILE_NAME,
+  asLedger,
+  expectedLedgerFile,
+  fsLedgerReaderForIndex,
+  isLedgerFileName,
+  javaTrim,
+  readLedger,
+  splitTableRow,
+} from './task-list-ledger.mjs';
+
+export { CMP_ID_FORM, splitTableRow };
 
 /** Java の \s（ASCII 空白のみ）。JS の \s は全角空白等も含み判定が Java 番人とずれるため明示する。 */
 const JAVA_SPACE = '[ \\t\\n\\x0B\\f\\r]';
-/** CMP-ID の形。日時形式を先に置く（CMP-\d+ を先にすると CMP-260819-2131 から CMP-260819 だけを拾う）。 */
-export const CMP_ID_FORM = 'CMP-\\d{6}-\\d{4}|CMP-\\d+';
 /**
  * Java の (?m)^ と同じ「行頭」。Java は LF・CRLF・CR・U+0085(NEL)・U+2028・U+2029 を行終端とし、
  * CR と LF の間は行頭にしない。JS の m フラグは NEL を行終端にしないため、後読みで明示する。
@@ -35,76 +52,19 @@ export const EXPECTED_COLUMN_COUNT = 7;
 /** 優先度または完了系の語（前方一致。Java: STATUS_PRIORITY_OR_DONE）。 */
 const STATUS_PRIORITY_OR_DONE = /^(P[1-5] |完了|取り下げ|取下げ|取下|重複|不要|対応不要|検証済み|対応済み|合格)/;
 
-/** Java の String.trim()（U+0020 以下の文字だけを両端から除く）。JS の trim() は全角空白も除くため使わない。 */
-function javaTrim(s) {
-  let start = 0;
-  let end = s.length;
-  while (start < end && s.charCodeAt(start) <= 0x20) start++;
-  while (end > start && s.charCodeAt(end - 1) <= 0x20) end--;
-  return s.slice(start, end);
-}
-
 /**
- * GFM の表の1行をセル分割する（Java: splitTableRow）。
- * \| だけを区切りにしない。コードスパン内の生の | も区切りとして数える（GFM の描画と同じ）。
+ * 1ファイルの本文を解析する（判定は Java 番人と同じ）。
+ * 重複・件数照合は Java の (?m)^ と同じ行終端（LF・CRLF・CR・NEL・U+2028・U+2029）で、
+ * 列数・優先度は Java と同じく LF だけで行を分ける（CRLF の CR は末尾の空セルに入るだけで判定に影響しない）。
  */
-export function splitTableRow(line) {
-  const result = [];
-  let buf = '';
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i];
-    if (c === '\\' && line[i + 1] === '|') {
-      buf += '|';
-      i++;
-      continue;
-    }
-    if (c === '|') {
-      result.push(buf);
-      buf = '';
-      continue;
-    }
-    buf += c;
-  }
-  result.push(buf);
-  return result;
-}
-
-/**
- * 台帳本文を検査する。content が null/undefined ならファイル不在として扱う。
- * @returns {{ ok: boolean, errors: string[], stats: { rows: number, looseRows: number } }}
- */
-export function checkTaskListStructure(content) {
-  const errors = [];
-  const stats = { rows: 0, looseRows: 0 };
-  if (typeof content !== 'string') {
-    errors.push('docs/task-list.md が存在しない（読めない）。台帳が無い状態を「問題なし」とは判定しない。');
-    return { ok: false, errors, stats };
-  }
-  // 改行は正規化しない。重複・件数照合は Java の (?m)^ と同じ行終端（LF・CRLF・CR・NEL・U+2028・U+2029）で、
-  // 列数・優先度は Java と同じく LF だけで行を分ける（CRLF の CR は末尾の空セルに入るだけで判定に影響しない）。
-  const text = content;
-  if (text.trim() === '') {
-    errors.push('docs/task-list.md が空である。台帳が空の状態を「問題なし」とは判定しない。');
-    return { ok: false, errors, stats };
-  }
-
-  // 1. CMP-ID の重複と、走査経路の自己検証（Java: cmpIdは重複しない）
+function analyzeContent(text) {
   const occurrences = new Map();
   for (const match of text.matchAll(CMP_ID_ROW)) occurrences.set(match[1], (occurrences.get(match[1]) || 0) + 1);
   const strictCount = [...occurrences.values()].reduce((sum, n) => sum + n, 0);
   const looseCount = [...text.matchAll(CMP_ID_ROW_LOOSE)].length;
-  stats.looseRows = looseCount;
-  if (looseCount === 0) {
-    errors.push('CMP-ID を含む表の行を1件も見つけられなかった。走査経路か台帳の表形式が壊れており、「重複なし」の判定自体が信用できない。');
-  } else if (strictCount !== looseCount) {
-    errors.push('CMP-ID を含む表の行は ' + looseCount + ' 件あるが、先頭セルの CMP-ID として厳密に抽出できたのは ' + strictCount
-      + ' 件で件数が一致しない。先頭セルが壊れた行、または先頭セル以外にだけ CMP-ID を持つ表の行がある（取りこぼした行の重複を見逃すため fail とする）。');
-  }
-  for (const [id, count] of occurrences) {
-    if (count > 1) errors.push('CMP-ID の重複: ' + id + ' が ' + count + ' 回出現する。後から main へ入った側が採番し直すこと。');
-  }
-
-  // 2. 列数（Java: cmpIdの行は列数が7である）と 3. 優先度（Java: cmp行の状態セルは優先度か完了系で始まる）
+  const columnErrors = [];
+  const priorityErrors = [];
+  const ids = [];
   let rows = 0;
   for (const line of text.split('\n')) {
     if (!line.startsWith('|')) continue;
@@ -115,46 +75,118 @@ export function checkTaskListStructure(content) {
     rows++;
     const columns = cells.length - 2;
     if (columns !== EXPECTED_COLUMN_COUNT) {
-      errors.push('列数: ' + firstCell + ' の行は ' + columns + ' 列（期待 ' + EXPECTED_COLUMN_COUNT + ' 列）。セル内の | は \\| にエスケープすること（コードスパン内でも）。');
+      columnErrors.push('列数: ' + firstCell + ' の行は ' + columns + ' 列（期待 ' + EXPECTED_COLUMN_COUNT + ' 列）。セル内の | は \\| にエスケープすること（コードスパン内でも）。');
     }
     if (cells.length < 4 || !CMP_ID_EXACT.test(firstCell)) continue;
+    ids.push(firstCell);
     const status = javaTrim(cells[3].replace(/\*/g, ''));
     if (!STATUS_PRIORITY_OR_DONE.test(status)) {
       const head = status.length > 30 ? status.slice(0, 30) + '…' : status;
-      errors.push('優先度: ' + firstCell + ' の状態セル "' + head + '" が P1〜P5（後ろに空白）または完了系の語で始まらない。未完の行は先頭に優先度を書くこと。');
+      priorityErrors.push('優先度: ' + firstCell + ' の状態セル "' + head + '" が P1〜P5（後ろに空白）または完了系の語で始まらない。未完の行は先頭に優先度を書くこと。');
     }
   }
-  stats.rows = rows;
-  if (rows === 0 && looseCount > 0) {
+  return { occurrences, strictCount, looseCount, columnErrors, priorityErrors, ids, rows };
+}
+
+/**
+ * 台帳を検査する（両配置・全ファイル横断）。ledger は readLedger の結果、または旧配置の docs/task-list.md の本文（文字列）。
+ * 文字列が null/undefined ならファイル不在として扱う。違反はファイル名を前置きして返す。
+ * @returns {{ ok: boolean, errors: string[], stats: { rows: number, looseRows: number, layout: string, files: number } }}
+ */
+export function checkTaskListStructure(input) {
+  const ledger = asLedger(input);
+  const errors = [];
+  const stats = { rows: 0, looseRows: 0, layout: ledger.layout, files: 0 };
+  const index = ledger.files.find((f) => f.path === LEDGER_INDEX_PATH);
+  if (!index || typeof index.content !== 'string') {
+    errors.push(LEDGER_INDEX_PATH + ' が存在しない（読めない）。台帳が無い状態を「問題なし」とは判定しない。');
+    return { ok: false, errors, stats };
+  }
+  if (index.content.trim() === '') {
+    errors.push(LEDGER_INDEX_PATH + ' が空である。台帳が空の状態を「問題なし」とは判定しない。');
+    return { ok: false, errors, stats };
+  }
+  const split = ledger.layout === 'split';
+  const files = split ? ledger.files : [index];
+  stats.files = files.length;
+  const occurrences = new Map();
+  let looseTotal = 0;
+  for (const file of files) {
+    if (typeof file.content !== 'string') {
+      errors.push(file.path + ': 本文を読めない。');
+      continue;
+    }
+    const a = analyzeContent(file.content);
+    looseTotal += a.looseCount;
+    stats.rows += a.rows;
+    if (a.strictCount !== a.looseCount) {
+      errors.push(file.path + ': CMP-ID を含む表の行は ' + a.looseCount + ' 件あるが、先頭セルの CMP-ID として厳密に抽出できたのは ' + a.strictCount
+        + ' 件で件数が一致しない。先頭セルが壊れた行、または先頭セル以外にだけ CMP-ID を持つ表の行がある（取りこぼした行の重複を見逃すため fail とする）。');
+    }
+    for (const [id, count] of a.occurrences) {
+      const entry = occurrences.get(id) ?? { count: 0, files: [] };
+      entry.count += count;
+      if (!entry.files.includes(file.path)) entry.files.push(file.path);
+      occurrences.set(id, entry);
+    }
+    for (const message of [...a.columnErrors, ...a.priorityErrors]) errors.push(file.path + ': ' + message);
+    if (!split) continue;
+    // 配置違反（新配置のときだけ）
+    if (file.path === LEDGER_INDEX_PATH) {
+      for (const id of a.ids) errors.push(file.path + ': 配置: 新配置では索引に CMP 行を置かない（' + id + ' は ' + expectedLedgerFile(id) + ' へ）。');
+      continue;
+    }
+    const name = file.path.slice(file.path.lastIndexOf('/') + 1);
+    if (!isLedgerFileName(name)) {
+      errors.push(file.path + ': 配置: docs/task-list/ のファイル名は YYYY-MM.md（月は 01〜12）か ' + LEGACY_FILE_NAME + ' に限る。');
+    }
+    for (const id of a.ids) {
+      const expected = expectedLedgerFile(id);
+      if (expected === file.path) continue;
+      if (name === LEGACY_FILE_NAME) errors.push(file.path + ': 配置: ' + LEGACY_FILE_NAME + ' に新形式 ID ' + id + ' がある（' + expected + ' へ置くこと）。');
+      else errors.push(file.path + ': 配置: ' + id + ' は ' + expected + ' に置くこと（自分の月・旧形式は ' + LEGACY_FILE_NAME + '）。');
+    }
+  }
+  stats.looseRows = looseTotal;
+  if (looseTotal === 0) {
+    errors.push('CMP-ID を含む表の行を1件も見つけられなかった（' + ledger.layout + ' 配置・' + files.length + ' ファイル）。走査経路か台帳の表形式が壊れており、「重複なし」の判定自体が信用できない。');
+  }
+  for (const [id, { count, files: where }] of occurrences) {
+    if (count > 1) errors.push('CMP-ID の重複: ' + id + ' が ' + count + ' 回出現する（' + where.join(', ') + '）。後から main へ入った側が採番し直すこと。');
+  }
+  if (stats.rows === 0 && looseTotal > 0) {
     errors.push('先頭セルに CMP-ID を持つ表の行を1件も見つけられなかった。走査経路（splitTableRow / CMP_ID_FORM）が壊れている可能性がある。');
   }
   return { ok: errors.length === 0, errors, stats };
 }
 
+/** 名前の別名（全ファイル横断であることを呼び出し側で明示したいとき）。 */
+export const checkLedger = checkTaskListStructure;
+
 /** CLI 本体。終了コードを返す（0: 問題なし / 1: 違反・読めない）。 */
-export function main(argv, out = console.log, err = console.error) {
+export async function main(argv, out = console.log, err = console.error) {
   const [filePath] = argv;
   if (!filePath) {
     err('使い方: node scripts/task-list-structure-check.mjs <docs/task-list.md のパス>');
     return 1;
   }
-  let content = null;
+  let ledger;
   try {
-    if (statSync(filePath, { throwIfNoEntry: false })?.isFile()) content = readFileSync(filePath, 'utf8');
+    ledger = await readLedger(fsLedgerReaderForIndex(filePath), { requireRows: false });
   } catch (error) {
-    err('docs/task-list.md を読めなかった（' + filePath + '）: ' + error.message);
+    err('台帳を読めなかった（' + filePath + '）: ' + error.message);
     return 1;
   }
-  const result = checkTaskListStructure(content);
+  const result = checkTaskListStructure(ledger);
   if (!result.ok) {
-    err('台帳構造検査: NG（' + filePath + '）');
+    err('台帳構造検査: NG（' + filePath + '、' + ledger.layout + ' 配置）');
     for (const message of result.errors) err('  ✗ ' + message);
     return 1;
   }
-  out('台帳構造検査: OK（' + filePath + '、CMP 行 ' + result.stats.rows + ' 件。重複・列数・優先度の違反なし）');
+  out('台帳構造検査: OK（' + filePath + '、' + ledger.layout + ' 配置・' + result.stats.files + ' ファイル、CMP 行 ' + result.stats.rows + ' 件。重複・列数・優先度' + (ledger.layout === 'split' ? '・配置' : '') + 'の違反なし）');
   return 0;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  process.exitCode = main(process.argv.slice(2));
+  process.exitCode = await main(process.argv.slice(2));
 }

@@ -124,4 +124,118 @@ describe('FileShareLinkDialog.vue', () => {
       expect(bodyArg.expiresAt).toBe('2026-06-10T15:00:00-07:00')
     })
   })
+
+  it('FSL-003: 発行応答の平文は SecretIssuedDialog に1回だけ渡り、一覧の再取得には token が含まれない（CMP-260826-1457）', async () => {
+    const plaintext = 'A'.repeat(43)
+    mockCreateFileLink.mockResolvedValueOnce({ data: { id: 7, fileId: 42, token: plaintext } })
+    mockGetFileLinks.mockResolvedValue({
+      data: [{
+        id: 7, fileId: 42, downloadAllowed: false, hasPassword: false, active: true,
+        accessCount: 3, expiresAt: '2099-01-01T00:00:00+09:00', lastAccessedAt: null,
+        createdAt: '2026-05-01T00:00:00+09:00',
+      }],
+    })
+    const wrapper = await mountSuspended(FileShareLinkDialog, {
+      props: { file: buildFile(), visible: true },
+    })
+    const vm = wrapper.vm as unknown as {
+      expiresAt: Date | null
+      onCreate: () => Promise<void>
+      issuedUrl: string
+      showIssuedDialog: boolean
+      onIssuedVisibleChange: (open: boolean) => void
+    }
+    vm.expiresAt = new Date(2026, 5, 10, 15, 0, 0)
+    await wrapper.vm.$nextTick()
+    await vm.onCreate()
+
+    expect(vm.showIssuedDialog).toBe(true)
+    expect(vm.issuedUrl).toBe(`${window.location.origin}/shared/${plaintext}`)
+
+    // 閉じたら平文はメモリから消える
+    vm.onIssuedVisibleChange(false)
+    expect(vm.issuedUrl).toBe('')
+
+    // 一覧には URL・コピーを出さず、再発行・削除だけがある
+    // 一覧のダイアログ本体（発行直後ダイアログとは別）には平文がどこにも出ない
+    const listDialog = document.body.querySelector('[data-testid="file-share-link-dialog"]')
+    expect(listDialog).not.toBeNull()
+    expect(listDialog!.innerHTML).not.toContain(plaintext)
+    expect(document.body.querySelector('[data-testid="share-link-reissue-7"]')).not.toBeNull()
+  })
+
+  it('FSL-004: 再発行は新リンクの発行に成功した後で旧リンクを削除する', async () => {
+    mockCreateFileLink.mockResolvedValueOnce({ data: { id: 8, fileId: 42, token: 'B'.repeat(43) } })
+    mockDeleteFileLink.mockResolvedValueOnce(undefined)
+    const wrapper = await mountSuspended(FileShareLinkDialog, {
+      props: { file: buildFile(), visible: true },
+    })
+    const vm = wrapper.vm as unknown as {
+      expiresAt: Date | null
+      onCreate: () => Promise<void>
+      onReissue: (link: { id: number, downloadAllowed: boolean, expiresAt: string | null }) => void
+    }
+    vm.onReissue({ id: 7, downloadAllowed: true, expiresAt: null })
+    vm.expiresAt = new Date(2026, 5, 10, 15, 0, 0)
+    await wrapper.vm.$nextTick()
+    await vm.onCreate()
+
+    expect(mockCreateFileLink).toHaveBeenCalledTimes(1)
+    expect((mockCreateFileLink.mock.calls[0]?.[1] as Record<string, unknown>).downloadAllowed).toBe(true)
+    expect(mockDeleteFileLink).toHaveBeenCalledWith(42, 7)
+    expect(mockCreateFileLink.mock.invocationCallOrder[0]).toBeLessThan(mockDeleteFileLink.mock.invocationCallOrder[0]!)
+  })
+
+  it('FSL-005: 新リンクの発行に失敗したときは旧リンクを削除しない', async () => {
+    mockCreateFileLink.mockRejectedValueOnce(new Error('boom'))
+    const wrapper = await mountSuspended(FileShareLinkDialog, {
+      props: { file: buildFile(), visible: true },
+    })
+    const vm = wrapper.vm as unknown as {
+      expiresAt: Date | null
+      onCreate: () => Promise<void>
+      onReissue: (link: { id: number, downloadAllowed: boolean, expiresAt: string | null }) => void
+    }
+    vm.onReissue({ id: 7, downloadAllowed: false, expiresAt: null })
+    vm.expiresAt = new Date(2026, 5, 10, 15, 0, 0)
+    await wrapper.vm.$nextTick()
+    await vm.onCreate()
+
+    expect(mockDeleteFileLink).not.toHaveBeenCalled()
+  })
+
+  it('FSL-006: 旧リンクの削除に失敗したら、成功トーストに続けて専用のエラー文言を出す', async () => {
+    mockCreateFileLink.mockResolvedValueOnce({ data: { id: 8, fileId: 42, token: 'C'.repeat(43) } })
+    mockDeleteFileLink.mockRejectedValueOnce(new Error('boom'))
+    const wrapper = await mountSuspended(FileShareLinkDialog, {
+      props: { file: buildFile(), visible: true },
+    })
+    const vm = wrapper.vm as unknown as {
+      expiresAt: Date | null
+      onCreate: () => Promise<void>
+      onReissue: (link: { id: number, downloadAllowed: boolean, expiresAt: string | null }) => void
+    }
+    vm.onReissue({ id: 7, downloadAllowed: false, expiresAt: null })
+    vm.expiresAt = new Date(2026, 5, 10, 15, 0, 0)
+    await wrapper.vm.$nextTick()
+    await vm.onCreate()
+
+    expect(mockShowError).toHaveBeenCalledWith('file_sharing.publicLink.reissueDeleteError')
+    expect(mockShowError).not.toHaveBeenCalledWith('file_sharing.publicLink.revokeError')
+  })
+
+  it('FSL-007: 再発行で旧期限が過去なら、期限欄を空にせず7日後前後を入れる', async () => {
+    const wrapper = await mountSuspended(FileShareLinkDialog, {
+      props: { file: buildFile(), visible: true },
+    })
+    const vm = wrapper.vm as unknown as {
+      expiresAt: Date | null
+      onReissue: (link: { id: number, downloadAllowed: boolean, expiresAt: string | null }) => void
+    }
+    vm.onReissue({ id: 7, downloadAllowed: false, expiresAt: '2020-01-01T00:00:00+09:00' })
+    expect(vm.expiresAt).not.toBeNull()
+    const days = (vm.expiresAt!.getTime() - Date.now()) / 86_400_000
+    expect(days).toBeGreaterThan(6.9)
+    expect(days).toBeLessThan(7.1)
+  })
 })

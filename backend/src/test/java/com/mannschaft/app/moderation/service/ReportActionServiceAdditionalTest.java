@@ -30,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 /**
@@ -45,6 +46,9 @@ class ReportActionServiceAdditionalTest {
 
     @Mock
     private ReportActionRepository actionRepository;
+
+    @Mock
+    private com.mannschaft.app.moderation.ModerationMapper moderationMapper;
 
     @InjectMocks
     private ReportActionService reportActionService;
@@ -189,20 +193,47 @@ class ReportActionServiceAdditionalTest {
     class GetAllReports {
 
         @Test
-        @DisplayName("正常系: 全通報をページング取得できる")
+        @DisplayName("正常系: status 未指定なら全通報をページング取得できる")
         void 全通報をページング取得できる() {
-            // given
             ContentReportEntity report = createPendingReport();
             org.springframework.data.domain.Pageable pageable = PageRequest.of(0, 10);
             Page<ContentReportEntity> page = new PageImpl<>(List.of(report), pageable, 1);
-
             given(reportRepository.findAll(pageable)).willReturn(page);
 
-            // when
-            Page<ContentReportEntity> result = reportActionService.getAllReports(pageable);
+            com.mannschaft.app.moderation.dto.ReportResponse dto = org.mockito.Mockito.mock(com.mannschaft.app.moderation.dto.ReportResponse.class);
+            given(moderationMapper.toReportResponse(report)).willReturn(dto);
 
-            // then
-            assertThat(result.getContent()).hasSize(1);
+            Page<com.mannschaft.app.moderation.dto.ReportResponse> result = reportActionService.getAllReports(null, pageable);
+
+            assertThat(result.getContent()).containsExactly(dto);
+            verify(reportRepository, never()).findByStatus(any(), any());
+        }
+
+        @Test
+        @DisplayName("正常系: status 指定ならそのステータスだけを取得する")
+        void ステータスで絞り込める() {
+            ContentReportEntity report = createPendingReport();
+            org.springframework.data.domain.Pageable pageable = PageRequest.of(0, 10);
+            Page<ContentReportEntity> page = new PageImpl<>(List.of(report), pageable, 1);
+            given(reportRepository.findByStatus(ReportStatus.REVIEWING, pageable)).willReturn(page);
+
+            com.mannschaft.app.moderation.dto.ReportResponse dto = org.mockito.Mockito.mock(com.mannschaft.app.moderation.dto.ReportResponse.class);
+            given(moderationMapper.toReportResponse(report)).willReturn(dto);
+
+            Page<com.mannschaft.app.moderation.dto.ReportResponse> result = reportActionService.getAllReports("REVIEWING", pageable);
+
+            assertThat(result.getContent()).containsExactly(dto);
+            verify(reportRepository, never()).findAll(any(org.springframework.data.domain.Pageable.class));
+        }
+
+        @Test
+        @DisplayName("異常系: 未定義の status は入力エラー（COMMON_001 → 400）")
+        void 不正なステータスは入力エラー() {
+            org.springframework.data.domain.Pageable pageable = PageRequest.of(0, 10);
+
+            assertThatThrownBy(() -> reportActionService.getAllReports("BOGUS", pageable))
+                    .isInstanceOf(BusinessException.class);
+            verify(reportRepository, never()).findByStatus(any(), any());
         }
     }
 

@@ -295,7 +295,10 @@ describe('削除済チーム復元の実ページと外部HTTP境界', () => {
       await openConfirm(wrapper)
       await accept()
       expect(external.success).not.toHaveBeenCalled()
-      expect(external.error).toHaveBeenCalled()
+      // 5xx のトーストは useApi が一元的に表示するので、handleApiError（useNotification）は呼ばれないことだけを確認する。
+      // useApi 側で1枚出ることは `app/composables/useApi.5xx-toast.spec.ts` の AC7 が担保する（CMP-261125-1951）。
+      if (failure === 'network') expect(external.error).toHaveBeenCalled()
+      else expect(external.error).not.toHaveBeenCalled()
       expect(
         wrapper.get('[data-testid="restore-restore-alpha"]').attributes('disabled'),
       ).toBeUndefined()

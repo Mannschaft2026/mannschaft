@@ -426,6 +426,7 @@
   "error": {
     "server": "サーバーエラーが発生しました",
     "server_retry": "しばらく時間をおいて再度お試しください。",
+    "server_multiple": "{count}件のサーバーエラーが発生しました",
     "rate_limited": "操作が集中しています",
     "rate_limited_detail": "短時間に操作が集中しました。しばらく待ってから再度お試しください。",
     "rate_limited_retry_after": "短時間に操作が集中しました。約 {seconds} 秒後に再度お試しください。",
@@ -459,6 +460,10 @@
     "AUTH_010": "現在のパスワードが正しくありません",
     "AUTH_011": "パスワードがまだ設定されていません",
     "AUTH_044": "リクエストが集中しています。しばらく時間をおいて再試行してください",
+    "SURVEY_014": "督促する権限がありません",
+    "SURVEY_015": "前回の督促から時間が経っていないため、まだ督促できません",
+    "SURVEY_016": "督促の上限回数に達しています",
+    "INVALID_SURVEY_STATUS": "このアンケートの状態では督促できません",
     "SURVEY_023": "匿名アンケートではチーム別内訳を有効化できません",
     "SCHEDULE_KEEP_001": "キープが見つかりません",
     "SCHEDULE_KEEP_002": "タイトルを入力してください",
@@ -3354,6 +3359,27 @@
       "created_at": "発行日時",
       "expires_at": "有効期限",
       "used_count": "利用回数"
+    },
+    "signage": {
+      "section": "表示端末トークン",
+      "issue": "トークン発行",
+      "device_name": "端末名",
+      "device_placeholder": "例: エントランスモニター",
+      "empty": "トークンがありません",
+      "issued_title": "表示端末用トークンを発行しました",
+      "no_expiry": "無期限",
+      "inactive": "無効",
+      "reissue_confirm": "新しいリンクを発行し、このトークンを無効にします。よろしいですか？",
+      "revoke_confirm": "このトークンを無効化しますか？",
+      "issue_success": "トークンを発行しました",
+      "issue_failed": "トークンの発行に失敗しました",
+      "reissue_success": "トークンを再発行しました",
+      "reissue_failed": "トークンの再発行に失敗しました",
+      "revoke_success": "トークンを無効化しました",
+      "revoke_failed": "トークンの無効化に失敗しました",
+      "name_required": "端末名を入力してください",
+      "token_label": "端末に設定するトークン",
+      "reissue_revoke_failed": "新しいトークンは発行済みですが、旧トークンの無効化に失敗しました。旧トークンを手動で無効化してください"
     }
   },
   "globalSearch": {
