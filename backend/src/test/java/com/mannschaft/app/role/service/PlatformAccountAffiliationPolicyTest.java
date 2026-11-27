@@ -18,6 +18,7 @@ import java.util.Arrays;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 
 /**
@@ -132,8 +133,9 @@ class PlatformAccountAffiliationPolicyTest {
     @Test
     @DisplayName("D-3T: judge で取引の外に判定し、callJudged の範囲では assertJudgedAffiliatable が DB を読まずに運営アカウントを 403 にする")
     void 取引の外の判定結果で取引の中が拒否する() {
-        given(userRoleRepository.existsPlatformAdminRoleByUserId(PLATFORM_USER_ID)).willReturn(1L);
-        given(userRoleRepository.existsPlatformAdminRoleByUserId(GENERAL_USER_ID)).willReturn(0L);
+        // 複数件の判定は 1 本の IN 句にまとめる（1 件ずつ user_roles を引かない）
+        given(userRoleRepository.findPlatformAdminUserIdsIn(java.util.Set.of(PLATFORM_USER_ID, GENERAL_USER_ID)))
+                .willReturn(java.util.List.of(PLATFORM_USER_ID));
         PlatformAccountAffiliationPolicy.Verdicts verdicts =
                 policy.judge(java.util.List.of(PLATFORM_USER_ID, GENERAL_USER_ID));
 
@@ -147,9 +149,35 @@ class PlatformAccountAffiliationPolicyTest {
             assertThat(PlatformAccountAffiliationPolicy.isJudgedPlatformAccount(PLATFORM_USER_ID)).isTrue();
             assertThat(PlatformAccountAffiliationPolicy.isJudgedPlatformAccount(GENERAL_USER_ID)).isFalse();
         });
-        // 判定は judge の 1 回だけ（取引の中の確認は DB を読まない）。
-        org.mockito.Mockito.verify(userRoleRepository).existsPlatformAdminRoleByUserId(PLATFORM_USER_ID);
-        org.mockito.Mockito.verify(userRoleRepository).existsPlatformAdminRoleByUserId(GENERAL_USER_ID);
+        // 判定は judge の 1 回の一括照会だけ（取引の中の確認は DB を読まない。1 件ずつの照会もしない）。
+        org.mockito.Mockito.verify(userRoleRepository).findPlatformAdminUserIdsIn(any());
+        org.mockito.Mockito.verify(userRoleRepository, org.mockito.Mockito.never())
+                .existsPlatformAdminRoleByUserId(any());
+    }
+
+    @Test
+    @DisplayName("判定は 1 件なら従来の単一照会、複数件なら重複・null を除いた 1 本の一括照会になる")
+    void judgeは件数に応じて単一照会と一括照会を使い分ける() {
+        given(userRoleRepository.existsPlatformAdminRoleByUserId(PLATFORM_USER_ID)).willReturn(1L);
+        PlatformAccountAffiliationPolicy.runJudged(policy.judge(java.util.Arrays.asList(PLATFORM_USER_ID, null, PLATFORM_USER_ID)),
+                () -> assertThat(PlatformAccountAffiliationPolicy.isJudgedPlatformAccount(PLATFORM_USER_ID)).isTrue());
+        org.mockito.Mockito.verify(userRoleRepository, org.mockito.Mockito.never()).findPlatformAdminUserIdsIn(any());
+
+        given(userRoleRepository.findPlatformAdminUserIdsIn(any())).willReturn(java.util.List.of());
+        PlatformAccountAffiliationPolicy.runJudged(policy.judge(java.util.List.of(GENERAL_USER_ID, 303L)), () -> {
+            assertThat(PlatformAccountAffiliationPolicy.isJudgedPlatformAccount(GENERAL_USER_ID)).isFalse();
+            assertThat(PlatformAccountAffiliationPolicy.isJudgedPlatformAccount(303L)).isFalse();
+        });
+        org.mockito.Mockito.verify(userRoleRepository, org.mockito.Mockito.times(1)).findPlatformAdminUserIdsIn(any());
+        assertThat(policy.judge(java.util.List.of())).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Verdicts は judge 以外から作れない（コンストラクタが private）")
+    void Verdictsのコンストラクタは公開しない() {
+        assertThat(PlatformAccountAffiliationPolicy.Verdicts.class.getDeclaredConstructors())
+                .isNotEmpty()
+                .allSatisfy(c -> assertThat(java.lang.reflect.Modifier.isPrivate(c.getModifiers())).isTrue());
     }
 
     @Test

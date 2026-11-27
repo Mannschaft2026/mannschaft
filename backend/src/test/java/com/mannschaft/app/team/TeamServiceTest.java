@@ -516,64 +516,6 @@ class TeamServiceTest {
         }
     }
 
-    @Nested
-    @DisplayName("followTeam")
-    class FollowTeam {
-
-        @Test
-        @DisplayName("異常系: ブロックされている場合TEAM_004例外")
-        void フォロー_ブロック_例外() {
-            // Given
-            TeamEntity team = TeamEntity.builder().name("テスト").template("sports")
-                    .visibility(TeamEntity.Visibility.GUESTS_AND_ABOVE).build();
-            given(teamRepository.findById(TEAM_ID)).willReturn(Optional.of(team));
-            given(teamBlockRepository.existsByTeamIdAndUserId(TEAM_ID, USER_ID)).willReturn(true);
-
-            // When / Then
-            assertThatThrownBy(() -> service.followTeam(USER_ID, TEAM_ID))
-                    .isInstanceOf(BusinessException.class)
-                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
-                            .isEqualTo("TEAM_004"));
-        }
-
-        @Test
-        @DisplayName("異常系: 既にSUPPORTERとして所属している場合TEAM_003例外")
-        void フォロー_既所属_例外() {
-            // Given
-            TeamEntity team = TeamEntity.builder().name("テスト").template("sports")
-                    .visibility(TeamEntity.Visibility.GUESTS_AND_ABOVE).build();
-            given(teamRepository.findById(TEAM_ID)).willReturn(Optional.of(team));
-            given(teamBlockRepository.existsByTeamIdAndUserId(TEAM_ID, USER_ID)).willReturn(false);
-            // F00.5 Phase 5: memberships ベースの重複チェック
-            given(membershipRepository.existsActiveByUserAndScopeAndRoleKind(
-                    USER_ID, ScopeType.TEAM, TEAM_ID, RoleKind.SUPPORTER)).willReturn(true);
-
-            // When / Then
-            assertThatThrownBy(() -> service.followTeam(USER_ID, TEAM_ID))
-                    .isInstanceOf(BusinessException.class)
-                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
-                            .isEqualTo("TEAM_003"));
-        }
-
-        @Test
-        @DisplayName("正常系: memberships に SUPPORTER として入会される")
-        void フォロー_正常_入会() {
-            // Given
-            TeamEntity team = TeamEntity.builder().name("テスト").template("sports")
-                    .visibility(TeamEntity.Visibility.GUESTS_AND_ABOVE).build();
-            given(teamRepository.findById(TEAM_ID)).willReturn(Optional.of(team));
-            given(teamBlockRepository.existsByTeamIdAndUserId(TEAM_ID, USER_ID)).willReturn(false);
-            given(membershipRepository.existsActiveByUserAndScopeAndRoleKind(
-                    USER_ID, ScopeType.TEAM, TEAM_ID, RoleKind.SUPPORTER)).willReturn(false);
-
-            // When
-            service.followTeam(USER_ID, TEAM_ID);
-
-            // Then
-            verify(membershipService).join(any(MembershipCreateRequest.class));
-        }
-    }
-
     /**
      * 画像 URL 根治 Phase 1: チーム詳細（toResponse）・公開詳細（getPublicTeam）の
      * icon/banner が生 R2 キーではなく {@link MediaUrlResolver} の解決済み署名付き表示 URL に

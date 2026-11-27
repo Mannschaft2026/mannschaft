@@ -1066,44 +1066,6 @@ public class TeamService {
     }
 
     /**
-     * SUPPORTERとしてチームをフォローする（自己登録）。
-     *
-     * <p>F00.5 Phase 5: memberships への書き込みに切替。MembershipService.join() 経由で
-     * 冪等性保証・イベント発火を一本化する。</p>
-     */
-    @Transactional
-    // TODO: teamドメインとmembershipドメイン(MembershipRepository/MembershipService)をまたいでいる。将来はTeamFollowRequestedEventで分離予定
-    @Caching(evict = {
-            @CacheEvict(value = "team-detail", allEntries = true),
-            @CacheEvict(value = "team-search", allEntries = true)
-    })
-    public void followTeam(Long userId, Long teamId) {
-        findTeamOrThrow(teamId);
-
-        // ブロックチェック
-        if (teamBlockRepository.existsByTeamIdAndUserId(teamId, userId)) {
-            throw new BusinessException(TeamErrorCode.TEAM_004);
-        }
-
-        // 重複チェック（memberships に既にアクティブな SUPPORTER がいる場合）
-        if (membershipRepository.existsActiveByUserAndScopeAndRoleKind(
-                userId, ScopeType.TEAM, teamId, RoleKind.SUPPORTER)) {
-            throw new BusinessException(TeamErrorCode.TEAM_003);
-        }
-
-        // F00.5 Phase 5: memberships に SUPPORTER として入会
-        MembershipCreateRequest req = new MembershipCreateRequest();
-        req.setUserId(userId);
-        req.setScopeType(ScopeType.TEAM);
-        req.setScopeId(teamId);
-        req.setRoleKind(RoleKind.SUPPORTER);
-        req.setSource("SELF_FOLLOW");
-        membershipService.join(req);
-
-        log.info("チームフォロー完了: userId={}, teamId={}", userId, teamId);
-    }
-
-    /**
      * SUPPORTERとしてのフォローを解除する。
      *
      * <p>F00.5 Phase 5: memberships への退会処理に切替。MembershipService.leave() 経由で

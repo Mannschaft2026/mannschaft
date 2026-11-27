@@ -62,8 +62,12 @@ class PlatformAccountAffiliationBanHeadmanSuccessionTest {
 
     @BeforeEach
     void setUp() {
-        given(userRoleRepository.existsPlatformAdminRoleByUserId(PLATFORM_USER_ID)).willReturn(1L);
-        given(userRoleRepository.existsPlatformAdminRoleByUserId(GENERAL_USER_ID)).willReturn(0L);
+        // 候補が 1 件なら単一照会、複数件なら 1 本の一括照会（どちらの経路でも運営アカウントを判定する）
+        org.mockito.Mockito.lenient().when(userRoleRepository.existsPlatformAdminRoleByUserId(PLATFORM_USER_ID)).thenReturn(1L);
+        org.mockito.Mockito.lenient().when(userRoleRepository.existsPlatformAdminRoleByUserId(GENERAL_USER_ID)).thenReturn(0L);
+        org.mockito.Mockito.lenient().when(userRoleRepository.findPlatformAdminUserIdsIn(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenAnswer(inv -> ((java.util.Collection<Long>) inv.getArgument(0)).stream()
+                        .filter(PLATFORM_USER_ID::equals).toList());
         scheduler = new VillageHeadmanSuccessionBatchScheduler(villageRepository, membershipRepository, service,
                 userStatusLookupService, new PlatformAccountAffiliationPolicy(userRoleRepository));
         given(membershipRepository.findFirstByVillageIdAndRoleAndLeftAtIsNullOrderByJoinedAtAsc(
