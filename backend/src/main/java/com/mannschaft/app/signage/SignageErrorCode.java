@@ -46,7 +46,10 @@ public enum SignageErrorCode implements ErrorCode {
     SIGNAGE_008("SIGNAGE_008", "slot_orderの重複があります", Severity.WARN),
 
     /** メンバー限定のチームの画面にはアクセストークンを発行できません（403。CMP-261124-0159 F00 §20.5.3） */
-    SIGNAGE_009("SIGNAGE_009", "メンバー限定のチームの画面にはアクセストークンを発行できません", Severity.WARN);
+    SIGNAGE_009("SIGNAGE_009", "メンバー限定のチームの画面にはアクセストークンを発行できません", Severity.WARN),
+
+    /** 許可IPアドレスの書式が不正です（IPアドレスまたはCIDRでない値を含む・400。CMP-261127-1814） */
+    SIGNAGE_010("SIGNAGE_010", "許可IPアドレスにはIPアドレスまたはCIDR表記を指定してください", Severity.WARN);
 
     private final String code;
     private final String message;
