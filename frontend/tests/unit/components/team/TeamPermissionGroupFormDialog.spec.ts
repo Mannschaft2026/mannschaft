@@ -19,6 +19,7 @@ import { expectedPermissionLabel } from '../../helpers/permissionLabelExpectatio
  *   PF-09 編集対象が既に ADMIN 専用権限を含み、付与できない操作者なら、編集全体を不可にする（外す操作も BE は 403）
  *   PF-10 カタログの assignableTargetRoles に選択中の対象ロールが無い権限（課金権限は DEPUTY_ADMIN のみ）は選べず理由が出る。対象ロールを切り替えると該当の選択は外れる
  *   PF-12 不適合な既存権限（MEMBER 向けグループの課金権限）は「解除のみ可」: チェック済みでも外せ、外すと保存でき、外した後は再チェックできない
+ *   PF-13 「シフトの管理」を対象ロールがメンバーのグループで選ぶと、副管理者のグループでのみ有効という注記が出る（保存は止めない。副管理者なら出ない）
  *   PF-11 既存グループが対象ロールと権限の組合せ制約に反している（誰にも割り当てられない）ときは保存させず理由を出す
  */
 
@@ -38,6 +39,7 @@ const catalog = [
   { id: 1, name: 'MANAGE_ORG_AFFILIATION', displayName: '組織への加盟操作', scope: 'TEAM', adminOnlyGrantable: true, assignableTargetRoles: BOTH },
   { id: 2, name: 'MANAGE_SCHEDULES', displayName: '予定管理', scope: 'TEAM', adminOnlyGrantable: false, assignableTargetRoles: BOTH },
   { id: 3, name: 'MANAGE_TEAM_BILLING', displayName: 'チーム課金管理', scope: 'TEAM', adminOnlyGrantable: false, assignableTargetRoles: ['DEPUTY_ADMIN'] },
+  { id: 4, name: 'MANAGE_SHIFTS', displayName: 'シフトの管理', scope: 'TEAM', adminOnlyGrantable: false, assignableTargetRoles: BOTH },
 ]
 
 const stubs = { ...primeStubs, NuxtLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } }
@@ -221,6 +223,19 @@ describe('TeamPermissionGroupFormDialog', () => {
     await flushPromises()
     expect(w.find('[data-testid="pf-go-members"]').attributes('href')).toBe('/teams/team-1/members')
   })
+
+  it('PF-13: 「シフトの管理」は対象ロールがメンバーのときだけ「副管理者のグループでのみ有効」の注記が出る', async () => {
+    const w = await mountDialog()
+    expect(w.find('[data-testid="pf-shift-role-notice"]').exists()).toBe(false)
+    await w.find('[data-testid="pf-target-role"]').setValue('MEMBER')
+    await w.find('[data-testid="pf-perm-4"]').setValue(true)
+    expect(w.find('[data-testid="pf-shift-role-notice"]').exists()).toBe(true)
+    await w.find('[data-testid="pf-target-role"]').setValue('DEPUTY_ADMIN')
+    expect(w.find('[data-testid="pf-shift-role-notice"]').exists()).toBe(false)
+    await w.find('[data-testid="pf-target-role"]').setValue('MEMBER')
+    await w.find('[data-testid="pf-perm-4"]').setValue(false)
+    expect(w.find('[data-testid="pf-shift-role-notice"]').exists()).toBe(false)
+  })
 })
 
 /** テスト環境の既定ロケールに依存しないよう、明示的に切り替えて再描画を待つ。 */
@@ -268,4 +283,5 @@ describe('TeamPermissionGroupFormDialog — 権限名の表示（ALIC-2）', () 
       expect(text, `権限コード ${code} が利用者に見えている`).not.toContain(code)
     }
   })
+
 })

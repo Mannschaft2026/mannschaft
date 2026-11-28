@@ -46,6 +46,7 @@
       "analytics": "访问分析",
       "audit_logs": "审计日志",
       "settings": "设置",
+      "shiftSettings": "排班设置",
       "faqSettings": "FAQ设置",
       "confirmableNotifications": "快速确认",
       "billing": "账单与套餐管理",

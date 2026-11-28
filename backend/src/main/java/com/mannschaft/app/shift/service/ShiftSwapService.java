@@ -70,7 +70,7 @@ public class ShiftSwapService {
      * <p>取得範囲は必ず単一チームに閉じる（他テナントのデータには到達できない）。
      * そのうえで<b>閲覧者の立場によって可視範囲を BE 側で絞り込む</b>:</p>
      * <ul>
-     *   <li><b>SYSTEM_ADMIN / 当該チームの ADMIN・DEPUTY_ADMIN</b>: 当該チームの全件。</li>
+     *   <li><b>当該チームの管理者の形（ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN・閲覧切替 ON の DEPUTY_ADMIN）</b>: 当該チームの全件。</li>
      *   <li><b>当該チームの一般メンバー（SUPPORTER 不可）</b>: <b>自分に関係する依頼のみ</b>。
      *       すなわち (1) 自分が指名されている（SPECIFIC かつ targetUserIds に自分が含まれる）、
      *       (2) 指名なし（OPEN_CALL。BE の承諾認可上、同一チームの誰でも承諾できる）、
@@ -88,7 +88,7 @@ public class ShiftSwapService {
      * @param teamId     対象チームID（Facade が認可済み）
      * @param status     ステータスフィルタ（省略時は当該チームの全件）
      * @param userId     操作者ユーザーID（一般メンバーの絞り込みに使う）
-     * @param privileged SYSTEM_ADMIN または当該チームの ADMIN/DEPUTY_ADMIN なら true（全件可視）
+     * @param privileged 当該チームの管理者の形（ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN・閲覧切替 ON の DEPUTY_ADMIN）なら true（全件可視）
      * @return 交代リクエスト一覧（一般メンバーは自分に関係するもののみ）
      */
     public List<SwapRequestResponse> listSwapRequests(Long teamId, String status, Long userId, boolean privileged) {

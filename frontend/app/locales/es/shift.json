@@ -12,11 +12,23 @@
     "board": {
       "title": "Tablero de turnos",
       "memberPool": "Miembros sin asignar",
+      "remainingHours": "Quedan {hours} h",
       "noUnassignedMembers": "No hay miembros sin asignar",
       "noMatchingMembers": "Ningún miembro coincide con la búsqueda",
       "dragHint": "Arrastra miembros para asignar",
       "unassignedSlots": "{count} turnos sin asignar",
-      "backToList": "Volver a la lista de turnos"
+      "backToList": "Volver a la lista de turnos",
+      "colDateTime": "Fecha y horario",
+      "assignedOfRequired": "{assigned} / {required}",
+      "full": "Completo",
+      "addMember": "Añadir",
+      "addMemberTitle": "Añadir miembro",
+      "addMemberSlotLabel": "{slot}",
+      "noAddableMembers": "No hay miembros que añadir",
+      "removeAssignment": "Quitar a {name} de este turno",
+      "fullReason": "Completo: no se puede añadir",
+      "overlapReason": "Se solapa con {slot}; no se puede elegir",
+      "overlapSlotLabel": "{date} {time} «{position}»"
     },
     "autoAssign": {
       "button": "Asignación automática",
@@ -199,17 +211,13 @@
       "moveDateAccept": "Mover turno y preferencias",
       "saveSuccess": "Franja guardada",
       "deleteSuccess": "Franja eliminada",
-      "assignmentMasked": "En ajuste",
+      "assignmentHidden": "Asignaciones ocultas",
       "assignmentMaskedHint": "Las asignaciones se ocultan hasta que se publique el turno",
       "deleteTitle": "Eliminar turno",
       "deleteConfirmPlain": "¿Eliminar este turno?",
-
       "deleteConfirmBoth": "¿Eliminar este turno? También se eliminarán las {requests} solicitud(es) enviadas para este turno y sus {assignments} asignación(es). No se puede deshacer con las operaciones habituales.",
-
       "deleteConfirmRequestsOnly": "¿Eliminar este turno? También se eliminarán las {requests} solicitud(es) enviadas para este turno. No se puede deshacer con las operaciones habituales.",
-
       "deleteConfirmAssignmentsOnly": "¿Eliminar este turno? También se eliminarán sus {assignments} asignación(es). No se puede deshacer con las operaciones habituales.",
-
       "deleteConfirmUnknown": "¿Eliminar este turno? Si hay solicitudes enviadas para este turno o asignaciones, también se eliminarán. No se puede deshacer con las operaciones habituales."
     },
     "requests": {
@@ -486,7 +494,13 @@
       "validation": {
         "rateRequired": "Introduce una tarifa por hora",
         "ratePositive": "Introduce una tarifa por hora de al menos 1 JPY"
-      }
+      },
+      "readOnlyNotice": "Solo puedes ver los salarios por hora. Registrarlos o modificarlos requiere el permiso \"Gestionar turnos\"."
+    },
+    "permission": {
+      "noManagePermission": "Solo puedes ver los turnos porque no tienes el permiso \"Gestionar turnos\". Para crearlos o editarlos, pide a un administrador que te lo conceda mediante un grupo de permisos.",
+      "adminNotice": "Los administradores adjuntos no pueden gestionar los turnos (solo verlos) si ningún grupo de permisos les concede \"Gestionar turnos\". Asigna un grupo de permisos que incluya \"Gestionar turnos\" a los adjuntos que lo necesiten.",
+      "adminNoticeLink": "Abrir grupos de permisos"
     }
   },
   "my_shift_guide": {

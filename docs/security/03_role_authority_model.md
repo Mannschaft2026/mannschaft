@@ -282,6 +282,8 @@ const isScopeAdmin = computed(
 )
 ```
 
+シフトボードの割当操作（枠への追加・外す・未割当プール・自動割当）の出し分け `canAssign` も同じ方針で、`roleName === 'ADMIN' || (roleName === 'DEPUTY_ADMIN' && can('MANAGE_SHIFTS'))` とする（CMP-261125-1336）。DEPUTY_ADMIN は MANAGE_SHIFTS を権限グループで付与された場合だけ割当操作が出て、持たない DEPUTY_ADMIN は閲覧のみ。SYSTEM_ADMIN 兼任者は `roleName` が `SYSTEM_ADMIN` になるため `shifts.vue` の入口判定と同じく含まれない。
+
 - 参照実装: `frontend/app/pages/teams/[slug]/shifts/[scheduleId]/board.vue` の `isScopeAdmin`（シフトボードの自動割当ボタン・履歴ボタン）、`frontend/app/pages/teams/[slug]/shifts.vue` の `isScopeAdmin`（「シフトボード」ボタン）。
 - **UI を隠すことは認可の代替ではない。** 上記のとおり BE は SYSTEM_ADMIN を常に許可するため、このボタンを消しても「SYSTEM_ADMIN がその API を叩けなくなる」わけではない。あくまで「運営専用アカウントに、一般利用者向けの業務導線を出さない」という UX 上の方針である。
 - **この等値比較は将来「バグだ」と誤解して `hasRoleOrAbove` 的な包含判定に書き換えないこと。** 書き換えると SYSTEM_ADMIN にもチーム運営導線が出てしまい、本節の方針に反する。
@@ -289,6 +291,8 @@ const isScopeAdmin = computed(
 ### 3.6 SYSTEM_ADMIN とテナント業務情報の分離（2026-11-15 マスター判断）
 
 **最新方針**: プラットフォームの運営管理権限と、各チーム・組織の業務情報へのアクセス権限を分離する。セキュリティリスクを減らすため、SYSTEM_ADMIN であることだけを理由に各チーム・組織の業務情報へアクセスできないことを基本とする。SYSTEM_ADMIN を持つ利用者も、通常の所属先・役割・担当権限で許可される範囲では業務利用できる。
+
+**シフト管理への適用（CMP-261125-2114・2026-11-25 実装）**: シフトの管理操作と閲覧は、ADMIN と `MANAGE_SHIFTS` を持つ DEPUTY_ADMIN だけに許可する（`AccessControlService#hasAdminOrPermissionInScope`）。チームのシフト設定の切替（`deputy_shift_view_enabled`・`deputy_hourly_rate_view_enabled`、既定 OFF）が ON のときに限り、`MANAGE_SHIFTS` 無しの DEPUTY_ADMIN にも**閲覧だけ**を許す。管理・閲覧とも**チームへの在籍も要求する**（ADMIN の判定 `isAdmin` は user_roles だけを見て在籍を問わないため、退会済みでロールだけ残った ADMIN は拒否。共通の `isAdmin` は変えず shift ゲートで追加検査する）。時給を見せる切替（`deputy_hourly_rate_view_enabled`）の変更は在籍中のチーム ADMIN だけで、MANAGE_SHIFTS 付き DEPUTY_ADMIN にも許さない（金額の開示範囲を決める設定のため。マスター裁定 2026-11-25）。在籍の判定は共通の門 `ScopeContentAccessGate#canAccessScopeContent` を通し、非公開チームに在籍する MEMBER 未満（是正前データのサポーター・ゲスト）は越境と同じ不在と同一の 404 にする（親チーム上限。F00 §20.4・AC-0159-94）。チームロールを持たない SYSTEM_ADMIN は、操作も閲覧も他の部外者と同じに拒否する（shift ドメインの `ShiftManageAccessGate` に SYSTEM_ADMIN の短絡は無い。§3.5 の SYSTEM_ADMIN 短絡の記述のうち、シフトに関するものは本項で置き換える。`ShiftAutoAssignService` 等の実例も現行ではこの経路に従う）。仕様: `docs/features/F03.5_shift/04_security_operations.md` §6。
 
 **CMP-260930-0233 への適用**: 駐車場情報もこの方針に従い、SYSTEM_ADMIN 単独で全組織を閲覧する経路は認めない。この仕様判断は決着したが、実装・検証・戦役完了を意味しない。
 

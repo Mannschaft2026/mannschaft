@@ -109,17 +109,13 @@
       "moveDateAccept": "枠と希望を移動",
       "saveSuccess": "スロットを保存しました",
       "deleteSuccess": "スロットを削除しました",
-      "assignmentMasked": "調整中",
+      "assignmentHidden": "割当は非公開",
       "assignmentMaskedHint": "公開前のため割当は表示されません",
       "deleteTitle": "シフト枠を削除",
       "deleteConfirmPlain": "この枠を削除しますか？",
-
       "deleteConfirmBoth": "この枠を削除しますか？この枠に出された希望 {requests} 件・割当 {assignments} 件も削除されます。通常の操作では元に戻せません。",
-
       "deleteConfirmRequestsOnly": "この枠を削除しますか？この枠に出された希望 {requests} 件も削除されます。通常の操作では元に戻せません。",
-
       "deleteConfirmAssignmentsOnly": "この枠を削除しますか？この枠の割当 {assignments} 件も削除されます。通常の操作では元に戻せません。",
-
       "deleteConfirmUnknown": "この枠を削除しますか？この枠に出された希望と割当があれば、それも削除されます。通常の操作では元に戻せません。"
     },
     "requests": {
@@ -340,11 +336,23 @@
     "board": {
       "title": "シフトボード",
       "memberPool": "未割当メンバー",
+      "remainingHours": "残り {hours}時間",
       "noUnassignedMembers": "未割当のメンバーはいません",
       "noMatchingMembers": "検索条件に一致するメンバーはいません",
       "dragHint": "メンバーをドラッグして割り当て",
       "unassignedSlots": "{count}件未割当",
-      "backToList": "シフト一覧に戻る"
+      "backToList": "シフト一覧に戻る",
+      "colDateTime": "日付・時間帯",
+      "assignedOfRequired": "{assigned} / {required}人",
+      "full": "満員",
+      "addMember": "追加",
+      "addMemberTitle": "メンバーを追加",
+      "addMemberSlotLabel": "{slot}",
+      "noAddableMembers": "追加できるメンバーがいません",
+      "removeAssignment": "{name}の割当を外す",
+      "fullReason": "満員のため追加できません",
+      "overlapReason": "{slot}と時間が重なるため選べません",
+      "overlapSlotLabel": "{date} {time}「{position}」"
     },
     "autoAssign": {
       "button": "自動割当",
@@ -486,7 +494,13 @@
       "validation": {
         "rateRequired": "時給を入力してください",
         "ratePositive": "時給は1円以上で入力してください"
-      }
+      },
+      "readOnlyNotice": "時給の閲覧のみ許可されています。登録・変更には「シフトの管理」権限が必要です。"
+    },
+    "permission": {
+      "noManagePermission": "シフトの管理権限がないため、閲覧のみ可能です。作成・編集などを行うには、管理者に、権限グループで「シフトの管理」を付けてもらってください。",
+      "adminNotice": "副管理者は、権限グループで「シフトの管理」を付与されていないとシフトを管理できません（閲覧のみ）。必要な副管理者には、「シフトの管理」を含む権限グループを割り当ててください。",
+      "adminNoticeLink": "権限グループを開く"
     }
   },
   "my_shift_guide": {

@@ -1,8 +1,6 @@
 package com.mannschaft.app.shift.service;
 
-import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
-import com.mannschaft.app.common.ScopeConcealingAccessGate;
 import com.mannschaft.app.shift.ShiftErrorCode;
 import com.mannschaft.app.shift.dto.AssignmentRunResponse;
 import com.mannschaft.app.shift.dto.AutoAssignRequest;
@@ -27,10 +25,10 @@ import java.util.List;
  * <pre>
  * 主体＼EP                    実行/確定/破棄(schedule)   履歴一覧(schedule)  詳細・目視確認(runId)
  * 部外者(非メンバー)          404 SHIFT_001/SHIFT_024*   404 SHIFT_001       404 SHIFT_024
- * 同チーム一般メンバー        403 COMMON_002             403 COMMON_002      404 SHIFT_024(同チームでも隠す)
- * チーム ADMIN/DEPUTY_ADMIN   200/201/204(状態次第)      200                 200(状態次第)
- * 非メンバーの SYSTEM_ADMIN   200/201/204(状態次第)      200                 200(状態次第)
- * メンバーの SYSTEM_ADMIN     200/201/204(状態次第)      200                 200(状態次第)
+ * 同チーム一般メンバー        実行 403 COMMON_002／確定・破棄 404 SHIFT_024(run の実在を隠す)  403 COMMON_002  404 SHIFT_024(同チームでも隠す)
+ * ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN  200/201/204(状態次第)  200  200(状態次第)
+ * MANAGE_SHIFTS 無しの DEPUTY_ADMIN  実行 403／確定・破棄 404 SHIFT_024  403 COMMON_002  404 SHIFT_024（一般メンバーと同じ。閲覧切替でも広がらない）
+ * SYSTEM_ADMIN(チームロール無し)  部外者と同じ（CMP-261125-2114: SYSTEM_ADMIN を特別扱いしない）
  * user_roles のみの ADMIN     200/201/204(状態次第)      200                 200(状態次第)
  * 他チームの ADMIN            404 SHIFT_001/SHIFT_024*   404 SHIFT_001       404 SHIFT_024
  * 対象不在                    404 SHIFT_001/SHIFT_024*   404 SHIFT_001       404 SHIFT_024
@@ -44,14 +42,11 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ShiftAutoAssignFacade {
 
-    private static final String TEAM = "TEAM";
-
     private final ShiftAutoAssignService autoAssignService;
-    private final ScopeConcealingAccessGate accessGate;
-    private final AccessControlService accessControlService;
+    private final ShiftManageAccessGate manageGate;
 
     /**
-     * 自動割当を実行する（スケジュール実体から解決したチームの ADMIN/DEPUTY_ADMIN のみ）。
+     * 自動割当を実行する（スケジュール実体から解決したチームの ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ）。
      *
      * @param scheduleId  スケジュール ID
      * @param request     自動割当リクエスト
@@ -61,38 +56,36 @@ public class ShiftAutoAssignFacade {
     public AssignmentRunResponse runAutoAssign(Long scheduleId, AutoAssignRequest request, Long triggeredBy) {
         Long teamId = autoAssignService.resolveScheduleTeamId(scheduleId);
         // 越境は兄弟（ShiftScheduleService）と同じく不在（SHIFT_SCHEDULE_NOT_FOUND）と同一応答へ畳む。
-        accessGate.requireAdminOrConceal(triggeredBy, teamId, TEAM, ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
+        manageGate.requireManageOrConceal(triggeredBy, teamId, ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
         return autoAssignService.runAutoAssign(scheduleId, request, triggeredBy);
     }
 
     /**
-     * 自動割当提案を確定する（run 実体由来のチームの ADMIN/DEPUTY_ADMIN のみ）。
+     * 自動割当提案を確定する（run 実体由来のチームの ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ）。
      *
      * @param scheduleId スケジュール ID
      * @param request    確定リクエスト
      * @param userId     操作者ユーザー ID
      */
     public void confirmAutoAssign(Long scheduleId, ConfirmAutoAssignRequest request, Long userId) {
-        Long teamId = autoAssignService.resolveRunTeamId(request.runId(), scheduleId);
-        accessGate.requireAdminOrConceal(userId, teamId, TEAM, ShiftErrorCode.ASSIGNMENT_RUN_NOT_FOUND);
+        requireRunAdminConcealed(request.runId(), scheduleId, userId);
         autoAssignService.confirmAutoAssign(scheduleId, request);
     }
 
     /**
-     * 自動割当提案を破棄する（run 実体由来のチームの ADMIN/DEPUTY_ADMIN のみ）。
+     * 自動割当提案を破棄する（run 実体由来のチームの ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ）。
      *
      * @param scheduleId スケジュール ID
      * @param runId      実行ログ ID
      * @param userId     操作者ユーザー ID
      */
     public void revokeAutoAssign(Long scheduleId, Long runId, Long userId) {
-        Long teamId = autoAssignService.resolveRunTeamId(runId, scheduleId);
-        accessGate.requireAdminOrConceal(userId, teamId, TEAM, ShiftErrorCode.ASSIGNMENT_RUN_NOT_FOUND);
+        requireRunAdminConcealed(runId, scheduleId, userId);
         autoAssignService.revokeAutoAssign(scheduleId, runId);
     }
 
     /**
-     * 自動割当実行履歴一覧を取得する（管理者専用の運用情報。ADMIN/DEPUTY_ADMIN 粒度）。
+     * 自動割当実行履歴一覧を取得する（管理者専用の運用情報。ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN 粒度）。
      *
      * @param scheduleId スケジュール ID
      * @param userId     操作者ユーザー ID
@@ -100,31 +93,31 @@ public class ShiftAutoAssignFacade {
      */
     public List<AssignmentRunResponse> getAssignmentRuns(Long scheduleId, Long userId) {
         Long teamId = autoAssignService.resolveScheduleTeamId(scheduleId);
-        accessGate.requireAdminOrConceal(userId, teamId, TEAM, ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
+        manageGate.requireManageOrConceal(userId, teamId, ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
         return autoAssignService.getAssignmentRuns(scheduleId);
     }
 
     /**
-     * 自動割当実行ログ詳細を取得する（run 実体由来のチームの ADMIN/DEPUTY_ADMIN のみ）。
+     * 自動割当実行ログ詳細を取得する（run 実体由来のチームの ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ）。
      *
      * @param runId  実行ログ ID
      * @param userId 操作者ユーザー ID
      * @return 実行ログ詳細
      */
     public AssignmentRunResponse getAssignmentRunDetail(Long runId, Long userId) {
-        requireRunAdminConcealed(runId, userId);
+        requireRunAdminConcealed(runId, null, userId);
         return autoAssignService.getAssignmentRunDetail(runId);
     }
 
     /**
-     * 目視確認を完了させる（確定と同一粒度。run 実体由来のチームの ADMIN/DEPUTY_ADMIN）。
+     * 目視確認を完了させる（確定と同一粒度。run 実体由来のチームの ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
      *
      * @param runId  実行ログ ID
      * @param note   確認備考
      * @param userId 確認者ユーザー ID
      */
     public void confirmVisualReview(Long runId, String note, Long userId) {
-        requireRunAdminConcealed(runId, userId);
+        requireRunAdminConcealed(runId, null, userId);
         autoAssignService.confirmVisualReview(runId, note, userId);
     }
 
@@ -132,16 +125,16 @@ public class ShiftAutoAssignFacade {
      * run 実体由来の管理者認可（<b>存在秘匿版</b>）。権限が無い場合も 403 ではなく
      * {@code ASSIGNMENT_RUN_NOT_FOUND}（404）を返す。
      *
-     * <p>パスにスコープを持たない {@code /assignment-runs/{runId}} 系の EP 専用。本 EP は
-     * 「同チームの非 ADMIN も不在と同じ 404」が仕様なので、同チームの権限不足を 403 で返す Gate は使わず、
-     * {@code isAdminOrAbove} の真偽だけで 404 に統一する。</p>
+     * <p>run 系（確定・破棄・詳細・目視確認）は、同チームの管理権限が無い人にも run の実在を読ませない
+     * （実在 runId が 403、不在が 404 に割れると存在オラクルになる）ので、権限不足を 403 で返す判定は使わず、
+     * {@code canManage}（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN）の真偽だけで 404 に統一する。
+     * run の解決（不在・パスのスケジュールと不一致は 404）の<b>後</b>に判定するが、どちらも同一コードなので応答は割れない。</p>
+     *
+     * @param scheduleId パスのスケジュール ID（{@code /assignment-runs/{runId}} 系のようにパスに無ければ null）
      */
-    private void requireRunAdminConcealed(Long runId, Long userId) {
-        Long teamId = autoAssignService.resolveRunTeamId(runId, null);
-        if (accessControlService.isSystemAdmin(userId)) {
-            return;
-        }
-        if (!accessControlService.isAdminOrAbove(userId, teamId, TEAM)) {
+    private void requireRunAdminConcealed(Long runId, Long scheduleId, Long userId) {
+        Long teamId = autoAssignService.resolveRunTeamId(runId, scheduleId);
+        if (!manageGate.canManage(userId, teamId)) {
             throw new BusinessException(ShiftErrorCode.ASSIGNMENT_RUN_NOT_FOUND);
         }
     }

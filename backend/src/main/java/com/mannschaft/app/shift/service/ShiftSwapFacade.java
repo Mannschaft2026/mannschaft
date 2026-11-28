@@ -4,7 +4,6 @@ import com.mannschaft.app.auth.service.UserStatusLookupService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
-import com.mannschaft.app.common.ScopeConcealingAccessGate;
 import com.mannschaft.app.shift.ShiftErrorCode;
 import com.mannschaft.app.shift.dto.CreateSwapRequestRequest;
 import com.mannschaft.app.shift.dto.ResolveSwapRequestRequest;
@@ -30,10 +29,10 @@ import java.util.List;
  * 部外者(非メンバー)            403 COMMON_002 404 SHIFT_002     404 SHIFT_005     404 SHIFT_005     404 SHIFT_005
  * 同チーム SUPPORTER            403 COMMON_002 403 COMMON_002    403 COMMON_002    403 COMMON_002    403 COMMON_002
  * 同チーム一般メンバー          200(関係分のみ) 201(作成資格※)   200(状態次第)     403 COMMON_002    403 COMMON_002(本人以外)
- * チーム ADMIN/DEPUTY_ADMIN     200(全件)      201(作成資格※)   200(状態次第)     200(状態次第)     204(状態次第)
+ * ADMIN／MANAGE_SHIFTS 付き DEPUTY 200(全件)      201(作成資格※)   200(状態次第)     200(状態次第)     204(状態次第)
+ * MANAGE_SHIFTS 無しの DEPUTY    切替OFF=一般メンバーと同じ／閲覧切替ON=一覧のみ全件。承認/却下・他人の取消は常に 403 COMMON_002
  * 申請者本人                    200            -                (自己承諾は 400 SWAP_SELF_REQUEST) - 204(PENDING のみ。親の存在に依存しない)
- * 非メンバーの SYSTEM_ADMIN     200(全件)      201(作成資格※)   200(状態次第)     200(状態次第)     204(状態次第)
- * メンバーの SYSTEM_ADMIN       200(全件)      201(作成資格※)   200(状態次第)     200(状態次第)     204(状態次第)
+ * SYSTEM_ADMIN(チームロール無し) 一覧 403／承認・取消は部外者と同じ（CMP-261125-2114: SYSTEM_ADMIN を特別扱いしない）
  * user_roles のみの ADMIN       200(全件)      403 COMMON_002   403 COMMON_002    200(状態次第)     204(状態次第)
  * 対象不在(swap/slot)           (n/a)          404 SHIFT_002    404 SHIFT_005     404 SHIFT_005     404 SHIFT_005
  * 親が不在(枠/スケジュール)     (n/a)          404 SHIFT_002    404 SHIFT_005     404 SHIFT_005     404 SHIFT_005(本人以外)
@@ -53,14 +52,14 @@ public class ShiftSwapFacade {
     private static final String TEAM = "TEAM";
 
     private final ShiftSwapService swapService;
-    private final ScopeConcealingAccessGate accessGate;
+    private final ShiftManageAccessGate manageGate;
     private final AccessControlService accessControlService;
     private final UserStatusLookupService userStatusLookupService;
 
     /**
      * 指定チームの交代リクエスト一覧を取得する。
      *
-     * <p>SYSTEM_ADMIN または当該チームの ADMIN/DEPUTY_ADMIN は全件、一般メンバー（SUPPORTER 不可）は
+     * <p>管理者の形（ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN、閲覧切替 ON の DEPUTY_ADMIN）は全件、一般メンバー（SUPPORTER 不可）は
      * 自分に関係する依頼のみ、それ以外は 403（{@code COMMON_002}）。一覧は ID を叩く EP ではなく
      * チームの存在有無が応答で割れないため、403 のまま。</p>
      *
@@ -84,8 +83,8 @@ public class ShiftSwapFacade {
     public SwapRequestResponse createSwapRequest(CreateSwapRequestRequest req, Long userId) {
         ShiftSwapService.SwapScope scope = swapService.resolveSlotScope(req.getSlotId());
         // 越境（他チームの slotId）は不在と同一応答（SHIFT_SLOT_NOT_FOUND）に畳む。
-        accessGate.requireMemberOrConceal(
-                userId, scope.teamId(), TEAM, ShiftErrorCode.SHIFT_SLOT_NOT_FOUND, true);
+        manageGate.requireMemberOrConceal(
+                userId, scope.teamId(), ShiftErrorCode.SHIFT_SLOT_NOT_FOUND, true);
         return swapService.createSwapRequest(req, userId);
     }
 
@@ -98,13 +97,13 @@ public class ShiftSwapFacade {
      */
     public SwapRequestResponse acceptSwapRequest(Long swapId, Long accepterId) {
         ShiftSwapService.SwapScope scope = swapService.resolveSwapScope(swapId);
-        accessGate.requireMemberOrConceal(
-                accepterId, scope.teamId(), TEAM, ShiftErrorCode.SWAP_REQUEST_NOT_FOUND, true);
+        manageGate.requireMemberOrConceal(
+                accepterId, scope.teamId(), ShiftErrorCode.SWAP_REQUEST_NOT_FOUND, true);
         return swapService.acceptSwapRequest(swapId, accepterId);
     }
 
     /**
-     * 交代リクエストを承認・却下する（当該チームの ADMIN 以上）。
+     * 交代リクエストを承認・却下する（当該チームの ADMIN／MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
      *
      * @param swapId  交代リクエスト ID
      * @param req     承認・却下リクエスト
@@ -113,8 +112,7 @@ public class ShiftSwapFacade {
      */
     public SwapRequestResponse resolveSwapRequest(Long swapId, ResolveSwapRequestRequest req, Long adminId) {
         ShiftSwapService.SwapScope scope = swapService.resolveSwapScope(swapId);
-        accessGate.requireAdminOrConceal(
-                adminId, scope.teamId(), TEAM, ShiftErrorCode.SWAP_REQUEST_NOT_FOUND);
+        manageGate.requireManageOrConceal(adminId, scope.teamId(), ShiftErrorCode.SWAP_REQUEST_NOT_FOUND);
         Long expectedAccepterId = null;
         if ("APPROVE".equals(req.getAction())) {
             expectedAccepterId = swapService.resolveApprovalAccepterId(swapId);
@@ -129,7 +127,7 @@ public class ShiftSwapFacade {
     }
 
     /**
-     * 交代リクエストをキャンセルする（申請者本人は所属を問わず許可、それ以外は当該チームの ADMIN 以上）。
+     * 交代リクエストをキャンセルする（申請者本人は所属を問わず許可、それ以外は当該チームの ADMIN／MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
      *
      * @param swapId 交代リクエスト ID
      * @param userId 操作者 ID
@@ -137,8 +135,8 @@ public class ShiftSwapFacade {
     public void cancelSwapRequest(Long swapId, Long userId) {
         ShiftSwapService.SwapScope scope = swapService.resolveCancelScope(swapId, userId);
         if (!userId.equals(scope.requesterId())) {
-            accessGate.requireOwnerOrAdminOrConceal(
-                    userId, scope.teamId(), TEAM, scope.requesterId(), ShiftErrorCode.SWAP_REQUEST_NOT_FOUND);
+            manageGate.requireOwnerOrManageOrConceal(
+                    userId, scope.teamId(), scope.requesterId(), ShiftErrorCode.SWAP_REQUEST_NOT_FOUND);
         }
         swapService.cancelSwapRequest(swapId, userId);
     }
@@ -148,14 +146,12 @@ public class ShiftSwapFacade {
      *
      * @param teamId 対象チーム ID
      * @param userId 操作者ユーザー ID
-     * @return SYSTEM_ADMIN または当該チームの ADMIN/DEPUTY_ADMIN なら true
-     * @throws BusinessException 当該チームのメンバーでない、または SUPPORTER の場合（COMMON_002 / 403）
+     * @return 管理者の形（ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN、閲覧切替 ON の DEPUTY_ADMIN）なら true
+     * @throws BusinessException 当該チームのメンバーでない、または SUPPORTER の場合（COMMON_002 / 403）。
+     *                           チームロールを持たない SYSTEM_ADMIN も同様（CMP-261125-2114）
      */
     private boolean checkListAccessAndIsPrivileged(Long teamId, Long userId) {
-        if (accessControlService.isSystemAdmin(userId)) {
-            return true;
-        }
-        if (accessControlService.isAdminOrAbove(userId, teamId, TEAM)) {
+        if (manageGate.canView(userId, teamId)) {
             return true;
         }
         // 一般メンバー（SUPPORTER は不可）。承諾できる立場と同じ条件に揃える。

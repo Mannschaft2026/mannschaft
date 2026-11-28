@@ -154,6 +154,38 @@ public final class MembershipTestHelper {
     }
 
     /**
+     * チームの DEPUTY_ADMIN に、権限グループ経由で指定の Permission を付与する（CMP-261125-2114）。
+     *
+     * <p>シフト管理は「ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN」だけに許可されるため、DEPUTY_ADMIN を
+     * 管理者として使うテストはこのメソッドで {@code MANAGE_SHIFTS} を付ける。{@code permissions} 行が無ければ作り、
+     * 対象チームの DEPUTY_ADMIN 向け権限グループを新規に作って付与する（既存のグループには触れない）。
+     * 事前に {@link #insertUserRole} で当該チームの DEPUTY_ADMIN にしておくこと。</p>
+     *
+     * @param em             EntityManager
+     * @param userId         付与先ユーザー
+     * @param teamId         チーム ID
+     * @param permissionName 付与する Permission 名（例: {@code "MANAGE_SHIFTS"}）
+     */
+    public static void grantTeamDeputyPermission(EntityManager em, Long userId, Long teamId, String permissionName) {
+        em.createNativeQuery("INSERT INTO permissions (name, display_name, scope, created_at, updated_at) "
+                        + "SELECT :pn, :pn, 'TEAM', NOW(), NOW() FROM DUAL "
+                        + "WHERE NOT EXISTS (SELECT 1 FROM permissions WHERE name = :pn)")
+                .setParameter("pn", permissionName).executeUpdate();
+        String groupName = "test-pg-" + java.util.UUID.randomUUID();
+        em.createNativeQuery("INSERT INTO permission_groups (team_id, organization_id, target_role, name, "
+                        + "created_at, updated_at) VALUES (:tid, NULL, 'DEPUTY_ADMIN', :name, NOW(), NOW())")
+                .setParameter("tid", teamId).setParameter("name", groupName).executeUpdate();
+        Long groupId = ((Number) em.createNativeQuery("SELECT id FROM permission_groups WHERE name = :name")
+                .setParameter("name", groupName).getSingleResult()).longValue();
+        em.createNativeQuery("INSERT INTO permission_group_permissions (group_id, permission_id, created_at) "
+                        + "SELECT :gid, p.id, NOW() FROM permissions p WHERE p.name = :pn")
+                .setParameter("gid", groupId).setParameter("pn", permissionName).executeUpdate();
+        em.createNativeQuery("INSERT INTO user_permission_groups (user_id, group_id, created_at) "
+                        + "VALUES (:uid, :gid, NOW())")
+                .setParameter("uid", userId).setParameter("gid", groupId).executeUpdate();
+    }
+
+    /**
      * roles.name から id を 1 SQL で解決する。
      *
      * <p>未投入ならオンデマンドで INSERT してから再取得する。priority は正準表

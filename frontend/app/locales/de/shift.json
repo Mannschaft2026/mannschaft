@@ -12,11 +12,23 @@
     "board": {
       "title": "Schichtplan-Board",
       "memberPool": "Nicht zugewiesene Mitglieder",
+      "remainingHours": "Noch {hours} Std.",
       "noUnassignedMembers": "Keine nicht zugewiesenen Mitglieder",
       "noMatchingMembers": "Keine Mitglieder entsprechen Ihrer Suche",
       "dragHint": "Mitglieder per Drag & Drop zuweisen",
       "unassignedSlots": "{count} nicht zugewiesene Schichten",
-      "backToList": "Zurück zur Schichtliste"
+      "backToList": "Zurück zur Schichtliste",
+      "colDateTime": "Datum / Zeit",
+      "assignedOfRequired": "{assigned} / {required}",
+      "full": "Voll",
+      "addMember": "Hinzufügen",
+      "addMemberTitle": "Mitglied hinzufügen",
+      "addMemberSlotLabel": "{slot}",
+      "noAddableMembers": "Keine Mitglieder zum Hinzufügen",
+      "removeAssignment": "{name} aus dieser Schicht entfernen",
+      "fullReason": "Voll: Hinzufügen nicht möglich",
+      "overlapReason": "Überschneidet sich mit {slot}, daher nicht wählbar",
+      "overlapSlotLabel": "{date} {time} „{position}“"
     },
     "autoAssign": {
       "button": "Automatisch zuweisen",
@@ -199,17 +211,13 @@
       "moveDateAccept": "Schicht und Wünsche verschieben",
       "saveSuccess": "Slot gespeichert",
       "deleteSuccess": "Slot gelöscht",
-      "assignmentMasked": "In Abstimmung",
+      "assignmentHidden": "Zuweisungen verborgen",
       "assignmentMaskedHint": "Zuweisungen werden bis zur Veröffentlichung ausgeblendet",
       "deleteTitle": "Schichtzeit löschen",
       "deleteConfirmPlain": "Diese Schichtzeit löschen?",
-
       "deleteConfirmBoth": "Diese Schichtzeit löschen? Die dafür eingereichten {requests} Wünsche und {assignments} Zuweisungen werden ebenfalls gelöscht. Dies lässt sich mit normalen Mitteln nicht rückgängig machen.",
-
       "deleteConfirmRequestsOnly": "Diese Schichtzeit löschen? Die dafür eingereichten {requests} Wünsche werden ebenfalls gelöscht. Dies lässt sich mit normalen Mitteln nicht rückgängig machen.",
-
       "deleteConfirmAssignmentsOnly": "Diese Schichtzeit löschen? Die {assignments} Zuweisungen werden ebenfalls gelöscht. Dies lässt sich mit normalen Mitteln nicht rückgängig machen.",
-
       "deleteConfirmUnknown": "Diese Schichtzeit löschen? Eingereichte Wünsche und Zuweisungen dafür, falls vorhanden, werden ebenfalls gelöscht. Dies lässt sich mit normalen Mitteln nicht rückgängig machen."
     },
     "requests": {
@@ -486,7 +494,13 @@
       "validation": {
         "rateRequired": "Bitte geben Sie einen Stundensatz ein",
         "ratePositive": "Bitte geben Sie einen Stundensatz von mindestens 1 JPY ein"
-      }
+      },
+      "readOnlyNotice": "Sie dürfen Stundenlöhne nur einsehen. Zum Erfassen oder Ändern ist die Berechtigung „Schichten verwalten“ erforderlich."
+    },
+    "permission": {
+      "noManagePermission": "Sie können Schichten nur einsehen, da Ihnen die Berechtigung „Schichten verwalten“ fehlt. Zum Erstellen oder Bearbeiten bitten Sie eine Administratorin oder einen Administrator, sie Ihnen über eine Berechtigungsgruppe zu erteilen.",
+      "adminNotice": "Stellvertretende Administratoren können Schichten nicht verwalten (nur einsehen), wenn ihnen keine Berechtigungsgruppe „Schichten verwalten“ erteilt. Weisen Sie den benötigten Stellvertretern eine Berechtigungsgruppe zu, die „Schichten verwalten“ enthält.",
+      "adminNoticeLink": "Berechtigungsgruppen öffnen"
     }
   },
   "my_shift_guide": {

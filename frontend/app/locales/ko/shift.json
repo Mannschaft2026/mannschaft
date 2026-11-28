@@ -12,11 +12,23 @@
     "board": {
       "title": "시프트 보드",
       "memberPool": "미배정 멤버",
+      "remainingHours": "남은 {hours}시간",
       "noUnassignedMembers": "미배정 멤버가 없습니다",
       "noMatchingMembers": "검색 조건에 일치하는 멤버가 없습니다",
       "dragHint": "멤버를 드래그하여 배정",
       "unassignedSlots": "{count}건 미배정",
-      "backToList": "근무 목록으로 돌아가기"
+      "backToList": "근무 목록으로 돌아가기",
+      "colDateTime": "날짜 / 시간대",
+      "assignedOfRequired": "{assigned} / {required}명",
+      "full": "정원 마감",
+      "addMember": "추가",
+      "addMemberTitle": "멤버 추가",
+      "addMemberSlotLabel": "{slot}",
+      "noAddableMembers": "추가할 수 있는 멤버가 없습니다",
+      "removeAssignment": "{name} 배정 해제",
+      "fullReason": "정원이 가득 차 추가할 수 없습니다",
+      "overlapReason": "{slot}와(과) 시간이 겹쳐 선택할 수 없습니다",
+      "overlapSlotLabel": "{date} {time} \"{position}\""
     },
     "autoAssign": {
       "button": "자동 배정",
@@ -199,17 +211,13 @@
       "moveDateAccept": "근무 시간대와 희망 이동",
       "saveSuccess": "슬롯을 저장했습니다",
       "deleteSuccess": "슬롯을 삭제했습니다",
-      "assignmentMasked": "조정 중",
+      "assignmentHidden": "배정 비공개",
       "assignmentMaskedHint": "공개 전이므로 배정은 표시되지 않습니다",
       "deleteTitle": "근무 시간대 삭제",
       "deleteConfirmPlain": "이 시간대를 삭제하시겠습니까?",
-
       "deleteConfirmBoth": "이 시간대를 삭제하시겠습니까? 이 시간대에 제출된 희망 {requests}건과 배정 {assignments}건도 함께 삭제됩니다. 일반적인 조작으로는 되돌릴 수 없습니다.",
-
       "deleteConfirmRequestsOnly": "이 시간대를 삭제하시겠습니까? 이 시간대에 제출된 희망 {requests}건도 함께 삭제됩니다. 일반적인 조작으로는 되돌릴 수 없습니다.",
-
       "deleteConfirmAssignmentsOnly": "이 시간대를 삭제하시겠습니까? 이 시간대의 배정 {assignments}건도 함께 삭제됩니다. 일반적인 조작으로는 되돌릴 수 없습니다.",
-
       "deleteConfirmUnknown": "이 시간대를 삭제하시겠습니까? 이 시간대에 제출된 희망과 배정이 있다면 함께 삭제됩니다. 일반적인 조작으로는 되돌릴 수 없습니다."
     },
     "requests": {
@@ -486,7 +494,13 @@
       "validation": {
         "rateRequired": "시급을 입력해 주세요",
         "ratePositive": "시급은 1엔 이상으로 입력해 주세요"
-      }
+      },
+      "readOnlyNotice": "시급은 열람만 허용됩니다. 등록·변경에는 \"근무 시프트 관리\" 권한이 필요합니다."
+    },
+    "permission": {
+      "noManagePermission": "\"근무 시프트 관리\" 권한이 없어 열람만 가능합니다. 작성·편집을 하려면 관리자에게 권한 그룹으로 \"근무 시프트 관리\"를 부여해 달라고 요청해 주세요.",
+      "adminNotice": "부관리자는 권한 그룹으로 \"근무 시프트 관리\"를 부여받지 않으면 시프트를 관리할 수 없습니다(열람만 가능). 필요한 부관리자에게 \"근무 시프트 관리\"가 포함된 권한 그룹을 할당해 주세요.",
+      "adminNoticeLink": "권한 그룹 열기"
     }
   },
   "my_shift_guide": {

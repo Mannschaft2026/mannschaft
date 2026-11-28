@@ -20,6 +20,7 @@
 import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 export const LEDGER_INDEX_PATH = 'docs/task-list.md';
 export const LEDGER_DIR = 'docs/task-list';
@@ -229,4 +230,10 @@ export function gitLedgerReader(ref, { cwd, maxBuffer = 64 * 1024 * 1024 } = {})
       return git(['cat-file', 'blob', tree + ':' + path]);
     },
   };
+}
+
+// CLI（migrate / render / port-diff）。本体は task-list-ledger-cli.mjs（循環 import を避けて起動時にだけ読む）。
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  // 評価完了後に読む（top-level await にすると本体との循環 import で止まる）
+  import('./task-list-ledger-cli.mjs').then(({ main }) => main(process.argv.slice(2))).then((code) => { process.exitCode = code; });
 }

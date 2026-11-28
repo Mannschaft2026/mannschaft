@@ -72,3 +72,19 @@ export function isAcceptingShiftRequests(schedule: ShiftScheduleResponse): boole
 export function isAcceptingChangeRequests(status: ShiftScheduleStatus): boolean {
   return status !== 'PUBLISHED' && status !== 'ARCHIVED'
 }
+
+/**
+ * 管理者の形（管理者・閲覧切替 ON の副管理者）ではない人にも PDF を出せるシフト表か。
+ *
+ * BE の ShiftPdfService#checkPubliclyReleasable（ShiftScheduleVisibilityPolicy#classifyByStatusName が FULL）に合わせる:
+ * PUBLISHED は常に、ARCHIVED は公開日時があるときだけ FULL。DRAFT・COLLECTING・ADJUSTING と、公開日時が無い ARCHIVED は
+ * 非管理者に対して 404 になる（公開状態を読ませないため）ので、PDF ボタンを出さない。
+ * 状態が未取得（null）は出さない側に倒す。
+ */
+export function isPdfReleasableToNonPrivileged(
+  status: { status: ShiftScheduleStatus, publishedAt: string | null } | null | undefined,
+): boolean {
+  if (!status) return false
+  if (status.status === 'PUBLISHED') return true
+  return status.status === 'ARCHIVED' && status.publishedAt !== null
+}

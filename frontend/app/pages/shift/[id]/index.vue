@@ -35,14 +35,12 @@ const loading = ref(false)
 /** 取得失敗（空状態へ倒さず DashboardErrorState で出す。AC-E1〜E3） */
 const loadError = ref<unknown>(null)
 
-const canManage = computed(() => {
-  if (!schedule.value) return false
-  return teamStore.myTeams.some(
-    (t) =>
-      t.id === schedule.value!.teamId &&
-      (t.role === 'ADMIN' || t.role === 'SYSTEM_ADMIN' || t.role === 'DEPUTY_ADMIN'),
-  )
-})
+// CMP-261125-2114: 管理操作はチーム ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけ（BE: ShiftManageAccessGate）。
+// 判定は useShiftPermission に集約。権限はシフト表のチーム（myTeams から slug を引く）で取得する。SYSTEM_ADMIN は特別扱いしない。
+const permissionTeamSlug = computed(
+  () => teamStore.myTeams.find(tm => tm.id === schedule.value?.teamId)?.slug ?? null,
+)
+const { canManageShift: canManage, isDeputyWithoutManage, loadPermissions } = useShiftPermission(permissionTeamSlug, { autoLoad: false })
 
 async function load() {
   loading.value = true
@@ -51,6 +49,9 @@ async function load() {
     const [s, sl] = await Promise.all([getSchedule(scheduleId.value), listSlots(scheduleId.value)])
     schedule.value = s
     slots.value = sl
+    // 権限は取得失敗を「権限なし」に倒さず、エラー状態で見せる（再試行できる）
+    const perm = await loadPermissions()
+    if (!perm.ok) throw perm.error
   } catch (error) {
     schedule.value = null
     slots.value = []
@@ -344,8 +345,11 @@ const currentStep = computed(() =>
         </div>
       </div>
 
+      <!-- MANAGE_SHIFTS を持たない副管理者には、操作できない理由を示す -->
+      <ShiftManageNotice v-if="isDeputyWithoutManage" variant="deputy" />
+
       <!-- タブナビ -->
-      <ShiftDetailTabs :schedule-id="scheduleId" :team-id="schedule.teamId" current="overview" />
+      <ShiftDetailTabs :schedule-id="scheduleId" :team-id="schedule.teamId" current="overview" :status="schedule?.status ?? null" />
 
       <!-- カレンダービュー -->
       <section>
@@ -360,17 +364,19 @@ const currentStep = computed(() =>
         <div
           v-else
           class="overflow-x-auto rounded-xl border border-surface-200 dark:border-surface-700"
+          data-testid="shift-overview-calendar"
         >
-          <table class="w-full border-collapse text-sm">
+          <!-- table-fixed: 長いポジション名で表の最小幅が広がり、札（1/3 等）がコンテナ外へ切れるのを防ぐ -->
+          <table class="w-full table-fixed border-collapse text-sm">
             <thead>
               <tr>
                 <th
-                  class="sticky left-0 min-w-[100px] bg-surface-50 px-3 py-2 text-left text-xs font-medium text-surface-500 dark:bg-surface-800"
+                  class="sticky left-0 w-28 bg-surface-50 px-3 py-2 text-left text-xs font-medium text-surface-500 dark:bg-surface-800"
                 >
                   {{ t('shift.detail.colDate') }}
                 </th>
                 <th
-                  class="min-w-[140px] bg-surface-50 px-3 py-2 text-left text-xs font-medium text-surface-500 dark:bg-surface-800"
+                  class="bg-surface-50 px-3 py-2 text-left text-xs font-medium text-surface-500 dark:bg-surface-800"
                 >
                   {{ t('shift.detail.colSlots') }}
                 </th>
@@ -401,7 +407,7 @@ const currentStep = computed(() =>
                       v-for="slot in slotsByDate.get(date)"
                       :key="slot.id"
                       :to="`/shift/${scheduleId}/edit`"
-                      class="inline-flex max-w-full items-center gap-1 rounded-lg border px-2 py-0.5 text-xs transition-colors hover:border-primary"
+                      class="inline-flex max-w-full flex-wrap items-center gap-1 rounded-lg border px-2 py-0.5 text-xs transition-colors hover:border-primary"
                       :class="
                         isSlotUnderStaffed(slot)
                           ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-900/20 dark:text-red-300'
@@ -413,7 +419,7 @@ const currentStep = computed(() =>
                           slot.time.endTime.slice(0, 5)
                         }}</span
                       >
-                      <span v-if="slot.position.positionName" class="min-w-0 break-words text-surface-400"
+                      <span v-if="slot.position.positionName" class="min-w-0 text-surface-400 [overflow-wrap:anywhere]"
                         >/{{ slot.position.positionName }}</span
                       >
                       <!-- 割当バッジ。サーバーが割当を伏せている間は人数を出さず中立表示にする -->
@@ -422,7 +428,7 @@ const currentStep = computed(() =>
                         class="shrink-0 whitespace-nowrap rounded bg-surface-100 px-1 font-medium text-surface-600 dark:bg-surface-700 dark:text-surface-300"
                         :title="$t('shift.slot.assignmentMaskedHint')"
                       >
-                        {{ $t('shift.slot.assignmentMasked') }}
+                        {{ $t('shift.slot.assignmentHidden') }}
                       </span>
                       <span
                         v-else

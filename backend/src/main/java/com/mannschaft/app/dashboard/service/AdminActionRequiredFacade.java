@@ -8,6 +8,7 @@ import com.mannschaft.app.matching.service.MatchingAdminQueryService;
 import com.mannschaft.app.payment.service.PaymentAdminQueryService;
 import com.mannschaft.app.reservation.service.ReservationAdminQueryService;
 import com.mannschaft.app.role.service.InviteIssuerPolicy;
+import com.mannschaft.app.shift.service.ShiftManageAccessGate;
 import com.mannschaft.app.shift.service.ShiftRequestAdminQueryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -56,6 +57,7 @@ public class AdminActionRequiredFacade {
     private final AccessControlService accessControlService;
     private final ReservationAdminQueryService reservationAdminQueryService;
     private final ShiftRequestAdminQueryService shiftRequestAdminQueryService;
+    private final ShiftManageAccessGate shiftManageAccessGate;
     private final MatchingAdminQueryService matchingAdminQueryService;
     private final PaymentAdminQueryService paymentAdminQueryService;
     private final PendingInviteAdminQueryService pendingInviteAdminQueryService;
@@ -110,7 +112,7 @@ public class AdminActionRequiredFacade {
 
     private List<DomainTask> buildTasks(Long userId, String scopeType, Long scopeId, String scopeSlug,
                                         int previewSize) {
-        List<DomainTask> tasks = new ArrayList<>(scopeTasks(scopeType, scopeId, scopeSlug, previewSize));
+        List<DomainTask> tasks = new ArrayList<>(scopeTasks(userId, scopeType, scopeId, scopeSlug, previewSize));
         // 再招待依頼（INVITE_REISSUE）は招待権限者（ADMIN、または INVITE_MEMBERS を持つ DEPUTY_ADMIN）にだけ含める
         // （CMP-261107-1833 PR3 設計 b・i）。権限の無い DEPUTY には欄も件数も出さない。
         if (inviteIssuerPolicy.canIssue(userId, scopeId, scopeType)) {
@@ -121,19 +123,25 @@ public class AdminActionRequiredFacade {
         return tasks;
     }
 
-    private List<DomainTask> scopeTasks(String scopeType, Long scopeId, String scopeSlug, int previewSize) {
+    private List<DomainTask> scopeTasks(Long userId, String scopeType, Long scopeId, String scopeSlug,
+                                        int previewSize) {
         if ("TEAM".equals(scopeType)) {
-            return List.of(
-                    new DomainTask("RESERVATION",
-                            "/teams/" + scopeSlug + "/admin/reservations?status=PENDING",
-                            () -> reservationAdminQueryService.pendingForTeam(scopeId, scopeSlug, previewSize)),
-                    new DomainTask("SHIFT_REQUEST",
-                            "/teams/" + scopeSlug + "/shifts",
-                            () -> shiftRequestAdminQueryService.pendingForTeam(scopeId, scopeSlug, previewSize)),
-                    new DomainTask("MATCHING",
-                            "/teams/" + scopeSlug + "/admin/matching?tab=received",
-                            () -> matchingAdminQueryService.pendingReceivedForTeam(scopeId, scopeSlug, previewSize))
-            );
+            List<DomainTask> teamTasks = new ArrayList<>();
+            teamTasks.add(new DomainTask("RESERVATION",
+                    "/teams/" + scopeSlug + "/admin/reservations?status=PENDING",
+                    () -> reservationAdminQueryService.pendingForTeam(scopeId, scopeSlug, previewSize)));
+            // シフト希望の欄・件数は、シフトの閲覧を許された人（ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN、
+            // または閲覧切替 ON の DEPUTY_ADMIN）にだけ出す。許されない DEPUTY には欄も件数も出さない
+            // （CMP-261125-2114。ダッシュボードそのものは入口認可どおり見られる）。
+            if (shiftManageAccessGate.canView(userId, scopeId)) {
+                teamTasks.add(new DomainTask("SHIFT_REQUEST",
+                        "/teams/" + scopeSlug + "/shifts",
+                        () -> shiftRequestAdminQueryService.pendingForTeam(scopeId, scopeSlug, previewSize)));
+            }
+            teamTasks.add(new DomainTask("MATCHING",
+                    "/teams/" + scopeSlug + "/admin/matching?tab=received",
+                    () -> matchingAdminQueryService.pendingReceivedForTeam(scopeId, scopeSlug, previewSize)));
+            return teamTasks;
         }
         if ("ORGANIZATION".equals(scopeType)) {
             return List.of(

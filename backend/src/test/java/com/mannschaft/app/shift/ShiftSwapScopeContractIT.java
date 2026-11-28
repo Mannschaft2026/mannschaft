@@ -632,16 +632,18 @@ class ShiftSwapScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-2/AC-3: user_roles のみの ADMIN は resolve・cancel で許可、member操作(create/accept)は 404 に化けず 403")
+        @DisplayName("AC-2/AC-3（CMP-261125-2114 で改訂）: user_roles のみの ADMIN（在籍なし）は resolve・cancel も member操作(create/accept)も所属者として403（404 に化けない）")
         void AC3_userRolesOnlyAdmin() throws Exception {
             setAuth(userRolesOnlyAdminAId);
             mockMvc.perform(post("/api/v1/shifts/swap-requests/{id}/resolve", acceptedSwapAId)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(
                                     Map.of("action", "APPROVE", "adminNote", "x"))))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error.code").value("COMMON_002"));
             mockMvc.perform(delete("/api/v1/shifts/swap-requests/{id}", pendingSwapAId))
-                    .andExpect(status().isNoContent());
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error.code").value("COMMON_002"));
             mockMvc.perform(post("/api/v1/shifts/swap-requests/{id}/accept", openCallSwapAId))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.error.code").value("COMMON_002"));
@@ -654,14 +656,15 @@ class ShiftSwapScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-5: 非メンバーの SYSTEM_ADMIN は resolve できる")
-        void AC5_systemAdminは通る() throws Exception {
+        @DisplayName("AC-5（CMP-261125-2114 で改訂）: チームロールを持たない SYSTEM_ADMIN は resolve できず部外者と同じ 404")
+        void AC5_systemAdminは短絡で通らない() throws Exception {
             setAuth(systemAdminId);
             mockMvc.perform(post("/api/v1/shifts/swap-requests/{id}/resolve", acceptedSwapAId)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(
                                     Map.of("action", "APPROVE", "adminNote", "x"))))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("SHIFT_005"));
         }
 
         @Test

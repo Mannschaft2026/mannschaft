@@ -28535,7 +28535,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** チームシフト設定更新（ADMIN/DEPUTY のみ） */
+        /**
+         * チームシフト設定更新（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN。時給閲覧の切替は ADMIN のみ）
+         * @description いずれも当該チームに在籍中であることが必要（退会済みでロールだけ残った ADMIN は不可）。`deputyHourlyRateViewEnabled`（副管理者への時給閲覧許可）は金額の開示範囲を決める設定のため、チームの ADMIN だけが変更できる（null 以外を送ると、MANAGE_SHIFTS を持つ DEPUTY_ADMIN でも 403）。他の項目（リマインド・`deputyShiftViewEnabled`）は ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN が変更できる。
+         */
         patch: operations["updateSettings_19"];
         trace?: never;
     };
@@ -39660,7 +39663,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * チーム時給一括取得（ADMIN/DEPUTY_ADMIN のみ）
+         * チーム時給一括取得（ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN。時給閲覧切替 ON なら DEPUTY_ADMIN も）
          * @description 基準日時点で有効な時給を、チーム全員ぶん 1 レスポンスで返す。時給が未設定のメンバーは含まれない。
          */
         get: operations["listTeamEffectiveHourlyRates"];
@@ -73734,12 +73737,16 @@ export interface components {
             visibility?: string;
         };
         UpdateTeamShiftSettingsRequest: {
-            atLeastOneEnabled?: boolean;
+            /** @description 副管理者への時給閲覧許可の切替。省略（null）なら変更しない。チームの ADMIN だけが変更できる（null 以外を送ると、MANAGE_SHIFTS を持つ DEPUTY_ADMIN でも 403） */
+            deputyHourlyRateViewEnabled?: boolean;
+            deputyShiftViewEnabled?: boolean;
             reminder12hEnabled?: boolean;
             reminder24hEnabled?: boolean;
             reminder48hEnabled?: boolean;
         };
         TeamShiftSettingsResponse: {
+            deputyHourlyRateViewEnabled?: boolean;
+            deputyShiftViewEnabled?: boolean;
             reminder12hEnabled?: boolean;
             reminder24hEnabled?: boolean;
             reminder48hEnabled?: boolean;
@@ -147856,7 +147863,7 @@ export interface operations {
                     "*/*": components["schemas"]["TeamShiftSettingsResponse"];
                 };
             };
-            /** @description 当該チームの ADMIN/DEPUTY でない */
+            /** @description 当該チームに在籍中の ADMIN でも MANAGE_SHIFTS を持つ DEPUTY_ADMIN でもない、または時給閲覧の切替を ADMIN 以外が送った */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -166004,7 +166011,7 @@ export interface operations {
                     "*/*": components["schemas"]["ApiResponseListHourlyRateResponse"];
                 };
             };
-            /** @description 当該チームの ADMIN/DEPUTY_ADMIN でない */
+            /** @description 当該チームの ADMIN でも MANAGE_SHIFTS 付き DEPUTY_ADMIN でもなく、時給閲覧切替 ON の DEPUTY_ADMIN でもない（チームロールの無い SYSTEM_ADMIN を含む） */
             403: {
                 headers: {
                     [name: string]: unknown;

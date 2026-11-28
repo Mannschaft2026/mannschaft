@@ -3,7 +3,6 @@ package com.mannschaft.app.shift.service;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
-import com.mannschaft.app.common.ScopeConcealingAccessGate;
 import com.mannschaft.app.shift.ShiftErrorCode;
 import com.mannschaft.app.shift.ShiftScheduleStatus;
 import com.mannschaft.app.shift.dto.CreateShiftScheduleRequest;
@@ -25,7 +24,8 @@ import java.util.List;
  * 流れは「{@link ShiftScheduleService#resolveScope} の readOnly な scope 解決（自ドメインのみ・FOR UPDATE なし）→
  * 認可 → {@link ShiftScheduleService} / {@link ShiftPreferenceReminderBatchService} の tx 本体（中で読み直す）」。
  * Controller は本クラスだけを呼ぶ。名前を {@code *AccessService} / {@code *AccessGate} にしないのは、
- * 呼んだだけで認可シグナル扱いになり本クラス内の認可漏れを AuthzControllerGuard が見逃すのを避けるため。</p>
+ * 呼んだだけで認可シグナル扱いになり本クラス内の認可漏れを AuthzControllerGuard が見逃すのを避けるため。
+ * 管理操作の判定は {@link ShiftManageAccessGate}（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけ）。</p>
  *
  * <h3>認可表（未公開の詳細・サマリは後述の 404 秘匿を適用）</h3>
  * <pre>
@@ -33,9 +33,13 @@ import java.util.List;
  * 部外者(越境)              403 COMMON_002 404 SHIFT_001    403 COMMON_002  404 SHIFT_001（remind も。是正前は 403）
  * 同チーム SUPPORTER        403 COMMON_002 403 COMMON_002   403 COMMON_002  403 COMMON_002
  * 同チーム一般メンバー      200            200              403 COMMON_002  403 COMMON_002
- * チーム ADMIN/DEPUTY_ADMIN 200(全件)      200              201             200/204/201
+ * ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN  200(全件)  200  201             200/204/201
+ * MANAGE_SHIFTS 無しの DEPUTY_ADMIN  切替OFF=一般メンバーと同じ／閲覧切替ON=閲覧だけ管理者の形（一覧・詳細・サマリ）。
+ *                           作成・更新・削除・遷移・複製・remind は切替に関わらず 403 COMMON_002
  * user_roles のみの ADMIN   403 COMMON_002 200              201             200/204/201（一覧は是正前から在籍を要求。広げない）
- * SYSTEM_ADMIN(非/メンバー) 200(全件)      200              201             200/204/201
+ * user_roles のみの DEPUTY_ADMIN（MANAGE_SHIFTS 無し・切替 OFF） 一覧 403／詳細 403 COMMON_002（所属者。越境の 404 にはしない）／
+ *                           作成・更新等も 403 COMMON_002（MANAGE_SHIFTS 無し）。在籍していないので一般メンバーとしても見られない
+ * SYSTEM_ADMIN(チームロール無し) 一覧 403 COMMON_002／他は部外者と同じ（CMP-261125-2114: SYSTEM_ADMIN を特別扱いしない）
  * 対象不在・親削除済み      (n/a)          404 SHIFT_001    (n/a)           404 SHIFT_001
  * </pre>
  * <p>未公開（DRAFT・ARCHIVED で publishedAt なし）の詳細・サマリは、一般メンバーには 404 SHIFT_001 へ寄せる
@@ -50,7 +54,7 @@ public class ShiftScheduleFacade {
 
     private final ShiftScheduleService scheduleService;
     private final ShiftPreferenceReminderBatchService reminderService;
-    private final ScopeConcealingAccessGate accessGate;
+    private final ShiftManageAccessGate manageGate;
     private final AccessControlService accessControlService;
     /** CMP-261115-1821: 公開の予算連動判定の値を公開 TX の外で取得する口（実装は shiftbudget）。 */
     private final ShiftPublicationBudgetContextPort publicationBudgetContextPort;
@@ -58,8 +62,9 @@ public class ShiftScheduleFacade {
     /**
      * チームのシフトスケジュール一覧を取得する（期間指定は {@code from}・{@code to} が両方あるとき）。
      *
-     * <p>SYSTEM_ADMIN、または当該チームの非 SUPPORTER メンバーのみ。それ以外は 403（{@code COMMON_002}）。
-     * 管理者側（SYSTEM_ADMIN・ADMIN 以上）は未公開も含めて全量、一般メンバーは公開済みのみ。</p>
+     * <p>当該チームの非 SUPPORTER メンバーのみ。それ以外（チームロールを持たない SYSTEM_ADMIN を含む）は
+     * 403（{@code COMMON_002}）。管理者の形（ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN、または閲覧切替 ON の
+     * DEPUTY_ADMIN）は未公開も含めて全量、一般メンバーは公開済みのみ。</p>
      *
      * @param teamId チームID
      * @param from   期間開始（null なら期間指定なし）
@@ -68,14 +73,12 @@ public class ShiftScheduleFacade {
      * @return シフトスケジュール一覧
      */
     public List<ShiftScheduleResponse> listSchedules(Long teamId, LocalDate from, LocalDate to, Long userId) {
-        boolean systemAdmin = accessControlService.isSystemAdmin(userId);
-        if (!systemAdmin) {
-            if (!accessControlService.isMember(userId, teamId, TEAM)
-                    || accessControlService.isSupporter(userId, teamId, TEAM)) {
-                throw new BusinessException(CommonErrorCode.COMMON_002);
-            }
+        // ?teamId= 直接指定のため越境・権限不足とも 403。SYSTEM_ADMIN を特別扱いしない（§3.6）。
+        if (!accessControlService.isMember(userId, teamId, TEAM)
+                || accessControlService.isSupporter(userId, teamId, TEAM)) {
+            throw new BusinessException(CommonErrorCode.COMMON_002);
         }
-        boolean privileged = systemAdmin || accessControlService.isAdminOrAbove(userId, teamId, TEAM);
+        boolean privileged = manageGate.canView(userId, teamId);
         if (from != null && to != null) {
             return scheduleService.listSchedulesByPeriod(teamId, from, to, privileged);
         }
@@ -85,7 +88,8 @@ public class ShiftScheduleFacade {
     /**
      * シフトスケジュールを単体取得する。
      *
-     * <p>管理者側（SYSTEM_ADMIN・ADMIN 以上。user_roles のみの ADMIN も含む）は常に可。それ以外は、所属していなければ越境として 404、
+     * <p>管理者の形（ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN、閲覧切替 ON の DEPUTY_ADMIN。user_roles のみの ADMIN も含む）は常に可。
+     * それ以外（チームロールを持たない SYSTEM_ADMIN を含む）は、所属していなければ越境として 404、
      * SUPPORTER は公開状態に依らず 403、その後に未公開なら 404（SUPPORTER に応答差で公開状態を読ませない）。</p>
      *
      * @param id     スケジュールID
@@ -94,13 +98,12 @@ public class ShiftScheduleFacade {
      */
     public ShiftScheduleResponse getSchedule(Long id, Long userId) {
         ShiftScheduleScope scope = scheduleService.resolveScope(id);
-        boolean privileged = isPrivileged(scope.teamId(), userId);
+        boolean privileged = manageGate.canView(userId, scope.teamId());
         if (!privileged) {
             // 越境は不在と同じ 404、SUPPORTER は公開状態に依らず一律 403、未公開の 404 はその後
             // （SUPPORTER に 404/403 の差で公開状態を読ませない。CMP-260826-2127 D-2127-1）。
-            if (!accessControlService.isMember(userId, scope.teamId(), TEAM)) {
-                throw new BusinessException(ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
-            }
+            // 所属していない（越境）は不在と同じ 404、所属しているが在籍していない（user_roles のみの副管理者等）は 403。
+            manageGate.requireMemberOrConceal(userId, scope.teamId(), ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
             if (accessControlService.isSupporter(userId, scope.teamId(), TEAM)) {
                 throw new BusinessException(CommonErrorCode.COMMON_002);
             }
@@ -112,7 +115,7 @@ public class ShiftScheduleFacade {
     }
 
     /**
-     * シフトスケジュールを作成する（SYSTEM_ADMIN、または当該チームの ADMIN/DEPUTY_ADMIN）。
+     * シフトスケジュールを作成する（当該チームの ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
      *
      * <p>{@code ?teamId=} 直接指定のため、越境・不在・権限不足はいずれも 403（{@code COMMON_002}）のまま。</p>
      *
@@ -122,14 +125,12 @@ public class ShiftScheduleFacade {
      * @return 作成されたシフトスケジュール
      */
     public ShiftScheduleResponse createSchedule(Long teamId, CreateShiftScheduleRequest req, Long userId) {
-        if (!accessControlService.isSystemAdmin(userId)) {
-            accessControlService.checkAdminOrAbove(userId, teamId, TEAM);
-        }
+        manageGate.requireManage(userId, teamId);
         return scheduleService.createSchedule(teamId, req, userId);
     }
 
     /**
-     * シフトスケジュールを更新する（SYSTEM_ADMIN、または当該チームの ADMIN/DEPUTY_ADMIN）。
+     * シフトスケジュールを更新する（当該チームの ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
      *
      * @param id     スケジュールID
      * @param req    更新リクエスト
@@ -142,7 +143,7 @@ public class ShiftScheduleFacade {
     }
 
     /**
-     * シフトスケジュールを論理削除する（SYSTEM_ADMIN、または当該チームの ADMIN/DEPUTY_ADMIN）。
+     * シフトスケジュールを論理削除する（当該チームの ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
      *
      * <p>親行の FOR UPDATE は認可の後（tx 本体の中）で取る。部外者は他チームの行を掴めない。</p>
      *
@@ -155,7 +156,7 @@ public class ShiftScheduleFacade {
     }
 
     /**
-     * シフトスケジュールのステータスを遷移する（SYSTEM_ADMIN、または当該チームの ADMIN/DEPUTY_ADMIN）。
+     * シフトスケジュールのステータスを遷移する（当該チームの ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
      *
      * @param id     スケジュールID
      * @param status 遷移先ステータス
@@ -180,7 +181,7 @@ public class ShiftScheduleFacade {
     }
 
     /**
-     * 充足状況サマリーを取得する（SYSTEM_ADMIN、または当該チームの ADMIN/DEPUTY_ADMIN）。
+     * 充足状況サマリーを取得する（閲覧扱い: ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN、閲覧切替 ON の DEPUTY_ADMIN）。
      *
      * <p>一般メンバーの未公開シフトは不在と同じ 404 で秘匿してから、既存の管理者ゲートを適用する。
      * SUPPORTER は全状態で既存の 403 を維持し、公開状態による応答差を新設しない。</p>
@@ -192,16 +193,20 @@ public class ShiftScheduleFacade {
     public ShiftScheduleSummaryResponse getScheduleSummary(Long id, Long userId) {
         ShiftScheduleScope scope = scheduleService.resolveScope(id);
         // 管理者限定でも、未公開への403と不在404との差から存在が分かる。SUPPORTERの既存403は維持する。
-        if (scope.isHidden() && !isPrivileged(scope.teamId(), userId)
-                && !accessControlService.isSupporter(userId, scope.teamId(), TEAM)) {
-            throw new BusinessException(ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
+        if (scope.isHidden() && !manageGate.canView(userId, scope.teamId())) {
+            // 越境は不在と同じ 404、在籍の無い user_roles のみの管理者は所属者向けの 403（getSchedule と同じ順序）。
+            manageGate.requireMemberOrConceal(userId, scope.teamId(), ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
+            if (!accessControlService.isSupporter(userId, scope.teamId(), TEAM)) {
+                throw new BusinessException(ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
+            }
         }
-        requireAdmin(scope, userId);
+        // サマリーは閲覧扱い（閲覧切替 ON の DEPUTY_ADMIN にも許す）。
+        manageGate.requireViewOrConceal(userId, scope.teamId(), ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
         return scheduleService.getScheduleSummary(id);
     }
 
     /**
-     * 未提出メンバーへ手動でリマインド通知を送る（SYSTEM_ADMIN、または当該チームの ADMIN/DEPUTY_ADMIN。COLLECTING のみ）。
+     * 未提出メンバーへ手動でリマインド通知を送る（当該チームの ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN。COLLECTING のみ）。
      *
      * <p>越境は不在と同じ 404（{@code SHIFT_001}）。是正前は実在の他チーム ID が 403、不在 ID が 404 で
      * 割れていた（存在オラクル）。Valkey の連打防止ロックは認可の後（tx 本体の先頭）で取るので、
@@ -217,7 +222,7 @@ public class ShiftScheduleFacade {
     }
 
     /**
-     * シフトスケジュールを複製する（複製元の所属チームの SYSTEM_ADMIN、または ADMIN/DEPUTY_ADMIN）。
+     * シフトスケジュールを複製する（複製元の所属チームの ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
      *
      * @param id     複製元ID
      * @param userId 作成者ID
@@ -235,17 +240,6 @@ public class ShiftScheduleFacade {
      * @param userId 操作者
      */
     private void requireAdmin(ShiftScheduleScope scope, Long userId) {
-        accessGate.requireAdminOrConceal(
-                userId, scope.teamId(), TEAM, ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
-    }
-
-    /**
-     * 管理者側（未公開も全量見てよい立場）かを判定する。SYSTEM_ADMIN を最初に短絡し、次に
-     * user_roles と memberships の 2 系統を統合した {@code isAdminOrAbove} で判定する
-     *（user_roles にだけ ADMIN を持つ利用者を越境と誤判定しない）。
-     */
-    private boolean isPrivileged(Long teamId, Long userId) {
-        return accessControlService.isSystemAdmin(userId)
-                || accessControlService.isAdminOrAbove(userId, teamId, TEAM);
+        manageGate.requireManageOrConceal(userId, scope.teamId(), ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
     }
 }

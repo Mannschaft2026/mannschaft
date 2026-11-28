@@ -25,14 +25,12 @@ const teamDefault = ref<MemberWorkConstraintResponse | null>(null)
 const memberConstraints = ref<MemberWorkConstraintResponse[]>([])
 const loading = ref(false)
 
-const canManage = computed(() => {
-  if (!schedule.value) return false
-  return teamStore.myTeams.some(
-    (t) =>
-      t.id === schedule.value!.teamId &&
-      (t.role === 'ADMIN' || t.role === 'SYSTEM_ADMIN' || t.role === 'DEPUTY_ADMIN'),
-  )
-})
+// CMP-261125-2114: 管理操作はチーム ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけ（BE: ShiftManageAccessGate）。
+// 判定は useShiftPermission に集約。権限はシフト表のチーム（myTeams から slug を引く）で取得する。SYSTEM_ADMIN は特別扱いしない。
+const permissionTeamSlug = computed(
+  () => teamStore.myTeams.find(tm => tm.id === schedule.value?.teamId)?.slug ?? null,
+)
+const { canManageShift: canManage, loadPermissions } = useShiftPermission(permissionTeamSlug, { autoLoad: false })
 
 /**
  * チームデフォルト未設定を 404 として検知するヘルパー。
@@ -94,7 +92,15 @@ async function load() {
   loadError.value = null
   try {
     schedule.value = await getSchedule(scheduleId.value)
-    if (!canManage.value) return
+    const perm = await loadPermissions()
+    if (!perm.ok) throw perm.error
+    // このページの一覧取得 API（listConstraints）は BE 側で管理操作の権限が必須（他人分は 403 SHIFT_022）。
+    // 直リンク・ブックマーク到達を塞ぐため、権限確定時点で詳細ページへ戻す。
+    if (!canManage.value) {
+      warn(t('shift.detail.accessDeniedRedirect'))
+      await navigateTo(`/shift/${scheduleId.value}`)
+      return
+    }
     const teamId = String(schedule.value.teamId)
     const [constraints, def] = await Promise.all([
       listConstraints(teamId),
@@ -122,19 +128,6 @@ async function load() {
     loading.value = false
   }
 }
-
-// このページの一覧取得 API（listConstraints）は BE 側で ADMIN/DEPUTY_ADMIN 限定。
-// 一般メンバーの直リンク・ブックマーク到達を塞ぐため、権限確定時点で詳細ページへ戻す。
-watch(
-  [schedule, canManage],
-  () => {
-    if (schedule.value && !canManage.value) {
-      warn(t('shift.detail.accessDeniedRedirect'))
-      navigateTo(`/shift/${scheduleId.value}`)
-    }
-  },
-  { immediate: true },
-)
 
 onMounted(async () => {
   await teamStore.fetchMyTeams()
@@ -227,7 +220,7 @@ function confirmAddMember() {
 
     <template v-else>
       <!-- タブ -->
-      <ShiftDetailTabs :schedule-id="scheduleId" :team-id="schedule?.teamId ?? null" current="constraints" />
+      <ShiftDetailTabs :schedule-id="scheduleId" :team-id="schedule?.teamId ?? null" current="constraints" :status="schedule?.status ?? null" />
 
       <!-- チームデフォルト -->
       <section class="mb-8">

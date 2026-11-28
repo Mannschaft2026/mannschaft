@@ -132,7 +132,8 @@
       "admin_only_reason": "Nur für Admins vorgesehene Berechtigungen wie „Organisationsbeitritt verwalten“ kann nur der Team-Admin selbst vergeben (nicht, wenn er zugleich SYSTEM_ADMIN ist). Sie sind nicht auswählbar",
       "admin_only_locked": "Diese Gruppe enthält Admin-Berechtigungen. Änderungen (auch das Entfernen von Berechtigungen) kann nur der Team-Admin selbst vornehmen (nicht, wenn er zugleich SYSTEM_ADMIN ist)",
       "role_reason": "Für diese Zielrolle nicht vergebbar (Abrechnungsberechtigungen nur für stellvertretende Leitung)",
-      "role_conflict": "Diese Gruppe enthält Berechtigungen, die der gewählten Zielrolle nicht zugewiesen werden können, und wäre daher niemandem zuweisbar. Prüfen Sie Zielrolle oder Berechtigungen"
+      "role_conflict": "Diese Gruppe enthält Berechtigungen, die der gewählten Zielrolle nicht zugewiesen werden können, und wäre daher niemandem zuweisbar. Prüfen Sie Zielrolle oder Berechtigungen",
+      "shift_role_notice": "„Schichten verwalten“ ist eine Berechtigung für stellvertretende Administratoren. In einer Gruppe mit der Zielrolle Mitglied ermöglicht sie keine Schichtverwaltung; sie wirkt nur in Gruppen für Stellvertreter."
     },
     "permission_names": {
       "CHANGE_MEMBER_ROLES": "Mitgliederrollen ändern",

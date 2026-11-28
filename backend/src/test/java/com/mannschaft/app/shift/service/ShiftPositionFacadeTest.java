@@ -3,7 +3,6 @@ package com.mannschaft.app.shift.service;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
-import com.mannschaft.app.common.ScopeConcealingAccessGate;
 import com.mannschaft.app.shift.ShiftErrorCode;
 import com.mannschaft.app.shift.dto.CreatePositionRequest;
 import com.mannschaft.app.shift.dto.UpdatePositionRequest;
@@ -39,8 +38,9 @@ class ShiftPositionFacadeTest {
     @Mock
     private ShiftPositionService positionService;
 
+    /** CMP-261125-2114: 管理操作の判定（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけ）。 */
     @Mock
-    private ScopeConcealingAccessGate accessGate;
+    private ShiftManageAccessGate manageGate;
 
     @Mock
     private AccessControlService accessControlService;
@@ -57,10 +57,9 @@ class ShiftPositionFacadeTest {
 
         facade.updatePosition(POSITION_ID, req, USER_ID);
 
-        InOrder order = inOrder(positionService, accessGate);
+        InOrder order = inOrder(positionService, manageGate);
         order.verify(positionService).resolvePositionScope(POSITION_ID);
-        order.verify(accessGate).requireAdminOrConceal(USER_ID, TEAM_ID, "TEAM",
-                ShiftErrorCode.SHIFT_POSITION_NOT_FOUND);
+        order.verify(manageGate).requireManageOrConceal(USER_ID, TEAM_ID, ShiftErrorCode.SHIFT_POSITION_NOT_FOUND);
         order.verify(positionService).updatePosition(POSITION_ID, req);
     }
 
@@ -72,32 +71,31 @@ class ShiftPositionFacadeTest {
 
         facade.deletePosition(POSITION_ID, USER_ID);
 
-        InOrder order = inOrder(positionService, accessGate);
+        InOrder order = inOrder(positionService, manageGate);
         order.verify(positionService).resolvePositionScope(POSITION_ID);
-        order.verify(accessGate).requireAdminOrConceal(USER_ID, TEAM_ID, "TEAM",
-                ShiftErrorCode.SHIFT_POSITION_NOT_FOUND);
+        order.verify(manageGate).requireManageOrConceal(USER_ID, TEAM_ID, ShiftErrorCode.SHIFT_POSITION_NOT_FOUND);
         order.verify(positionService).deletePosition(POSITION_ID);
 
         org.mockito.Mockito.clearInvocations(positionService);
-        doThrow(new BusinessException(ShiftErrorCode.SHIFT_POSITION_NOT_FOUND)).when(accessGate)
-                .requireAdminOrConceal(any(), any(), any(), any());
+        doThrow(new BusinessException(ShiftErrorCode.SHIFT_POSITION_NOT_FOUND)).when(manageGate)
+                .requireManageOrConceal(any(), any(), any());
         assertThatThrownBy(() -> facade.deletePosition(POSITION_ID, USER_ID)).isInstanceOf(BusinessException.class);
         verify(positionService, never()).deletePosition(any());
     }
 
     @Test
-    @DisplayName("作成_SYSTEM_ADMINは短絡で通る／それ以外は管理者確認の後にtx本体")
+    @DisplayName("作成_管理操作の判定（requireManage）の後にtx本体／拒否ならtx本体を呼ばない（SYSTEM_ADMIN の短絡は無い。CMP-261125-2114）")
     void 作成_認可() {
         CreatePositionRequest req = new CreatePositionRequest("ホール", 2);
-        given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
         facade.createPosition(TEAM_ID, req, USER_ID);
-        verify(accessControlService, never()).checkAdminOrAbove(any(), any(), any());
-        verify(positionService).createPosition(TEAM_ID, req);
+        InOrder order = inOrder(manageGate, positionService);
+        order.verify(manageGate).requireManage(USER_ID, TEAM_ID);
+        order.verify(positionService).createPosition(TEAM_ID, req);
+        verify(accessControlService, never()).isSystemAdmin(any());
 
         org.mockito.Mockito.clearInvocations(positionService);
-        given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
-        doThrow(new BusinessException(CommonErrorCode.COMMON_002)).when(accessControlService)
-                .checkAdminOrAbove(USER_ID, TEAM_ID, "TEAM");
+        doThrow(new BusinessException(CommonErrorCode.COMMON_002)).when(manageGate)
+                .requireManage(USER_ID, TEAM_ID);
         assertThatThrownBy(() -> facade.createPosition(TEAM_ID, req, USER_ID)).isInstanceOf(BusinessException.class);
         verify(positionService, never()).createPosition(any(), any());
     }
@@ -105,7 +103,6 @@ class ShiftPositionFacadeTest {
     @Test
     @DisplayName("一覧_非メンバー・SUPPORTERは403 COMMON_002でtx本体を呼ばない／メンバーは通る")
     void 一覧_認可() {
-        given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
         given(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).willReturn(false, true, true);
         given(accessControlService.isSupporter(USER_ID, TEAM_ID, "TEAM")).willReturn(true, false);
 

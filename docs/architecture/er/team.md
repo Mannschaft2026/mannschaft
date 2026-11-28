@@ -329,6 +329,8 @@ erDiagram
 | `reminder_48h_enabled` | `tinyint(1)` | NO | `1` |  |
 | `reminder_24h_enabled` | `tinyint(1)` | NO | `1` |  |
 | `reminder_12h_enabled` | `tinyint(1)` | NO | `0` |  |
+| `deputy_shift_view_enabled` | `tinyint(1)` | NO | `0` |  |
+| `deputy_hourly_rate_view_enabled` | `tinyint(1)` | NO | `0` |  |
 | `created_at` | `datetime` | NO | `CURRENT_TIMESTAMP` （式） |  |
 | `updated_at` | `datetime` | NO | `CURRENT_TIMESTAMP` （式） |  |
 

@@ -51,7 +51,31 @@ class PlaintextSecretTokenGuardConditionTest {
 
     private static final String FIXTURES_PACKAGE = "com.mannschaft.app.common.architecture.plaintexttoken";
 
+    /**
+     * fixture の債務注釈（cmp = CMP-260826-1457）を判定する合成台帳。実台帳（docs/task-list）の状態に依存させない
+     * （実台帳で当該戦役が完了すると自己検証が壊れるため）。本番クラスの走査（PlaintextSecretTokenGuardArchTest）は実台帳を読む。
+     */
+    private static final String FIXTURE_LEDGER = ledgerWithState("実装中");
+
     private JavaClasses fixtureClasses;
+
+    private static String ledgerWithState(String state) {
+        return String.join("\n",
+                "| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |",
+                "| CMP-260826-1457 | 合成: 平文トークン戦役 | " + state + " | — | 条件 | — | — |");
+    }
+
+    @Test
+    @DisplayName("台帳の状態で債務注釈の有効性が変わる: 完了・未登録の合成台帳では債務注釈つきの列も違反になる")
+    void debtAnnotationDependsOnSyntheticLedgerState() {
+        String inviteToken = field(ExemptedSecretFixtureEntity.class, "inviteToken");
+        for (String ledger : List.of(ledgerWithState("完了（2026-11-27）"), "| ID | 戦役 | 状態 |\n")) {
+            GuardResult result = PlaintextSecretTokenGuardRules.plaintextColumns(fixtureClasses, () -> ledger);
+            assertListed(result.violations(), inviteToken, "完了・未登録の CMP を指す債務注釈は無効");
+        }
+        GuardResult open = PlaintextSecretTokenGuardRules.plaintextColumns(fixtureClasses, () -> FIXTURE_LEDGER);
+        assertNotListed(open.violations(), inviteToken, "登録済み未完了の債務注釈は有効");
+    }
 
     @BeforeAll
     void importFixtures() {
@@ -92,7 +116,7 @@ class PlaintextSecretTokenGuardConditionTest {
 
         @BeforeAll
         void evaluate() {
-            result = PlaintextSecretTokenGuardRules.plaintextColumns(fixtureClasses);
+            result = PlaintextSecretTokenGuardRules.plaintextColumns(fixtureClasses, () -> FIXTURE_LEDGER);
         }
 
         @Test
@@ -195,7 +219,7 @@ class PlaintextSecretTokenGuardConditionTest {
 
         @BeforeAll
         void evaluate() {
-            result = PlaintextSecretTokenGuardRules.plaintextRepositoryLookups(fixtureClasses);
+            result = PlaintextSecretTokenGuardRules.plaintextRepositoryLookups(fixtureClasses, () -> FIXTURE_LEDGER);
         }
 
         @Test
@@ -259,7 +283,7 @@ class PlaintextSecretTokenGuardConditionTest {
 
         @BeforeAll
         void evaluate() {
-            result = PlaintextSecretTokenGuardRules.selfIssuedTokens(fixtureClasses);
+            result = PlaintextSecretTokenGuardRules.selfIssuedTokens(fixtureClasses, () -> FIXTURE_LEDGER);
         }
 
         @Test
@@ -360,7 +384,7 @@ class PlaintextSecretTokenGuardConditionTest {
 
         @BeforeAll
         void evaluate() {
-            result = PlaintextSecretTokenGuardRules.selfIssuedTokens(fixtureClasses);
+            result = PlaintextSecretTokenGuardRules.selfIssuedTokens(fixtureClasses, () -> FIXTURE_LEDGER);
         }
 
         @Test
@@ -544,6 +568,28 @@ class PlaintextSecretTokenGuardConditionTest {
     }
 
     @Nested
+    @DisplayName("W3: 戦役の債務残高 debtsOf")
+    class DebtBalance {
+
+        @Test
+        @DisplayName("陽性: 指定 cmp の債務注釈が付いたフィールド・メソッドを数える")
+        void countsDebtsOfTheCampaign() {
+            List<String> debts = PlaintextSecretTokenGuardRules.debtsOf(fixtureClasses, "CMP-260826-1457");
+            assertListed(debts, field(ExemptedSecretFixtureEntity.class, "inviteToken"), "フィールドの債務注釈");
+            assertListed(debts, method(SelfIssuingFixtureService.class, "issueUnderDebt"), "メソッドの債務注釈");
+        }
+
+        @Test
+        @DisplayName("陰性: 他の cmp の債務注釈・注釈の無い要素は数えない")
+        void ignoresOtherCampaignsAndUnannotated() {
+            List<String> debts = PlaintextSecretTokenGuardRules.debtsOf(fixtureClasses, "CMP-260826-1457");
+            assertNotListed(debts, field(MisdeclaredHashExemptionFixtureEntity.class, "tokenHash"), "他戦役の債務注釈");
+            assertThat(PlaintextSecretTokenGuardRules.debtsOf(fixtureClasses, "CMP-000000-0000"))
+                    .as("どの要素にも付いていない cmp は空").isEmpty();
+        }
+    }
+
+    @Nested
     @DisplayName("番人4（AC-22）: IssuedToken の永続化")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class IssuedTokenPersistence {
@@ -593,7 +639,7 @@ class PlaintextSecretTokenGuardConditionTest {
 
         @BeforeAll
         void evaluate() {
-            result = PlaintextSecretTokenGuardRules.rawWritesAndBearerKeysWithSelfRandom(fixtureClasses);
+            result = PlaintextSecretTokenGuardRules.rawWritesAndBearerKeysWithSelfRandom(fixtureClasses, () -> FIXTURE_LEDGER);
         }
 
         @Test

@@ -42,18 +42,40 @@ class ShiftHourlyRateServiceTest {
     @Mock
     private AccessControlService accessControlService;
 
+    @Mock
+    private com.mannschaft.app.team.service.TeamShiftSettingsService teamShiftSettingsService;
+
     private ShiftHourlyRateService shiftHourlyRateService;
 
     @org.junit.jupiter.api.BeforeEach
     void setUp() {
         // 認可判定は ShiftHourlyRateAuthorizer に一本化されている。モックの AccessControlService を実際の判定へ通す。
+        // 判定の実体は ShiftManageAccessGate（CMP-261125-2114）。AccessControlService と設定だけモックにして本物を組む。
+        com.mannschaft.app.shift.service.ShiftManageAccessGate manageGate =
+                new com.mannschaft.app.shift.service.ShiftManageAccessGate(accessControlService, teamShiftSettingsService,
+                        new com.mannschaft.app.common.ScopeContentAccessGate(accessControlService, teamIds -> java.util.Set.of()));
+        // 参照の認可は ShiftHourlyRateFacade（tx の外）の責務で、ShiftHourlyRateFacadeTest が固定する。
         shiftHourlyRateService = new ShiftHourlyRateService(hourlyRateRepository, shiftMapper,
-                accessControlService, new com.mannschaft.app.shift.service.ShiftHourlyRateAuthorizer(accessControlService));
+                new com.mannschaft.app.shift.service.ShiftHourlyRateAuthorizer(accessControlService, manageGate,
+                        new com.mannschaft.app.common.ScopeContentAccessGate(accessControlService, teamIds -> java.util.Set.of())));
     }
 
     // ========================================
     // テスト用定数・ヘルパー
     // ========================================
+
+    /** 操作者を「ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN」にする（管理操作の許可。CMP-261125-2114）。 */
+    private void givenCanManage(Long userId) {
+        given(accessControlService.hasAdminOrPermissionInScope(userId, TEAM_ID, "TEAM", "MANAGE_SHIFTS"))
+                .willReturn(true);
+        org.mockito.Mockito.lenient().when(accessControlService.isMember(userId, TEAM_ID, "TEAM")).thenReturn(true);
+    }
+
+    /** 管理操作に加え、時給の閲覧判定が通る（isAdminOrAbove を先に見るため）。 */
+    private void givenCanViewRates(Long userId) {
+        given(accessControlService.isAdminOrAbove(userId, TEAM_ID, "TEAM")).willReturn(true);
+        givenCanManage(userId);
+    }
 
     private static final Long USER_ID = 10L;
     private static final Long TEAM_ID = 1L;
@@ -98,7 +120,7 @@ class ShiftHourlyRateServiceTest {
                     .willReturn(List.of(response));
 
             // When
-            List<HourlyRateResponse> result = shiftHourlyRateService.listHourlyRates(USER_ID, TEAM_ID, CURRENT_USER_ID);
+            List<HourlyRateResponse> result = shiftHourlyRateService.listHourlyRates(USER_ID, TEAM_ID);
 
             // Then
             assertThat(result).hasSize(1);
@@ -126,7 +148,7 @@ class ShiftHourlyRateServiceTest {
             given(shiftMapper.toHourlyRateResponse(entity)).willReturn(response);
 
             // When
-            HourlyRateResponse result = shiftHourlyRateService.getEffectiveRate(USER_ID, TEAM_ID, date, CURRENT_USER_ID);
+            HourlyRateResponse result = shiftHourlyRateService.getEffectiveRate(USER_ID, TEAM_ID, date);
 
             // Then
             assertThat(result).isNotNull();
@@ -142,7 +164,7 @@ class ShiftHourlyRateServiceTest {
                     .willReturn(Optional.empty());
 
             // When
-            HourlyRateResponse result = shiftHourlyRateService.getEffectiveRate(USER_ID, TEAM_ID, date, CURRENT_USER_ID);
+            HourlyRateResponse result = shiftHourlyRateService.getEffectiveRate(USER_ID, TEAM_ID, date);
 
             // Then
             assertThat(result).isNull();
@@ -161,6 +183,7 @@ class ShiftHourlyRateServiceTest {
         @DisplayName("時給設定_正常_レスポンス返却")
         void 時給設定_正常_レスポンス返却() {
             // Given
+            givenCanManage(ADMIN_USER_ID);
             // CMP-260910-1555: 書き込みは JPA の save ではなく、一意制約に衝突解決させる
             // 原子的な upsert 1 文に変わった（並行時に片方が制約違反で落ちるのを防ぐため）。
             LocalDate effectiveFrom = LocalDate.of(2026, 5, 1);
@@ -179,7 +202,7 @@ class ShiftHourlyRateServiceTest {
             assertThat(result).isNotNull();
             verify(hourlyRateRepository).upsertHourlyRate(
                     USER_ID, TEAM_ID, new BigDecimal("1500.00"), effectiveFrom);
-            verify(accessControlService).checkAdminOrAbove(ADMIN_USER_ID, TEAM_ID, "TEAM");
+            verify(accessControlService).hasAdminOrPermissionInScope(ADMIN_USER_ID, TEAM_ID, "TEAM", "MANAGE_SHIFTS");
             verify(accessControlService).checkMembership(USER_ID, TEAM_ID, "TEAM");
         }
     }
@@ -200,27 +223,9 @@ class ShiftHourlyRateServiceTest {
         private static final Long MEMBER_USER_ID = 20L;
 
         @Test
-        @DisplayName("一般メンバーが他メンバーの時給を参照 → checkAdminOrAbove で弾かれる")
-        void 他人の時給参照_一般メンバーは403() {
-            given(accessControlService.isSystemAdmin(MEMBER_USER_ID)).willReturn(false);
-            org.mockito.BDDMockito.willThrow(
-                            new com.mannschaft.app.common.BusinessException(
-                                    com.mannschaft.app.common.CommonErrorCode.COMMON_002))
-                    .given(accessControlService).checkAdminOrAbove(MEMBER_USER_ID, TEAM_ID, "TEAM");
-
-            org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-                            shiftHourlyRateService.listHourlyRates(OTHER_USER_ID, TEAM_ID, MEMBER_USER_ID))
-                    .isInstanceOf(com.mannschaft.app.common.BusinessException.class);
-
-            // 弾かれた以上、リポジトリまで到達してはならない（存在オラクルも残さない）
-            verify(hourlyRateRepository, org.mockito.Mockito.never())
-                    .findByUserIdAndTeamIdOrderByEffectiveFromDesc(any(), any());
-        }
-
-        @Test
         @DisplayName("他チームのユーザーを対象にした時給登録 → 対象側の checkMembership で弾かれる")
         void 他テナントのユーザーへの登録は403() {
-            given(accessControlService.isSystemAdmin(ADMIN_USER_ID)).willReturn(false);
+            givenCanManage(ADMIN_USER_ID);
             org.mockito.BDDMockito.willThrow(
                             new com.mannschaft.app.common.BusinessException(
                                     com.mannschaft.app.common.CommonErrorCode.COMMON_002))
@@ -234,21 +239,6 @@ class ShiftHourlyRateServiceTest {
                     .isInstanceOf(com.mannschaft.app.common.BusinessException.class);
 
             verify(hourlyRateRepository, org.mockito.Mockito.never()).upsertHourlyRate(any(), any(), any(), any());
-        }
-
-        @Test
-        @DisplayName("本人の時給参照 → チームメンバーであることだけを要求する")
-        void 本人参照はメンバーシップのみ要求() {
-            given(accessControlService.isSystemAdmin(CURRENT_USER_ID)).willReturn(false);
-            given(hourlyRateRepository.findByUserIdAndTeamIdOrderByEffectiveFromDesc(USER_ID, TEAM_ID))
-                    .willReturn(List.of());
-            given(shiftMapper.toHourlyRateResponseList(List.of())).willReturn(List.of());
-
-            shiftHourlyRateService.listHourlyRates(USER_ID, TEAM_ID, CURRENT_USER_ID);
-
-            verify(accessControlService).checkMembership(CURRENT_USER_ID, TEAM_ID, "TEAM");
-            verify(accessControlService, org.mockito.Mockito.never())
-                    .checkAdminOrAbove(any(), any(), any());
         }
     }
 
@@ -271,7 +261,7 @@ class ShiftHourlyRateServiceTest {
         @Test
         @DisplayName("書き込みは原子的な upsert 1 文で行い、事前 SELECT による分岐を行わない")
         void 事前SELECTで分岐しない() {
-            given(accessControlService.isSystemAdmin(ADMIN_USER_ID)).willReturn(false);
+            givenCanManage(ADMIN_USER_ID);
             LocalDate day = LocalDate.of(2026, 4, 1);
             givenUpsertReadBack(day, createRateEntity());
 
@@ -290,7 +280,7 @@ class ShiftHourlyRateServiceTest {
         @Test
         @DisplayName("同じキーへ連続で登録しても例外にならず、常に最後の金額へ収束する（冪等）")
         void 同一キーの再送は冪等() {
-            given(accessControlService.isSystemAdmin(ADMIN_USER_ID)).willReturn(false);
+            givenCanManage(ADMIN_USER_ID);
             LocalDate day = LocalDate.of(2026, 4, 1);
             givenUpsertReadBack(day, createRateEntity());
 
@@ -310,7 +300,7 @@ class ShiftHourlyRateServiceTest {
         @Test
         @DisplayName("別の適用開始日は別行として書かれる（過去の履歴は消えない）")
         void 別日は別行として書かれる() {
-            given(accessControlService.isSystemAdmin(ADMIN_USER_ID)).willReturn(false);
+            givenCanManage(ADMIN_USER_ID);
             LocalDate newDay = LocalDate.of(2026, 5, 1);
             givenUpsertReadBack(newDay, createRateEntity());
 
@@ -326,7 +316,7 @@ class ShiftHourlyRateServiceTest {
         @Test
         @DisplayName("upsert 直後に読み戻せない異常は握りつぶさず例外にする")
         void 読み戻せない場合は例外() {
-            given(accessControlService.isSystemAdmin(ADMIN_USER_ID)).willReturn(false);
+            givenCanManage(ADMIN_USER_ID);
             LocalDate day = LocalDate.of(2026, 4, 1);
             given(hourlyRateRepository.findByUserIdAndTeamIdAndEffectiveFrom(USER_ID, TEAM_ID, day))
                     .willReturn(Optional.empty());
@@ -352,10 +342,9 @@ class ShiftHourlyRateServiceTest {
      * 一律で拒否</b>されなければならない。一般メンバーが呼んで他人の時給が返るのは漏洩である。</p>
      */
     @Nested
-    @DisplayName("listEffectiveRatesForTeam")
+    @DisplayName("listEffectiveRatesForTeam（認可なしの tx 本体。認可は ShiftHourlyRateFacade）")
     class ListEffectiveRatesForTeam {
 
-        private static final Long ADMIN_USER_ID = 99L;
         /** 時給は設定済みだが既にチームを脱退したユーザー。 */
         private static final Long LEFT_USER_ID = 77L;
         private static final LocalDate BASE_DATE = LocalDate.of(2026, 9, 16);
@@ -363,83 +352,36 @@ class ShiftHourlyRateServiceTest {
         @Test
         @DisplayName("AC-3: 何人いても有効時給の取得は 1 クエリで済む")
         void 一括取得は1クエリ() {
-            // Given: ADMIN として通す
-            given(accessControlService.isSystemAdmin(ADMIN_USER_ID)).willReturn(false);
-            given(accessControlService.listActiveMemberIds(TEAM_ID, "TEAM")).willReturn(List.of(USER_ID));
             List<ShiftHourlyRateEntity> entities = List.of(createRateEntity(), createRateEntity());
             given(hourlyRateRepository.findEffectiveRatesByTeam(TEAM_ID, BASE_DATE, List.of(USER_ID)))
                     .willReturn(entities);
             given(shiftMapper.toHourlyRateResponseList(entities))
                     .willReturn(List.of(createRateResponse(), createRateResponse()));
 
-            // When
             List<HourlyRateResponse> result =
-                    shiftHourlyRateService.listEffectiveRatesForTeam(TEAM_ID, BASE_DATE, ADMIN_USER_ID);
+                    shiftHourlyRateService.listEffectiveRatesForTeam(TEAM_ID, BASE_DATE, List.of(USER_ID));
 
-            // Then
             assertThat(result).hasSize(2);
             verify(hourlyRateRepository, org.mockito.Mockito.times(1))
                     .findEffectiveRatesByTeam(TEAM_ID, BASE_DATE, List.of(USER_ID));
             // 1 人ずつ引く経路は使わない（使うと人数ぶんクエリが出る）
             verify(hourlyRateRepository, org.mockito.Mockito.never())
                     .findEffectiveRate(any(), any(), any());
-            verify(accessControlService).checkAdminOrAbove(ADMIN_USER_ID, TEAM_ID, "TEAM");
-        }
-
-        @Test
-        @DisplayName("AC-5: ADMIN/DEPUTY_ADMIN でない一般メンバーは 403 で、時給を 1 件も読まない")
-        void 一般メンバーは拒否され時給を読まない() {
-            // Given
-            given(accessControlService.isSystemAdmin(CURRENT_USER_ID)).willReturn(false);
-            org.mockito.BDDMockito.willThrow(new com.mannschaft.app.common.BusinessException(
-                            com.mannschaft.app.common.CommonErrorCode.COMMON_002))
-                    .given(accessControlService).checkAdminOrAbove(CURRENT_USER_ID, TEAM_ID, "TEAM");
-
-            // When / Then
-            org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-                            shiftHourlyRateService.listEffectiveRatesForTeam(TEAM_ID, BASE_DATE, CURRENT_USER_ID))
-                    .isInstanceOf(com.mannschaft.app.common.BusinessException.class);
-            verify(hourlyRateRepository, org.mockito.Mockito.never())
-                    .findEffectiveRatesByTeam(any(), any(), any());
-        }
-
-        @Test
-        @DisplayName("SYSTEM_ADMIN は短絡的に許可される（既存の時給 API と同じ方針）")
-        void システム管理者は許可() {
-            given(accessControlService.isSystemAdmin(ADMIN_USER_ID)).willReturn(true);
-            given(accessControlService.listActiveMemberIds(TEAM_ID, "TEAM")).willReturn(List.of(USER_ID));
-            given(hourlyRateRepository.findEffectiveRatesByTeam(TEAM_ID, BASE_DATE, List.of(USER_ID)))
-                    .willReturn(List.of());
-            given(shiftMapper.toHourlyRateResponseList(List.of())).willReturn(List.of());
-
-            assertThat(shiftHourlyRateService.listEffectiveRatesForTeam(TEAM_ID, BASE_DATE, ADMIN_USER_ID))
-                    .isEmpty();
-            verify(accessControlService, org.mockito.Mockito.never())
-                    .checkAdminOrAbove(any(), any(), any());
         }
 
         /**
-         * Codex 検分 P1 の回帰封じ。
-         *
-         * <p>単数取得は {@code checkHourlyRateAccess} が対象ユーザーの<b>現在の所属</b>まで確認していた。
-         * 一括取得を teamId だけで引くと、<b>時給を設定されたあとにチームを脱退した元メンバーの
-         * 金銭情報まで返ってしまう</b>（1 件ずつなら効いていた認可が、まとめて取ると効かなくなる）。
-         * ロールの検査（誰が呼べるか）と対象の絞り込み（誰の時給を返すか）は別の軸である。</p>
+         * Codex 検分 P1 の回帰封じ（対象の絞り込みの軸）。呼び出し側（Facade）が渡す在籍者 ID だけで引き、
+         * 渡されなかった元メンバーの時給は読まない。
          */
         @Test
-        @DisplayName("AC-5: 取得対象は在籍中のメンバーに限られる（脱退した元メンバーの時給は引かない）")
+        @DisplayName("AC-5: 取得対象は渡された在籍者に限られる（脱退した元メンバーの時給は引かない）")
         void 脱退者は取得対象から外れる() {
-            // Given: 在籍中は USER_ID のみ。LEFT_USER_ID は時給を設定済みだが既に脱退している。
-            given(accessControlService.isSystemAdmin(ADMIN_USER_ID)).willReturn(false);
-            given(accessControlService.listActiveMemberIds(TEAM_ID, "TEAM")).willReturn(List.of(USER_ID));
             given(hourlyRateRepository.findEffectiveRatesByTeam(eq(TEAM_ID), eq(BASE_DATE), any()))
                     .willReturn(List.of());
             given(shiftMapper.toHourlyRateResponseList(List.of())).willReturn(List.of());
 
-            // When
-            shiftHourlyRateService.listEffectiveRatesForTeam(TEAM_ID, BASE_DATE, ADMIN_USER_ID);
+            shiftHourlyRateService.listEffectiveRatesForTeam(TEAM_ID, BASE_DATE, List.of(USER_ID));
 
-            // Then: 検索対象に渡る ID は在籍者だけで、脱退者は含まれない
             org.mockito.ArgumentCaptor<List<Long>> captor =
                     org.mockito.ArgumentCaptor.forClass(List.class);
             verify(hourlyRateRepository).findEffectiveRatesByTeam(eq(TEAM_ID), eq(BASE_DATE), captor.capture());
@@ -450,10 +392,7 @@ class ShiftHourlyRateServiceTest {
         @Test
         @DisplayName("在籍者が 0 名なら時給は 1 件も読まない（空 IN 句を DB へ投げない）")
         void 在籍者ゼロなら時給を読まない() {
-            given(accessControlService.isSystemAdmin(ADMIN_USER_ID)).willReturn(false);
-            given(accessControlService.listActiveMemberIds(TEAM_ID, "TEAM")).willReturn(List.of());
-
-            assertThat(shiftHourlyRateService.listEffectiveRatesForTeam(TEAM_ID, BASE_DATE, ADMIN_USER_ID))
+            assertThat(shiftHourlyRateService.listEffectiveRatesForTeam(TEAM_ID, BASE_DATE, List.of()))
                     .isEmpty();
             verify(hourlyRateRepository, org.mockito.Mockito.never())
                     .findEffectiveRatesByTeam(any(), any(), any());
