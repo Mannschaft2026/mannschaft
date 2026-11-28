@@ -38,6 +38,25 @@ public class TimelineFriendForwardPostService {
     private final TimelinePostRepository timelinePostRepository;
 
     /**
+     * F06.4.1: 転送元が努力由来の投稿（未削除の TEAM 投稿）なら、その投稿のチーム ID を返す（データ設計 §7.2）。
+     *
+     * <p>呼出元（social の転送）は、操作者がこのチームに所属している（＝投稿が見えている）ときだけ
+     * 403 EFFORT_003 にする。見えない者には既存の判定（不在と同じ 404 など）を返し、努力由来かどうかを
+     * 判別させない。エンティティは渡さない。</p>
+     *
+     * @param postId 転送元投稿 ID
+     * @return 努力由来ならその投稿のチーム ID。努力由来でない・不在・論理削除済みは空
+     */
+    public Optional<Long> findEffortSourceTeamId(Long postId) {
+        if (postId == null || !timelinePostRepository.isEffortSource(postId)) {
+            return Optional.empty();
+        }
+        return timelinePostRepository.findById(postId)
+                .filter(p -> p.getScopeType() == PostScopeType.TEAM)
+                .map(TimelinePostEntity::getScopeId);
+    }
+
+    /**
      * フレンド共有済みの公開 TEAM 投稿を取得する。
      *
      * @param postId 投稿 ID
@@ -52,6 +71,8 @@ public class TimelineFriendForwardPostService {
                 .filter(p -> p.getStatus() == PostStatus.PUBLISHED)
                 .filter(p -> Boolean.TRUE.equals(p.getShareWithFriends()))
                 .filter(p -> p.getScopeId() != null)
+                // F06.4.1: 努力由来の投稿は転送元にしない（作成時から share_with_friends=false 固定。多層防御）
+                .filter(p -> !timelinePostRepository.isEffortSource(p.getId()))
                 .map(p -> new FriendShareableTeamPost(p.getId(), p.getScopeId(), p.getContent()));
     }
 

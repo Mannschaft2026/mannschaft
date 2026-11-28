@@ -1,5 +1,7 @@
 package com.mannschaft.app.timeline.dto;
 
+import com.mannschaft.app.effortrecord.dto.EffortSharedRecord;
+import com.mannschaft.app.timeline.TimelinePostSourceType;
 import com.mannschaft.app.village.entity.enums.VillageEventNotificationType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
@@ -72,6 +74,22 @@ public class PostResponse {
      * enrich しない経路（旧実装）では組み立てず、Service の添付付与を通した経路でのみ設定される。</p>
      */
     private final List<AttachmentResponse> attachments;
+
+    /**
+     * F06.4.1: 投稿の由来。対応表 {@code timeline_effort_sources} に行がある投稿（個人の頑張り記録のチーム共有）だけ
+     * {@code PERSONAL_EFFORT_SHARE}、通常の投稿は {@code null}。本文の文字列では判定しない（API 契約 §4.2）。
+     */
+    @Schema(description = "投稿の由来。努力由来（頑張り記録のチーム共有）の投稿だけ PERSONAL_EFFORT_SHARE、通常の投稿は null",
+            nullable = true)
+    private final TimelinePostSourceType sourceType;
+
+    /**
+     * F06.4.1: 努力由来の投稿に載せる、閲覧者が F00 を通った共有（チーム詳細 API と同じ SharedRecord。allowlist の項目だけ）。
+     * {@code sourceType} が非 null のとき必ず非 null。通常の投稿は {@code null}。timeline の read TX の外で
+     * {@code TimelineEffortReadGuard} が一括で載せる（API 契約 §4.2）。
+     */
+    @Schema(description = "努力由来の投稿の共有内容（SharedRecord）。通常の投稿は null", nullable = true)
+    private final EffortSharedRecord effortShare;
 
     /**
      * 投稿スコープ。

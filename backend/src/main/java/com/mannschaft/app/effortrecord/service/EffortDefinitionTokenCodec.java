@@ -63,10 +63,32 @@ public class EffortDefinitionTokenCodec {
     }
 
     /**
+     * token を復号し、本人の束縛と有効期限だけを検証する（共有 preview 用。定義 UUID・revision は token から得て、
+     * 呼び出し側がチームと現行 revision に突き合わせる）。
+     */
+    public Claims verifyForUser(String token, Long userId) {
+        Claims claims = decode(token);
+        if (!claims.userId().equals(userId)) {
+            throw invalid();
+        }
+        return claims;
+    }
+
+    /**
      * token を復号し、本人・定義 UUID・revision の束縛と有効期限を検証する。
      * teamId と定義 hash の照合は呼び出し側が保存済みの定義と突き合わせて行う。
      */
     public Claims verify(String token, Long userId, UUID definitionUuid, int revision) {
+        Claims claims = decode(token);
+        if (!claims.userId().equals(userId) || !claims.definitionUuid().equals(definitionUuid)
+                || claims.revision() != revision) {
+            throw invalid();
+        }
+        return claims;
+    }
+
+    /** 復号と書式・期限の検証（束縛の照合は呼び出し側）。 */
+    private Claims decode(String token) {
         if (token == null || token.isBlank() || token.length() > MAX_LENGTH) {
             throw invalid();
         }
@@ -86,10 +108,6 @@ public class EffortDefinitionTokenCodec {
             throw e;
         } catch (RuntimeException e) {
             // 復号失敗（改竄・鍵違い）・書式不正・数値/UUID 解析失敗はすべて不正 token。入力値は記録しない。
-            throw invalid();
-        }
-        if (!claims.userId().equals(userId) || !claims.definitionUuid().equals(definitionUuid)
-                || claims.revision() != revision) {
             throw invalid();
         }
         return claims;

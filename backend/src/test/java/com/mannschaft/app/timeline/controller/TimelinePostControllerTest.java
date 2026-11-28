@@ -46,6 +46,8 @@ class TimelinePostControllerTest {
     private TimelineScopeIdResolver scopeIdResolver;
 
     @Mock private com.mannschaft.app.timeline.service.TimelineRanchNativeOperationFacade ranchNative;
+    /** F06.4.1 努力由来の投稿の F00 ガード（本テストの対象外。通常の投稿として通す）。 */
+    @Mock private com.mannschaft.app.timeline.service.TimelineEffortReadGuard effortReadGuard;
     private final org.springframework.mock.web.MockHttpServletRequest servletRequest = new org.springframework.mock.web.MockHttpServletRequest();
     private TimelinePostController controller;
     private MockedStatic<SecurityUtils> securityUtils;
@@ -56,7 +58,31 @@ class TimelinePostControllerTest {
 
     @BeforeEach
     void setUp() {
-        controller = new TimelinePostController(postService, ranchNative, servletRequest, scopeIdResolver);
+        controller = new TimelinePostController(postService, ranchNative, servletRequest, scopeIdResolver, effortReadGuard);
+        Mockito.lenient().when(effortReadGuard.isVisible(Mockito.any(), Mockito.any())).thenReturn(true);
+        Mockito.lenient().when(effortReadGuard.visibleDetail(Mockito.any(), Mockito.any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        Mockito.lenient().when(effortReadGuard.filterVisible(Mockito.any(), Mockito.any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        // fillVisiblePage は間引きなしで 1 回取得して素通しする（判定そのものは EffortTimelineCursorIT で確かめる）
+        Mockito.lenient().when(effortReadGuard.fillVisiblePage(Mockito.any(), Mockito.anyInt(), Mockito.any(), Mockito.any()))
+                .thenAnswer(invocation -> {
+                    Long cursor = invocation.getArgument(0);
+                    int size = invocation.getArgument(1);
+                    java.util.function.BiFunction<Long, Integer, java.util.List<com.mannschaft.app.timeline.dto.PostResponse>> fetch =
+                            invocation.getArgument(2);
+                    java.util.List<com.mannschaft.app.timeline.dto.PostResponse> raw = fetch.apply(cursor, size);
+                    boolean hasNext = raw.size() > size;
+                    java.util.List<com.mannschaft.app.timeline.dto.PostResponse> page = hasNext ? raw.subList(0, size) : raw;
+                    Long next = hasNext ? page.get(page.size() - 1).getId() : null;
+                    return new com.mannschaft.app.timeline.service.TimelineVisiblePage(page, next, hasNext);
+                });
+        Mockito.lenient().when(effortReadGuard.fillVisibleAuthorPosts(Mockito.anyInt(), Mockito.any(), Mockito.any()))
+                .thenAnswer(invocation -> {
+                    java.util.function.IntFunction<java.util.List<com.mannschaft.app.timeline.dto.PostResponse>> fetch =
+                            invocation.getArgument(1);
+                    return fetch.apply(invocation.getArgument(0));
+                });
         securityUtils = Mockito.mockStatic(SecurityUtils.class);
         securityUtils.when(SecurityUtils::getCurrentUserId).thenReturn(USER_ID);
     }

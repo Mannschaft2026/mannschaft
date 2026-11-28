@@ -200,6 +200,10 @@ public class ContentReportService {
         if (report.getTargetType() == ReportTargetType.RECRUITMENT_LISTING) {
             recruitmentListingModerationService.hide(report.getTargetId());
         }
+        if (report.getTargetType() == ReportTargetType.TIMELINE_POST) {
+            // F06.4.1: 努力由来の投稿なら commit 後に effort の共有を MODERATED（終端）へ寄せる（データ設計 §7.2）。
+            timelinePostModerationService.notifyHiddenByModeration(report.getTargetId());
+        }
         reportRepository.save(report);
         log.info("コンテンツ非表示: reportId={}, targetType={}, targetId={}",
                 reportId, report.getTargetType(), report.getTargetId());

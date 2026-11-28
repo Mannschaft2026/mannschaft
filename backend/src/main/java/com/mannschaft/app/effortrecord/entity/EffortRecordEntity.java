@@ -18,6 +18,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
+import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.SQLRestriction;
 
 import java.time.Instant;
@@ -32,12 +33,14 @@ import java.util.UUID;
  * F00 専用の purged 行読取は専用 native query で行う（データ設計 §7.1）。</p>
  *
  * <p>version は @Version（CAS 用）、contentRevision は内容版、shareVersion は共有許可の版で、
- * 互いに独立（データ設計 §6）。</p>
+ * 互いに独立（データ設計 §6）。共有の後処理（ack・失敗記録・MODERATED・加入期間の終了）は条件付きの native UPDATE で
+ * 共有列だけを更新するため、本人の更新は変更した列だけを書く（{@code @DynamicUpdate}。後処理の確定を古い値で上書きしない）。</p>
  */
 @Entity
 @Table(name = "effort_records",
         uniqueConstraints = @UniqueConstraint(name = "uq_effort_record_share", columnNames = {"share_id"}))
 @SQLRestriction("deleted_at IS NULL AND purged_at IS NULL")
+@DynamicUpdate
 @Getter
 @Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)

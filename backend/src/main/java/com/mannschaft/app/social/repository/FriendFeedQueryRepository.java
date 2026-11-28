@@ -23,6 +23,8 @@ import java.util.Optional;
  *   <li>自チームのフレンドチーム ID 一覧を {@code team_friends} から取得</li>
  *   <li>（任意）フォルダフィルタ: {@code team_friend_folder_members} 経由でフォルダ内のフレンドチームに絞る</li>
  *   <li>{@code timeline_posts} を {@code scopeId IN (フレンドチームID一覧) AND shareWithFriends = TRUE} でフィルタ</li>
+ *   <li>努力由来の投稿（F06.4.1。{@code timeline_effort_sources} に行がある投稿）は常に除く（転送も禁止のため。
+ *       ページングと件数を揃えるため取得後に間引かず JPQL で除く）</li>
  *   <li>（任意）発信元チームフィルタ</li>
  *   <li>カーソルページング: {@code cursor} 指定時は {@code post.id < cursor}</li>
  *   <li>{@code friend_content_forwards} を LEFT JOIN して自チームの転送状況を付与</li>
@@ -82,6 +84,9 @@ public class FriendFeedQueryRepository {
                   AND p.scopeId IN :friendTeamIds
                   AND p.shareWithFriends = true
                   AND p.status = com.mannschaft.app.timeline.PostStatus.PUBLISHED
+                  AND NOT EXISTS (
+                      SELECT 1 FROM com.mannschaft.app.timeline.entity.TimelineEffortSourceEntity es
+                      WHERE es.timelinePostId = p.id)
                 """);
 
         if (sourceTeamId != null) {

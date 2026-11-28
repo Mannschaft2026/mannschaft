@@ -25,6 +25,17 @@ public interface TimelinePostRepository extends JpaRepository<TimelinePostEntity
                                       @Param("status") com.mannschaft.app.timeline.PostStatus status);
 
     /**
+     * F06.4.1: 投稿が努力由来（対応表 {@code timeline_effort_sources} に行がある。取消済みを含む）か。
+     * 通常操作の EFFORT_003 ガードと転送元の候補からの除外が使う（投稿の論理削除の有無は見ない）。
+     *
+     * @param postId 投稿 ID
+     * @return 努力由来なら true
+     */
+    @Query("SELECT CASE WHEN COUNT(s) > 0 THEN true ELSE false END "
+            + "FROM TimelineEffortSourceEntity s WHERE s.timelinePostId = :postId")
+    boolean isEffortSource(@Param("postId") Long postId);
+
+    /**
      * F17.2 Wave2 ①: 村行事のシステム自動投稿の冪等判定（設計書 §3.7）。
      *
      * <p>{@code (scope_village_id, system_post_type, source_event_uuid)} の存在チェックで、

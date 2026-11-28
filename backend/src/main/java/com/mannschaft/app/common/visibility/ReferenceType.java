@@ -252,7 +252,30 @@ public enum ReferenceType {
      * {@code ContentVisibilityChecker.canViewUuid} / {@code filterAccessibleUuid} の
      * 判定経路でのみ参照される。</p>
      */
-    SCHEDULE_COMMENT;
+    SCHEDULE_COMMENT,
+
+    // ---------------------------------------------------------------------
+    // F06.4.1 個人の頑張り記録（effort_records / effort_team_shares は UUIDv7 主キー）
+    // ---------------------------------------------------------------------
+
+    /**
+     * 個人の頑張り記録の原本（F06.4.1 / {@code EffortRecordVisibilityResolver} が実装）。
+     *
+     * <p>私的原本は所有者本人だけが読める（管理者・SYSTEM_ADMIN も不可）。{@link #idKind()} は
+     * {@link IdKind#UUID_V7}。コルクボード引用の対象外で、{@code ContentVisibilityChecker.canViewUuid} の
+     * 判定経路でのみ参照される。</p>
+     */
+    EFFORT_RECORD,
+
+    /**
+     * 個人の頑張り記録のチーム共有（F06.4.1 / {@code EffortTeamShareVisibilityResolver} が実装。contentId は share UUID）。
+     *
+     * <p>閲覧者の現在のチーム所属・チームの有効性・team 行と owner 行の両方が VISIBLE で版と hash が一致すること・
+     * 投稿者の加入期間 ID の資格を読み取り時に毎回確認する（データ設計 §3・§8）。照会障害は fail closed ではなく
+     * {@code EFFORT_004}（503）として呼出元へ伝える（障害を「0件」に置き換えない）。{@link #idKind()} は
+     * {@link IdKind#UUID_V7}。コルクボード引用の対象外。</p>
+     */
+    EFFORT_TEAM_SHARE;
 
     /**
      * 本 reference_type が参照する主キー型を返す。
@@ -281,7 +304,10 @@ public enum ReferenceType {
                  // ContentVisibilityChecker.canViewUuid / filterAccessibleUuid が
                  // 「BIGINT 主キーの referenceType に UUID 経路が呼ばれた」と判定して
                  // WARN ログ 1 行だけ残して fail-closed する（＝全コメントが静かに不可視になる）。
-                 SCHEDULE_COMMENT -> IdKind.UUID_V7;
+                 SCHEDULE_COMMENT,
+                 // F06.4.1: effort_records / effort_team_shares は UUIDv7 主キー（書き忘れると全件 deny になる）。
+                 EFFORT_RECORD,
+                 EFFORT_TEAM_SHARE -> IdKind.UUID_V7;
             default -> IdKind.BIGINT;
         };
     }

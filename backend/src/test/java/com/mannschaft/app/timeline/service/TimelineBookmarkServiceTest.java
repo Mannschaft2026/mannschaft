@@ -41,6 +41,8 @@ class TimelineBookmarkServiceTest {
 
     @Mock
     private TimelinePostVisibilityAccessGuard postVisibilityGuard;
+    @Mock
+    private TimelineEffortOperationGuard effortOperationGuard;
 
     @InjectMocks
     private TimelineBookmarkService timelineBookmarkService;

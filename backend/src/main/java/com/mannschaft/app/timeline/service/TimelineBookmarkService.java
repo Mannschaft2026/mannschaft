@@ -33,6 +33,8 @@ public class TimelineBookmarkService {
      * 対象投稿が呼び出し元から可視な scope に属することを確認してから登録する。
      */
     private final TimelinePostVisibilityAccessGuard postVisibilityGuard;
+    /** F06.4.1: 努力由来の投稿のブックマークは 403 EFFORT_003（可視性の判定の後に呼ぶ）。 */
+    private final TimelineEffortOperationGuard effortOperationGuard;
 
     /**
      * 投稿をブックマークする。
@@ -47,6 +49,7 @@ public class TimelineBookmarkService {
     @Transactional
     public BookmarkResponse addBookmark(Long postId, Long userId) {
         postVisibilityGuard.requireVisiblePost(postId, userId);
+        effortOperationGuard.rejectIfEffortSource(postId);
 
         if (bookmarkRepository.existsByUserIdAndTimelinePostId(userId, postId)) {
             throw new BusinessException(TimelineErrorCode.BOOKMARK_ALREADY_EXISTS);

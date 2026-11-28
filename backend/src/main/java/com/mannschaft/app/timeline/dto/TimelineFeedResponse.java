@@ -123,4 +123,17 @@ public class TimelineFeedResponse {
     public static TimelineFeedResponse ofReplies(List<PostResponse> replies, int limit) {
         return ofMyFeed(replies, limit);
     }
+
+    /**
+     * 閲覧可否で間引き済みのページ応答（F06.4.1 努力由来の投稿の F00 判定）。
+     *
+     * <p>次ページの有無とカーソルは、返したページの内容から決まる（{@code TimelineEffortReadGuard#fillVisiblePage}）。
+     * カーソルは最後に見えた投稿の ID で、見せない投稿の ID は出ない。</p>
+     */
+    public static TimelineFeedResponse ofVisiblePage(List<PostResponse> pinned,
+                                                     com.mannschaft.app.timeline.service.TimelineVisiblePage page,
+                                                     int pageSize) {
+        FeedMeta feedMeta = new FeedMeta(page.nextCursor(), pageSize, page.hasNext());
+        return new TimelineFeedResponse(new FeedData(pinned, page.posts()), feedMeta);
+    }
 }

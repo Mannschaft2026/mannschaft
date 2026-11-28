@@ -153,6 +153,11 @@ public class TimelinePostService {
     private final TimelineDeliveryScopeResolver deliveryScopeResolver;
     /** マイフィードのミュート除外用（表示設定であり認可ではない。本サービスのフィード経路限定）。 */
     private final com.mannschaft.app.timeline.repository.UserMuteRepository muteRepository;
+    /**
+     * F06.4.1 努力由来の投稿への通常操作（返信・repost・引用・公開化・本文更新・削除・ピン留め）を 403 EFFORT_003 で
+     * 拒否する。既存の可視性・管理権限の判定の後に呼ぶ（見えない者には既存の応答を返し、存在を漏らさない）。
+     */
+    private final TimelineEffortOperationGuard effortOperationGuard;
 
     /** {@code user_mutes.muted_type} のチーム種別。 */
     private static final String MUTED_TYPE_TEAM = "TEAM";
@@ -581,6 +586,8 @@ public class TimelinePostService {
                 // （読めないスコープの投稿にリプライを積めないようにする）。
                 requireReplyableParent(parentPost, userId);
             }
+            // F06.4.1: 努力由来の投稿への返信は禁止（親の可視性を確かめた後に判定する）
+            effortOperationGuard.rejectIfEffortSource(parentPost.getId());
         }
 
         // 認可根治 Wave6: リポスト元は「呼び出し元から見える投稿」に限る。
@@ -592,6 +599,10 @@ public class TimelinePostService {
             if (enforceScopeAuthorization
                     && (repostOriginal == null || !postVisibilityGuard.isVisible(repostOriginal, userId))) {
                 throw new BusinessException(TimelineErrorCode.POST_NOT_FOUND);
+            }
+            // F06.4.1: 努力由来の投稿の repost・引用・公開スコープへの repost（公開化）は禁止
+            if (repostOriginal != null) {
+                effortOperationGuard.rejectIfEffortSource(repostOriginal.getId());
             }
         }
 
@@ -725,6 +736,8 @@ public class TimelinePostService {
     public PostResponse updatePost(Long postId, UpdatePostRequest req, Long userId) {
         TimelinePostEntity post = findPostOrThrow(postId);
         postAccessGuard.checkCanEdit(userId, post);
+        // F06.4.1: 努力由来の投稿の本文更新は禁止（編集できる者にだけ返し、存在を漏らさない）
+        effortOperationGuard.rejectIfEffortSource(postId);
 
         if (req.getContent() == null || req.getContent().isBlank()) {
             throw new BusinessException(TimelineErrorCode.EMPTY_POST_CONTENT);
@@ -760,6 +773,8 @@ public class TimelinePostService {
     public void deletePost(Long postId, Long userId) {
         TimelinePostEntity post = findPostOrThrow(postId);
         postAccessGuard.checkCanManage(userId, post);
+        // F06.4.1: 努力由来の投稿の通常の削除は禁止（取消 API へ誘導する。管理できる者にだけ返す）
+        effortOperationGuard.rejectIfEffortSource(postId);
 
         // F13 Phase 4-γ: 削除前に添付ファイル情報を取得してクォータ減算に備える
         List<TimelinePostAttachmentEntity> attachments =
@@ -1516,6 +1531,8 @@ public class TimelinePostService {
     public PostResponse togglePin(Long postId, boolean pinned, Long userId) {
         TimelinePostEntity post = findPostOrThrow(postId);
         postAccessGuard.checkCanManage(userId, post);
+        // F06.4.1: 努力由来の投稿のピン留めは禁止（管理できる者にだけ返す）
+        effortOperationGuard.rejectIfEffortSource(postId);
 
         post.setPinned(pinned);
         post = postRepository.save(post);

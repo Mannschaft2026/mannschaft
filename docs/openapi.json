@@ -1723,6 +1723,14 @@
       "description": "F06.4 活動記録コメントCRUD"
     },
     {
+      "name": "個人の頑張り記録（チーム履歴）",
+      "description": "F06.4.1 チームに共有された頑張り記録"
+    },
+    {
+      "name": "個人の頑張り記録（チーム共有）",
+      "description": "F06.4.1 本人の記録をチームへ共有する"
+    },
+    {
       "name": "チーム譲渡希望",
       "description": "F09.3 チーム譲渡希望管理"
     },
@@ -26541,6 +26549,112 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResponseEffortDeleteResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/effort-records/me/{id}/team-share": {
+      "put": {
+        "tags": [
+          "個人の頑張り記録（チーム共有）"
+        ],
+        "summary": "チーム共有（202 PENDING）",
+        "operationId": "shareEffortRecordToTeam",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EffortShareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseEffortOwnerRecordResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "個人の頑張り記録（チーム共有）"
+        ],
+        "summary": "チーム共有の本人取消（200 REVOKED）",
+        "operationId": "revokeEffortTeamShare",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "share_version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseEffortOwnerRecordResponse"
                 }
               }
             }
@@ -85816,6 +85930,98 @@
         }
       }
     },
+    "/api/v1/effort-records/me/{id}/team-share/retry": {
+      "post": {
+        "tags": [
+          "個人の頑張り記録（チーム共有）"
+        ],
+        "summary": "チーム共有の再試行（202。FAILED または 60 秒超の PENDING だけ）",
+        "operationId": "retryEffortTeamShare",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EffortShareRetryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseEffortOwnerRecordResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/effort-records/me/{id}/team-share/preview": {
+      "post": {
+        "tags": [
+          "個人の頑張り記録（チーム共有）"
+        ],
+        "summary": "チーム共有の preview（DB を変えない・10 分有効 token）",
+        "operationId": "previewEffortTeamShare",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EffortSharePreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseEffortSharePreviewResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/effort-records/me/definition-snapshots": {
       "post": {
         "tags": [
@@ -125927,6 +126133,219 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResponseEmergencyClosurePreviewResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/teams/{teamId}/effort-records": {
+      "get": {
+        "tags": [
+          "個人の頑張り記録（チーム履歴）"
+        ],
+        "summary": "チームに共有された記録の一覧（カーソルページング）",
+        "operationId": "listEffortTeamRecords",
+        "parameters": [
+          {
+            "name": "teamId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "definition_uuid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CursorPagedResponseEffortSharedRecord"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/teams/{teamId}/effort-records/{shareId}": {
+      "get": {
+        "tags": [
+          "個人の頑張り記録（チーム履歴）"
+        ],
+        "summary": "チームに共有された記録の詳細",
+        "operationId": "getEffortTeamRecord",
+        "parameters": [
+          {
+            "name": "teamId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "shareId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseEffortSharedRecord"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "個人の頑張り記録（チーム履歴）"
+        ],
+        "summary": "チームに共有された記録の管理者非表示（200 MODERATED）",
+        "operationId": "moderateEffortTeamRecord",
+        "parameters": [
+          {
+            "name": "teamId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "shareId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseEffortModerateResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/teams/{teamId}/effort-records/definitions": {
+      "get": {
+        "tags": [
+          "個人の頑張り記録（チーム履歴）"
+        ],
+        "summary": "チーム履歴の定義候補（VISIBLE の履歴がある定義だけ）",
+        "operationId": "listEffortTeamDefinitions",
+        "parameters": [
+          {
+            "name": "teamId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseListEffortTeamDefinitionCandidate"
                 }
               }
             }
@@ -177597,6 +178016,63 @@
           }
         }
       },
+      "EffortShareMapping": {
+        "type": "object",
+        "properties": {
+          "sourceFieldKey": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 0
+          },
+          "targetFieldKey": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 0
+          },
+          "valueOverride": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 0
+          }
+        }
+      },
+      "EffortShareRequest": {
+        "type": "object",
+        "properties": {
+          "mappings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffortShareMapping"
+            },
+            "maxItems": 15,
+            "minItems": 0
+          },
+          "previewToken": {
+            "type": "string",
+            "maxLength": 16384,
+            "minLength": 0
+          },
+          "selectedFieldKeys": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64,
+              "minLength": 0
+            },
+            "maxItems": 15,
+            "minItems": 0
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "mappings",
+          "selectedFieldKeys",
+          "version"
+        ]
+      },
       "UpdateWidgetSettingsRequest": {
         "type": "object",
         "properties": {
@@ -184643,6 +185119,129 @@
           }
         }
       },
+      "Author": {
+        "type": "object",
+        "properties": {
+          "avatarUrl": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "EffortSharedRecord": {
+        "type": "object",
+        "properties": {
+          "author": {
+            "$ref": "#/components/schemas/Author"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "definitionUuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Field"
+            }
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "interactions": {
+            "$ref": "#/components/schemas/Interactions"
+          },
+          "recordTimezone": {
+            "type": "string"
+          },
+          "recordedOn": {
+            "type": "string",
+            "format": "date"
+          },
+          "teamId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "templateName": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "Field": {
+        "type": "object",
+        "properties": {
+          "displayValue": {
+            "type": "string"
+          },
+          "fieldKey": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "semantic": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "NUMBER",
+              "TEXT",
+              "SELECT",
+              "DATE",
+              "DATETIME",
+              "CHECKBOX"
+            ]
+          },
+          "unit": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "Interactions": {
+        "type": "object",
+        "properties": {
+          "canComment": {
+            "type": "boolean"
+          },
+          "canLike": {
+            "type": "boolean"
+          },
+          "canMitayo": {
+            "type": "boolean"
+          },
+          "canQuote": {
+            "type": "boolean"
+          },
+          "canReply": {
+            "type": "boolean"
+          },
+          "canRepost": {
+            "type": "boolean"
+          }
+        }
+      },
       "PostAuditDto": {
         "type": "object",
         "properties": {
@@ -184747,6 +185346,10 @@
           "content": {
             "$ref": "#/components/schemas/PostContentDto"
           },
+          "effortShare": {
+            "$ref": "#/components/schemas/EffortSharedRecord",
+            "description": "努力由来の投稿の共有内容（SharedRecord）。通常の投稿は null"
+          },
           "id": {
             "type": "integer",
             "format": "int64"
@@ -184765,6 +185368,13 @@
           },
           "scope": {
             "$ref": "#/components/schemas/PostScopeDto"
+          },
+          "sourceType": {
+            "type": "string",
+            "description": "投稿の由来。努力由来（頑張り記録のチーム共有）の投稿だけ PERSONAL_EFFORT_SHARE、通常の投稿は null",
+            "enum": [
+              "PERSONAL_EFFORT_SHARE"
+            ]
           },
           "stats": {
             "$ref": "#/components/schemas/PostStatsDto"
@@ -213957,6 +214567,100 @@
           "values"
         ]
       },
+      "EffortShareRetryRequest": {
+        "type": "object",
+        "properties": {
+          "shareVersion": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "shareVersion",
+          "version"
+        ]
+      },
+      "EffortSharePreviewRequest": {
+        "type": "object",
+        "properties": {
+          "definitionToken": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 0
+          },
+          "mappings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffortShareMapping"
+            },
+            "maxItems": 15,
+            "minItems": 0
+          },
+          "selectedFieldKeys": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64,
+              "minLength": 0
+            },
+            "maxItems": 15,
+            "minItems": 0
+          },
+          "teamId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "mappings",
+          "selectedFieldKeys",
+          "teamId",
+          "version"
+        ]
+      },
+      "ApiResponseEffortSharePreviewResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EffortSharePreviewResponse"
+          }
+        }
+      },
+      "EffortSharePreviewResponse": {
+        "type": "object",
+        "properties": {
+          "contentRevision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "definitionRevision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "previewToken": {
+            "type": "string"
+          },
+          "projection": {
+            "$ref": "#/components/schemas/EffortSharedRecord"
+          },
+          "recordVersion": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "CreateDefinitionSnapshotRequest": {
         "type": "object",
         "properties": {
@@ -229176,6 +229880,10 @@
           "content": {
             "$ref": "#/components/schemas/PostContentDto"
           },
+          "effortShare": {
+            "$ref": "#/components/schemas/EffortSharedRecord",
+            "description": "努力由来の投稿の共有内容（SharedRecord）。通常の投稿は null"
+          },
           "id": {
             "type": "integer",
             "format": "int64"
@@ -229191,6 +229899,13 @@
           },
           "scope": {
             "$ref": "#/components/schemas/PostScopeDto"
+          },
+          "sourceType": {
+            "type": "string",
+            "description": "投稿の由来。努力由来（頑張り記録のチーム共有）の投稿だけ PERSONAL_EFFORT_SHARE、通常の投稿は null",
+            "enum": [
+              "PERSONAL_EFFORT_SHARE"
+            ]
           },
           "stats": {
             "$ref": "#/components/schemas/PostStatsDto"
@@ -234462,6 +235177,54 @@
           "startTime": {
             "type": "string",
             "example": "14:30:00"
+          }
+        }
+      },
+      "CursorPagedResponseEffortSharedRecord": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffortSharedRecord"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/CursorMeta"
+          }
+        }
+      },
+      "ApiResponseEffortSharedRecord": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EffortSharedRecord"
+          }
+        }
+      },
+      "ApiResponseListEffortTeamDefinitionCandidate": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffortTeamDefinitionCandidate"
+            }
+          }
+        }
+      },
+      "EffortTeamDefinitionCandidate": {
+        "type": "object",
+        "properties": {
+          "definitionUuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "isRetired": {
+            "type": "boolean"
+          },
+          "templateName": {
+            "type": "string"
           }
         }
       },
@@ -257333,6 +258096,30 @@
             "type": "string",
             "maxLength": 500,
             "minLength": 0
+          }
+        }
+      },
+      "ApiResponseEffortModerateResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EffortModerateResponse"
+          }
+        }
+      },
+      "EffortModerateResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

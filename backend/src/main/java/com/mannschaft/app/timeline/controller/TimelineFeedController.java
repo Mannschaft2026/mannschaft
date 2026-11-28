@@ -38,6 +38,8 @@ public class TimelineFeedController {
     private final TimelinePostService postService;
     /** slug/Long 文字列 → 内部 Long ID の共有リゾルバ（書き込み経路と共通）。 */
     private final TimelineScopeIdResolver scopeIdResolver;
+    /** F06.4.1 努力由来の投稿を F00 に通す共通 source guard（timeline の read TX の外で判定する）。 */
+    private final com.mannschaft.app.timeline.service.TimelineEffortReadGuard effortReadGuard;
 
     /**
      * スコープ別フィードを取得する。
@@ -60,11 +62,12 @@ public class TimelineFeedController {
             @RequestParam(defaultValue = "20") int size) {
         Long userId = SecurityUtils.getCurrentUserId();
         Long resolvedScopeId = scopeIdResolver.resolve(scopeType, scopeId);
-        List<PostResponse> posts = postService.getFeed(scopeType, resolvedScopeId, scopeVillageId, size, userId);
+        List<PostResponse> posts = effortReadGuard.filterVisible(
+                postService.getFeed(scopeType, resolvedScopeId, scopeVillageId, size, userId), userId);
         // 認可根治 Wave6: 村スコープのピン留めは scope_id（常に 0）ではなく scope_village_id で引く。
         // 村 ID を渡さないと全村のピン留めが混在するため、フィードと同じ村 ID を必ず伝播させる。
-        List<PostResponse> pinned =
-                postService.getPinnedPosts(scopeType, resolvedScopeId, scopeVillageId, userId);
+        List<PostResponse> pinned = effortReadGuard.filterVisible(
+                postService.getPinnedPosts(scopeType, resolvedScopeId, scopeVillageId, userId), userId);
         TimelineFeedResponse response = TimelineFeedResponse.of(pinned, posts, size);
         return ResponseEntity.ok(response);
     }
@@ -84,12 +87,17 @@ public class TimelineFeedController {
         int pageSize = requestedLimit > 0 ? Math.min(requestedLimit, 50) : 20;
         Long userId = SecurityUtils.getCurrentUserId();
         Long resolvedScopeId = scopeIdResolver.resolve(scopeType, scopeId);
-        List<PostResponse> posts = postService.getFeedPage(
-                scopeType, resolvedScopeId, scopeVillageId, cursor, pageSize, userId);
+        // F06.4.1: 見える投稿でページを埋める。カーソルは最後に見えた投稿の ID だけ（間引いた投稿の ID は出さない）
+        com.mannschaft.app.timeline.service.TimelineVisiblePage page = effortReadGuard.fillVisiblePage(
+                cursor, pageSize,
+                (position, count) -> postService.getFeedPage(
+                        scopeType, resolvedScopeId, scopeVillageId, position, count, userId),
+                userId);
         List<PostResponse> pinned = cursor == null
-                ? postService.getPinnedPosts(scopeType, resolvedScopeId, scopeVillageId, userId)
+                ? effortReadGuard.filterVisible(
+                        postService.getPinnedPosts(scopeType, resolvedScopeId, scopeVillageId, userId), userId)
                 : List.of();
-        return ResponseEntity.ok(TimelineFeedResponse.of(pinned, posts, pageSize));
+        return ResponseEntity.ok(TimelineFeedResponse.ofVisiblePage(pinned, page, pageSize));
     }
 
     /**
@@ -126,8 +134,11 @@ public class TimelineFeedController {
             @RequestParam(required = false) Long cursor,
             @RequestParam(defaultValue = "20") int limit) {
         Long userId = SecurityUtils.getCurrentUserId();
-        List<PostResponse> posts = postService.getMyFeed(userId, cursor, limit);
-        return ResponseEntity.ok(TimelineFeedResponse.ofMyFeed(posts, limit));
+        int pageSize = limit > 0 ? limit : 20;
+        // F06.4.1: 見える投稿でページを埋める。カーソルは最後に見えた投稿の ID だけ
+        com.mannschaft.app.timeline.service.TimelineVisiblePage page = effortReadGuard.fillVisiblePage(
+                cursor, pageSize, (position, count) -> postService.getMyFeed(userId, position, count), userId);
+        return ResponseEntity.ok(TimelineFeedResponse.ofVisiblePage(List.of(), page, pageSize));
     }
 
     /**
@@ -148,7 +159,12 @@ public class TimelineFeedController {
             @PathVariable Long userId,
             @RequestParam(defaultValue = "20") int size) {
         Long callerUserId = SecurityUtils.getCurrentUserId();
-        List<PostResponse> posts = postService.getUserPosts(userId, size, callerUserId);
+        // F06.4.1: F00 を通らない努力由来の投稿と、著者を匿名にした共有（退会・purge 後）を除く
+        // （timeline の read TX の外で判定する。利用者 ID から匿名の共有へ辿らせない）
+        // 匿名の共有を除いた分は、続きのページから補って要求件数まで埋める
+        int pageSize = size > 0 ? size : 20;
+        List<PostResponse> posts = effortReadGuard.fillVisibleAuthorPosts(pageSize,
+                limit -> postService.getUserPosts(userId, limit, callerUserId), callerUserId);
         return ResponseEntity.ok(ApiResponse.of(posts));
     }
 
@@ -165,7 +181,8 @@ public class TimelineFeedController {
         // 村 ID を取らない EP のため scopeVillageId は null を渡す（VILLAGE 指定は fail-closed）。
         // 4 引数版を直接呼ぶのは、認可番人の委譲追跡（深さ 2）で
         // accessControlService の呼び出しが可視な位置に留まるようにするため。
-        List<PostResponse> posts = postService.getPinnedPosts(scopeType, scopeId, null, userId);
+        List<PostResponse> posts = effortReadGuard.filterVisible(
+                postService.getPinnedPosts(scopeType, scopeId, null, userId), userId);
         return ResponseEntity.ok(ApiResponse.of(posts));
     }
 
@@ -185,7 +202,8 @@ public class TimelineFeedController {
             @RequestParam String q,
             @RequestParam(defaultValue = "20") int limit) {
         Long userId = SecurityUtils.getCurrentUserId();
-        List<PostResponse> posts = postService.searchPosts(q, limit, userId);
+        // F06.4.1: F00 を通らない努力由来の投稿を除く（件数を返さない limit 付き一覧のため取得後に判定する）
+        List<PostResponse> posts = effortReadGuard.filterVisible(postService.searchPosts(q, limit, userId), userId);
         return ResponseEntity.ok(ApiResponse.of(posts));
     }
 }

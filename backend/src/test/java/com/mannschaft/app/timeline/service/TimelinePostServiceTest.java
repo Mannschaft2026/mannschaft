@@ -135,6 +135,9 @@ class TimelinePostServiceTest {
     @Mock
     private com.mannschaft.app.timeline.repository.UserMuteRepository muteRepository;
 
+    @Mock
+    private TimelineEffortOperationGuard effortOperationGuard;
+
     @InjectMocks
     private TimelinePostService timelinePostService;
 

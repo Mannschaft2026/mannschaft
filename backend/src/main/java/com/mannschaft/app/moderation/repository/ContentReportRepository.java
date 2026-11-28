@@ -6,7 +6,10 @@ import com.mannschaft.app.moderation.entity.ContentReportEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -66,4 +69,12 @@ public interface ContentReportRepository extends JpaRepository<ContentReportEnti
      * スコープ別・ステータス別の通報数を取得する。
      */
     long countByScopeTypeAndScopeIdAndStatus(String scopeType, Long scopeId, ReportStatus status);
+
+    /**
+     * 対象 ID の集合のうち、通報・モデレーションで非表示（content_hidden）にされているもの（1 回の照会）。
+     */
+    @Query("SELECT DISTINCT r.targetId FROM ContentReportEntity r WHERE r.targetType = :targetType "
+            + "AND r.targetId IN :targetIds AND r.contentHidden = true")
+    List<Long> findHiddenTargetIds(@Param("targetType") ReportTargetType targetType,
+                                   @Param("targetIds") Collection<Long> targetIds);
 }

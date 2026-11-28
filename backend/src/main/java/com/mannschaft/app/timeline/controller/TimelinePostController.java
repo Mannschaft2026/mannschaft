@@ -41,6 +41,8 @@ public class TimelinePostController {
     private final jakarta.servlet.http.HttpServletRequest servletRequest;
     /** slug/Long 文字列 → 内部 Long ID の共有リゾルバ（フィード取得経路と共通）。 */
     private final TimelineScopeIdResolver scopeIdResolver;
+    /** F06.4.1 努力由来の投稿を F00 に通す共通 source guard（timeline の read TX の外で判定する）。 */
+    private final com.mannschaft.app.timeline.service.TimelineEffortReadGuard effortReadGuard;
 
 
     /**
@@ -69,7 +71,12 @@ public class TimelinePostController {
     @Operation(summary = "投稿詳細取得")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")
     public ResponseEntity<ApiResponse<PostDetailResponse>> getPost(@PathVariable Long id) {
-        PostDetailResponse response = postService.getPostDetail(id, SecurityUtils.getCurrentUserId());
+        Long userId = SecurityUtils.getCurrentUserId();
+        // F06.4.1: 努力由来の投稿は F00 を通るときだけ SharedRecord を載せて返す（通らなければ存在しない投稿と同じ 404）。
+        PostDetailResponse response = effortReadGuard.visibleDetail(postService.getPostDetail(id, userId), userId);
+        if (response == null) {
+            throw new com.mannschaft.app.common.BusinessException(com.mannschaft.app.timeline.TimelineErrorCode.POST_NOT_FOUND);
+        }
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 
@@ -115,8 +122,15 @@ public class TimelinePostController {
             @PathVariable Long id,
             @RequestParam(required = false) Long cursor,
             @RequestParam(defaultValue = "20") int limit) {
-        List<PostResponse> replies = postService.getReplies(id, cursor, limit, SecurityUtils.getCurrentUserId());
-        return ResponseEntity.ok(TimelineFeedResponse.ofReplies(replies, limit));
+        Long userId = SecurityUtils.getCurrentUserId();
+        // F06.4.1: 親が F00 を通らない努力由来の投稿なら、詳細と同じく存在しない投稿として 404
+        if (!effortReadGuard.isVisible(id, userId)) {
+            throw new com.mannschaft.app.common.BusinessException(com.mannschaft.app.timeline.TimelineErrorCode.POST_NOT_FOUND);
+        }
+        int pageSize = limit > 0 ? limit : 20;
+        com.mannschaft.app.timeline.service.TimelineVisiblePage page = effortReadGuard.fillVisiblePage(
+                cursor, pageSize, (position, count) -> postService.getReplies(id, position, count, userId), userId);
+        return ResponseEntity.ok(TimelineFeedResponse.ofVisiblePage(List.of(), page, pageSize));
     }
 
     /**
