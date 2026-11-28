@@ -48,6 +48,7 @@ BE:
 | アップロード後の Content-Type 偽装（クライアント送信値は偽装可能） | WebShell/マルウェア配布 | BE でアップロード完了通知受信後に R2 の実 Content-Type を HEAD で確認する |
 | テナント間 URL 流用（IDOR 変形） | 他組織のファイルへの不正アクセス | objectKey にスコープ識別子を含める（`org-{id}/user-{id}/filename`）。アクセス前にスコープ一致確認 |
 | ホットリンクによるストレージ帯域消費 | コスト増大 | Download Presigned URL はログイン済みユーザーのみ発行（公開ファイルを除く） |
+| 未認証の公開ファイルリンク応答からの内部情報漏洩（ストレージキー・作成者ID） | objectKey の露出・内部ユーザーIDの推測材料 | 未認証経路 `/api/v1/public/file-links/{token}/access` は専用 DTO `PublicFileLinkResponse`（表示項目のみ）を返し、`fileKey`・`createdBy`・内部ID は含めない。認証済み向け `FileResponse` を公開経路へ流用しない（`PublicFileLinkContractIT` で固定） |
 | 大量アップロードによるストレージ枯渇 | 可用性低下 | StorageQuotaService で org/team/personal ごとに上限管理（既実装） |
 | 悪意あるファイルのアップロード（WebShell 等） | サーバー侵害・XSS | MIME 検証ホワイトリスト適用（§3 参照）|
 | Presigned URL の転送途中での漏洩 | 不正ファイル操作 | HTTPS 必須。URL に短い TTL を設定（Upload: 900 秒、Download: 3600 秒） |

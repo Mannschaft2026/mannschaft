@@ -17,9 +17,9 @@
            PageHeader の actions 欄に入れると md 以上で見出しが押し潰されて縦書き状に折れるため、
            見出しの下の折り返す行に置く。 -->
       <div v-if="schedule" class="mt-2 flex flex-wrap items-center gap-2" data-testid="shift-board-actions">
-        <!-- PDF エクスポートボタン（SUPPORTER ロールは非表示） -->
+        <!-- PDF エクスポートボタン（SUPPORTER は非表示。管理者の形以外は公開済みのシフト表だけ） -->
         <ShiftPdfExportButton
-          v-if="!isSupporter"
+          v-if="canExportPdf"
           :schedule-id="scheduleId"
         />
 
@@ -193,31 +193,27 @@ import type {
 } from '~/types/shift'
 import type { LoadErrorKind } from '~/utils/loadError'
 import { getLoadErrorHttpStatus } from '~/utils/loadError'
+import { isPdfReleasableToNonPrivileged } from '~/utils/shiftStatus'
 
 const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
 const scheduleId = computed(() => Number(route.params.scheduleId))
 
-// F00.5 Phase 5: チームレベルの SUPPORTER 判定を useRoleAccess 経由に切替
+// F00.5 Phase 5: チームレベルの SUPPORTER 判定を useRoleAccess（useShiftPermission 経由）に切替
 // 旧実装: authStore.currentUser?.systemRole === 'SUPPORTER'
 //   → systemRole はプラットフォームロール（SYSTEM_ADMIN など）であり、
 //     チームの SUPPORTER を判定するのは誤りだった。
 // 新実装: /api/v1/teams/{id}/me/permissions から取得した roleName で判定する。
-const { roleName, can, loadPermissions } = useRoleAccess('team', teamSlug)
+const { roleName, canManageShift, canViewShift, loadPermissions } = useShiftPermission(teamSlug, { autoLoad: false })
 const isSupporter = computed(() => roleName.value === 'SUPPORTER')
-// 割当操作（枠への追加・外す・未割当プール・自動割当）を出すのは、当該チームの ADMIN と、
-// MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけ（CMP-261125-1336）。それ以外は閲覧のみ。
-// 出すと必ず 403 になる死んだ導線になるため、DOM に出さない。BE 側の MANAGE_SHIFTS 化は別戦役で、本件は FE の出し分けのみ。
-//
-// 【意図的に SYSTEM_ADMIN を含めない等値比較】(CMP-260909-1509)
-// 実効ロール解決は最強ロールの 1 値を返すため、SYSTEM_ADMIN 兼任者の roleName は 'SYSTEM_ADMIN' になり、
-// 以下の等値比較には当たらない。「運営専用アカウントには一般のチーム運営導線を出さない」という
-// マスター確定の設計判断（docs/security/03_role_authority_model.md §3.5）で、shifts.vue の入口判定とも一致させる。
-// BE は SYSTEM_ADMIN を別途常に許可しており、この UI 非表示は認可の代替ではない。
-// roleName の包含判定（hasRoleOrAbove 的）に書き換えないこと。
-const canAssign = computed(
-  () => roleName.value === 'ADMIN' || (roleName.value === 'DEPUTY_ADMIN' && can('MANAGE_SHIFTS')),
-)
+// PDF は BE（ShiftPdfFacade）が、管理者の形なら未公開でも許し、それ以外の会員は公開済みだけ許す（未公開は 404）。
+const canExportPdf = computed(() =>
+  !isSupporter.value && (canViewShift.value || isPdfReleasableToNonPrivileged(schedule.value?.status)))
+// CMP-261125-2114: 割当操作（枠への追加・外す・未割当プール・自動割当・実行履歴）は、チーム ADMIN または
+// MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけに許される（BE: ShiftManageAccessGate）。それ以外は閲覧のみ。
+// 判定は useShiftPermission に集約（CMP-261125-1336 の FE 側の等値比較はここへ統合した）。
+// SYSTEM_ADMIN の roleName 特別扱いはしない（BE も特別扱いしない）。UI の出し分けは認可の代替ではない。
+const canAssign = canManageShift
 
 // 自動割当は 2026-09-09 の方針転換で既定 OFF（BE も ShiftAutoAssignController の
 // クラスレベル @RequireFeature で 6 経路すべてを FEATURE_GATE_001 で拒否する）。

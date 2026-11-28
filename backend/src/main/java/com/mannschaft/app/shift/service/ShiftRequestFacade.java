@@ -1,6 +1,5 @@
 package com.mannschaft.app.shift.service;
 
-import com.mannschaft.app.common.ScopeConcealingAccessGate;
 import com.mannschaft.app.role.service.RoleService;
 import com.mannschaft.app.shift.ShiftErrorCode;
 import com.mannschaft.app.shift.dto.CreateShiftRequestRequest;
@@ -29,10 +28,12 @@ import java.util.List;
  * 部外者(非メンバー)          404 SHIFT_001             404 SHIFT_001         404 SHIFT_003          404 SHIFT_003
  * 同チーム SUPPORTER          403 COMMON_002            403 COMMON_002        403 COMMON_002         403 COMMON_002
  * 同チーム一般メンバー        403 COMMON_002            201                   403 COMMON_002(他人分)  403 COMMON_002(他人分)
- * チーム ADMIN/DEPUTY_ADMIN   200                       201                   200(状態次第)          204
+ * ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN  200  201  200(状態次第)  204
+ * MANAGE_SHIFTS 無しの DEPUTY_ADMIN  一覧/サマリーは切替OFF=403 COMMON_002（一般メンバーと同じ）・閲覧切替ON=200。
+ *                             他人分の更新・削除は常に 403 COMMON_002。本人分は一般メンバーと同じ（CMP-261125-2114）
  * 提出者本人                  (一般メンバーと同じ)      201                   200(状態次第)          204
- * 非メンバーの SYSTEM_ADMIN   200                       201                   200(状態次第)          204
- * メンバーの SYSTEM_ADMIN     200                       201                   200(状態次第)          204
+ * SYSTEM_ADMIN(チームロール無し) 部外者と同じ（CMP-261125-2114: SYSTEM_ADMIN を特別扱いしない。一覧/サマリー・提出・更新・削除とも
+ *                             越境として 404。チームの ADMIN／MANAGE_SHIFTS 付き DEPUTY・在籍メンバーを兼ねる場合はその立場で判定）
  * user_roles のみの ADMIN     200                       403 COMMON_002        200(状態次第)          204
  * 対象不在(schedule/request)  404 SHIFT_001             404 SHIFT_001         404 SHIFT_003          404 SHIFT_003
  * 親だけ不在(論理削除)        404 SHIFT_001             404 SHIFT_001         404 SHIFT_003          404 SHIFT_003
@@ -47,14 +48,13 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ShiftRequestFacade {
 
-    private static final String TEAM = "TEAM";
-
     private final ShiftRequestService requestService;
-    private final ScopeConcealingAccessGate accessGate;
+    private final ShiftManageAccessGate manageGate;
     private final RoleService roleService;
 
     /**
-     * スケジュールのシフト希望一覧を取得する（他メンバー分を含むため管理者のみ）。
+     * スケジュールのシフト希望一覧を取得する（他メンバー分を含むため管理者の形のみ。閲覧扱い: ADMIN・MANAGE_SHIFTS 付き
+     * DEPUTY_ADMIN、閲覧切替 ON の DEPUTY_ADMIN）。
      *
      * @param scheduleId スケジュールID
      * @param userId     操作者ユーザーID
@@ -62,7 +62,7 @@ public class ShiftRequestFacade {
      */
     public List<ShiftRequestResponse> listRequests(Long scheduleId, Long userId) {
         ShiftRequestService.ScheduleScope scope = requestService.resolveScheduleScope(scheduleId);
-        accessGate.requireAdminOrConceal(userId, scope.teamId(), TEAM, ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
+        manageGate.requireViewOrConceal(userId, scope.teamId(), ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
         return requestService.listRequests(scheduleId);
     }
 
@@ -76,13 +76,13 @@ public class ShiftRequestFacade {
     public ShiftRequestResponse submitRequest(CreateShiftRequestRequest req, Long userId) {
         ShiftRequestService.ScheduleScope scope = requestService.resolveScheduleScope(req.getScheduleId());
         // 越境は不在と同一の SHIFT_001。user_roles のみの ADMIN は許可せず 403。
-        accessGate.requireMemberOrConceal(userId, scope.teamId(), TEAM,
+        manageGate.requireMemberOrConceal(userId, scope.teamId(),
                 ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND, true);
         return requestService.submitRequest(req, userId);
     }
 
     /**
-     * シフト希望を更新する（提出者本人、または当該チームの ADMIN 以上）。
+     * シフト希望を更新する（提出者本人、または当該チームの ADMIN／MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
      *
      * @param requestId 希望ID
      * @param req       更新リクエスト
@@ -91,26 +91,26 @@ public class ShiftRequestFacade {
      */
     public ShiftRequestResponse updateRequest(Long requestId, UpdateShiftRequestRequest req, Long userId) {
         ShiftRequestService.RequestScope scope = requestService.resolveRequestScope(requestId);
-        accessGate.requireOwnerOrAdminOrConceal(userId, scope.teamId(), TEAM, scope.ownerUserId(),
+        manageGate.requireOwnerOrManageOrConceal(userId, scope.teamId(), scope.ownerUserId(),
                 ShiftErrorCode.SHIFT_REQUEST_NOT_FOUND);
         return requestService.updateRequest(requestId, req);
     }
 
     /**
-     * シフト希望を削除する（提出者本人、または当該チームの ADMIN 以上）。
+     * シフト希望を削除する（提出者本人、または当該チームの ADMIN／MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
      *
      * @param requestId 希望ID
      * @param userId    操作者ユーザーID
      */
     public void deleteRequest(Long requestId, Long userId) {
         ShiftRequestService.RequestScope scope = requestService.resolveRequestScope(requestId);
-        accessGate.requireOwnerOrAdminOrConceal(userId, scope.teamId(), TEAM, scope.ownerUserId(),
+        manageGate.requireOwnerOrManageOrConceal(userId, scope.teamId(), scope.ownerUserId(),
                 ShiftErrorCode.SHIFT_REQUEST_NOT_FOUND);
         requestService.deleteRequest(requestId);
     }
 
     /**
-     * シフト希望提出サマリーを取得する（管理者のみ）。
+     * シフト希望提出サマリーを取得する（閲覧扱い: ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN、閲覧切替 ON の DEPUTY_ADMIN）。
      *
      * @param scheduleId スケジュールID
      * @param userId     操作者ユーザーID
@@ -118,7 +118,7 @@ public class ShiftRequestFacade {
      */
     public ShiftRequestSummaryResponse getRequestSummary(Long scheduleId, Long userId) {
         ShiftRequestService.ScheduleScope scope = requestService.resolveScheduleScope(scheduleId);
-        accessGate.requireAdminOrConceal(userId, scope.teamId(), TEAM, ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
+        manageGate.requireViewOrConceal(userId, scope.teamId(), ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
         // 提出対象メンバーの列挙は role ドメインの窓口（RoleService）から tx の外で取得し、tx 本体へ引数で渡す。
         List<Long> memberCandidateIds = roleService.getMemberCandidateUserIdsByTeamId(scope.teamId());
         return requestService.getRequestSummary(scheduleId, memberCandidateIds);

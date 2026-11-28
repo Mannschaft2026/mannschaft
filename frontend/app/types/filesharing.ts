@@ -62,16 +62,14 @@ export interface PublicFileLink {
 
 /**
  * F05.5 (D) 未認証の公開閲覧ページ（/shared/{token}）で表示するファイルメタ。
- * 生成型 components["schemas"]["FileResponse"] と一致させる。
+ * 生成型 components["schemas"]["PublicFileLinkResponse"] と一致させる（内部ID・fileKey・createdBy は返らない）。
  */
 export interface PublicSharedFileMeta {
-  id?: number
   name?: string
   fileSize?: number
   contentType?: string
   description?: string | null
   downloadDisabled?: boolean
-  createdAt?: string
   updatedAt?: string
 }
 

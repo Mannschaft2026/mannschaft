@@ -4,6 +4,7 @@ import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.shift.dto.MemberWorkConstraintRequest;
 import com.mannschaft.app.shift.dto.MemberWorkConstraintResponse;
+import com.mannschaft.app.shift.service.MemberWorkConstraintFacade;
 import com.mannschaft.app.shift.service.MemberWorkConstraintService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -33,6 +34,8 @@ import java.util.List;
 public class MemberWorkConstraintController {
 
     private final MemberWorkConstraintService workConstraintService;
+    /** 個別制約の upsert の認可＋対象の在籍検査（tx の外。CMP-261125-2114）。 */
+    private final MemberWorkConstraintFacade workConstraintFacade;
 
     // ========================================
     // 一覧取得（ADMIN/DEPUTY_ADMIN のみ）
@@ -46,7 +49,7 @@ public class MemberWorkConstraintController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")
     public ResponseEntity<ApiResponse<List<MemberWorkConstraintResponse>>> listConstraints(
             @PathVariable Long teamId) {
-        List<MemberWorkConstraintResponse> list = workConstraintService
+        List<MemberWorkConstraintResponse> list = workConstraintFacade
                 .listConstraintsByTeam(teamId, SecurityUtils.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.of(list));
     }
@@ -81,8 +84,10 @@ public class MemberWorkConstraintController {
             @PathVariable Long teamId,
             @PathVariable Long userId,
             @Valid @RequestBody MemberWorkConstraintRequest request) {
-        MemberWorkConstraintResponse response = workConstraintService
-                .upsertConstraint(teamId, userId, request, SecurityUtils.getCurrentUserId());
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        // 権限判定と対象の在籍検査は tx の外の Facade が行う（権限判定が先。越境・存在オラクルの封鎖は Facade の javadoc）。
+        MemberWorkConstraintResponse response = workConstraintFacade
+                .upsertConstraint(teamId, userId, request, currentUserId);
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 
@@ -95,7 +100,7 @@ public class MemberWorkConstraintController {
     public ResponseEntity<Void> deleteConstraint(
             @PathVariable Long teamId,
             @PathVariable Long userId) {
-        workConstraintService.deleteConstraint(teamId, userId, SecurityUtils.getCurrentUserId());
+        workConstraintFacade.deleteConstraint(teamId, userId, SecurityUtils.getCurrentUserId());
         return ResponseEntity.noContent().build();
     }
 
@@ -125,7 +130,7 @@ public class MemberWorkConstraintController {
     public ResponseEntity<ApiResponse<MemberWorkConstraintResponse>> upsertTeamDefault(
             @PathVariable Long teamId,
             @Valid @RequestBody MemberWorkConstraintRequest request) {
-        MemberWorkConstraintResponse response = workConstraintService
+        MemberWorkConstraintResponse response = workConstraintFacade
                 .upsertTeamDefault(teamId, request, SecurityUtils.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.of(response));
     }
@@ -138,7 +143,7 @@ public class MemberWorkConstraintController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204", description = "削除成功")
     public ResponseEntity<Void> deleteTeamDefault(
             @PathVariable Long teamId) {
-        workConstraintService.deleteTeamDefault(teamId, SecurityUtils.getCurrentUserId());
+        workConstraintFacade.deleteTeamDefault(teamId, SecurityUtils.getCurrentUserId());
         return ResponseEntity.noContent().build();
     }
 }

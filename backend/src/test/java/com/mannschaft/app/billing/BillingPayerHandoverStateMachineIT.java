@@ -838,6 +838,45 @@ class BillingPayerHandoverStateMachineIT extends AbstractMySqlIntegrationTest {
         return requested.handoverRequestId();
     }
 
+    @Test
+    @DisplayName("CMP-260909-0304: 期限切れの承諾試行は HANDOVER_EXPIRED を返しつつ、EXPIRED への確定がコミットされる")
+    void expiredAcceptAttemptCommitsExpiredStatus() {
+        stubGatewayForHappyPath();
+        HandoverRequestResult requested = handoverService.requestHandover(
+                EntitlementScopeKind.TEAM, TEAM_ID, oldContractId, oldPayerUserId);
+        expireHandoverRow(requested.handoverRequestId());
+
+        assertThatThrownBy(() -> handoverService.acceptHandover(
+                EntitlementScopeKind.TEAM, TEAM_ID, requested.handoverRequestId(), adminAUserId))
+                .isInstanceOfSatisfying(BusinessException.class, e ->
+                        assertThat(e.getErrorCode()).isEqualTo(EntitlementErrorCode.HANDOVER_EXPIRED));
+
+        // コミット後の行を実 DB から読み直す（一次キャッシュを捨てる）。
+        assertThat(reloadHandover(requested.handoverRequestId()).getStatus())
+                .as("EXPIRED が巻き戻らず永続化される").isEqualTo(PayerHandoverStatus.EXPIRED);
+
+        // 終端化により同一契約への再要求が塞がれない。
+        HandoverRequestResult again = handoverService.requestHandover(
+                EntitlementScopeKind.TEAM, TEAM_ID, oldContractId, oldPayerUserId);
+        assertThat(again.handoverRequestId()).isNotEqualTo(requested.handoverRequestId());
+    }
+
+    @Test
+    @DisplayName("CMP-260909-0304 P1: 期限超過でもACCEPTED以降の承諾試行はEXPIREDに確定せず、Stripe照合の経路へ委ねる")
+    void expiredAcceptAttemptDoesNotExpireAcceptedRow() {
+        UUID handoverId = createAmbiguousAcceptance();
+        expireHandoverRow(handoverId);
+
+        // 本人の再試行は状態検証を通り（期限切れで EXPIRED に化けない）、Stripe 照会の失敗がそのまま出る。
+        assertThatThrownBy(() -> handoverService.acceptHandover(
+                EntitlementScopeKind.TEAM, TEAM_ID, handoverId, adminAUserId))
+                .isInstanceOf(IllegalStateException.class);
+
+        assertThat(reloadHandover(handoverId).getStatus())
+                .as("Stripe に新サブスクがありうる ACCEPTED を EXPIRED に確定しない")
+                .isEqualTo(PayerHandoverStatus.ACCEPTED);
+    }
+
     /** 猶予期限を過去にずらし「承諾者が戻らないまま期限を越えた」状況を作る。 */
     private void expireHandoverRow(UUID handoverRequestId) {
         transactionTemplate.executeWithoutResult(tx -> {

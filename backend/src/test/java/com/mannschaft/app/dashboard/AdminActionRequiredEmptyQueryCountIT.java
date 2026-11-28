@@ -1,5 +1,6 @@
 package com.mannschaft.app.dashboard;
 
+import com.mannschaft.app.common.visibility.perf.SqlIntentCounter;
 import com.mannschaft.app.common.PendingAggregate;
 import com.mannschaft.app.matching.service.MatchingAdminQueryService;
 import com.mannschaft.app.organization.entity.OrganizationEntity;
@@ -10,9 +11,6 @@ import com.mannschaft.app.shift.service.ShiftRequestAdminQueryService;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
 import com.mannschaft.app.team.entity.TeamEntity;
 import com.mannschaft.app.team.repository.TeamRepository;
-import jakarta.persistence.EntityManagerFactory;
-import org.hibernate.SessionFactory;
-import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -32,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>共通MySQL Testcontainersと共通Spring構成をそのまま使い、追加のモックや設定は作らない。
  * fixtureはRepository経由で計測前にcommitする。テスト自体にトランザクションを張らず、
  * 各Query Serviceの実proxyが開始する読み取りトランザクションを1呼び出しずつ計測する。
- * SessionFactory全体のStatisticsを使うため排他とし、有効状態は必ず復元する。</p>
+ * 計測は現在スレッドの SQL だけを数える（{@link SqlIntentCounter}）。他スレッドの非同期処理に左右されない。</p>
  *
  * <p>本試験は内部Query ServiceのSQL本数を検査する。HTTPやロール別認可の試験は代替しない。</p>
  */
@@ -41,8 +39,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("管理者向け承認待ち集約: 空スコープはCOUNTだけを発行する（実DB）")
 class AdminActionRequiredEmptyQueryCountIT extends AbstractMySqlIntegrationTest {
 
-    @Autowired
-    private EntityManagerFactory entityManagerFactory;
     @Autowired
     private TeamRepository teamRepository;
     @Autowired
@@ -110,22 +106,18 @@ class AdminActionRequiredEmptyQueryCountIT extends AbstractMySqlIntegrationTest 
     }
 
     private void assertEmptyQueryCount(Supplier<PendingAggregate> query, long expectedStatements) {
-        Statistics stats = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        boolean originallyEnabled = stats.isStatisticsEnabled();
+        // 現在スレッドが発行した SQL だけを数える。SessionFactory 全体の Statistics は、前のテストクラスが
+        // 残した非同期処理など他スレッドの SQL も数えてしまい、CI の shard 構成次第で 1 本のはずが 3 本になった。
         PendingAggregate result;
-        long preparedStatements;
-        try {
-            stats.setStatisticsEnabled(true);
-            stats.clear();
+        int issuedStatements;
+        try (SqlIntentCounter.CurrentThreadCapture capture = SqlIntentCounter.captureCurrentThread()) {
             result = query.get();
-            preparedStatements = stats.getPrepareStatementCount();
-        } finally {
-            stats.setStatisticsEnabled(originallyEnabled);
+            issuedStatements = capture.totalCount();
         }
 
         assertThat(result.pendingCount()).isZero();
         assertThat(result.items()).isEmpty();
-        assertThat(preparedStatements).as("空スコープの集約はCOUNTのみ発行する")
+        assertThat((long) issuedStatements).as("空スコープの集約はCOUNTのみ発行する")
                 .isEqualTo(expectedStatements);
     }
 }

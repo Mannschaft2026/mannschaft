@@ -5,10 +5,10 @@ import com.mannschaft.app.cms.PostStatus;
 import com.mannschaft.app.cms.PostType;
 import com.mannschaft.app.cms.Visibility;
 import com.mannschaft.app.cms.entity.BlogPostEntity;
-import com.mannschaft.app.common.visibility.RolePriority;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.support.test.MembershipTestHelper;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import jakarta.persistence.NoResultException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -225,9 +225,7 @@ class InviteJoinRoleKindIT extends AbstractGlobalSearchIT {
                 return ((Number) em.createNativeQuery("SELECT id FROM roles WHERE name = :n").setParameter("n", name)
                         .getSingleResult()).longValue();
             } catch (NoResultException e) {
-                em.createNativeQuery("INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                                + "VALUES (:n, :n, :p, 0, NOW(), NOW())")
-                        .setParameter("n", name).setParameter("p", RolePriority.priority(name)).executeUpdate();
+                RoleSeedSupport.ensureCanonical(em, name);
                 return ((Number) em.createNativeQuery("SELECT id FROM roles WHERE name = :n").setParameter("n", name)
                         .getSingleResult()).longValue();
             }

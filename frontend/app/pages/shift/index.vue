@@ -50,17 +50,13 @@ const selectableTeams = computed(() =>
   teamStore.myTeams.filter((t) => !SHIFT_UNREADABLE_ROLES.includes(t.role)),
 )
 
-/** ADMIN / SYSTEM_ADMIN / DEPUTY_ADMIN のチーム（シフト表の作成・編集権限あり。canManage 専用） */
-const manageableTeams = computed(() =>
-  teamStore.myTeams.filter(
-    (t) => t.role === 'ADMIN' || t.role === 'SYSTEM_ADMIN' || t.role === 'DEPUTY_ADMIN',
-  ),
+// CMP-261125-2114: 作成・編集の権限は、選択中のチームでの ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけ
+// （BE: ShiftManageAccessGate）。希望サマリー（提出状況）の閲覧は、これに加えて閲覧切替が ON の副管理者にも許される。
+// 判定は useShiftPermission に集約する。一覧の ADMIN 系ロール（myTeams の role）では判定しない。
+const selectedTeamSlug = computed(
+  () => teamStore.myTeams.find(tm => tm.id === selectedTeamId.value)?.slug ?? null,
 )
-
-const canManage = computed(() => {
-  if (!selectedTeamId.value) return false
-  return manageableTeams.value.some((t) => t.id === selectedTeamId.value)
-})
+const { canManageShift: canManage, canViewShift, isDeputyWithoutManage, isScopeAdmin, loadPermissions } = useShiftPermission(selectedTeamSlug, { autoLoad: false })
 
 // =====================================================
 // フィルタ
@@ -98,8 +94,11 @@ async function load() {
       fromDate.value || undefined,
       toDate.value || undefined,
     )
-    // サマリー（提出状況）は BE が管理者専用のため、管理者のときだけ取得する（会員で 403 を出さない）
-    const summaryEntries = canManage.value
+    // サマリー（提出状況）は BE が管理者の閲覧専用のため、閲覧できる人のときだけ取得する（会員で 403 を出さない）。
+    // 権限の取得失敗は「権限なし」に倒して握りつぶさず、通知する。
+    const perm = await loadPermissions()
+    if (!perm.ok) handleApiError(perm.error)
+    const summaryEntries = perm.ok && canViewShift.value
       ? await Promise.allSettled(
         schedules.value.map(async (s) => {
           const summary = await getRequestSummary(s.id)
@@ -257,6 +256,11 @@ function openDetail(scheduleId: number) {
         />
       </template>
     </PageHeader>
+
+    <!-- MANAGE_SHIFTS を持たない副管理者には、操作できない理由を示す -->
+    <ShiftManageNotice v-if="isDeputyWithoutManage" variant="deputy" />
+    <!-- 管理者が最初に開く画面。副管理者への権限付与の手順を告知する（閉じられる） -->
+    <ShiftManageNotice v-else-if="isScopeAdmin" variant="admin" :team-slug="selectedTeamSlug" />
 
     <!-- フィルタバー -->
     <div class="mb-6 flex flex-wrap items-center gap-3">

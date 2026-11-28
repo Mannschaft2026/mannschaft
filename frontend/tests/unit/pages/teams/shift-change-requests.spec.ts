@@ -46,8 +46,11 @@ mockNuxtImport('useShiftApi', () => () => ({
   withdrawChangeRequest: mocks.withdrawChangeRequest,
 }))
 mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getTeam }))
-mockNuxtImport('useRoleAccess', () => () => ({
-  roleName: computed(() => (mocks.isAdminOrDeputy.value ? 'ADMIN' : 'MEMBER')),
+// 判定本体は useShiftPermission（別 spec で検証済み）。isAdminOrDeputy は「審査できる（管理操作の権限がある）」の意味。
+mockNuxtImport('useShiftPermission', () => () => ({
+  canManageShift: computed(() => mocks.isAdminOrDeputy.value),
+  canViewShift: computed(() => mocks.isAdminOrDeputy.value),
+  isDeputyWithoutManage: computed(() => false),
   loadPermissions: mocks.loadPermissions,
 }))
 mockNuxtImport('useNotification', () => () => ({ success: vi.fn(), error: vi.fn() }))
@@ -99,7 +102,7 @@ beforeEach(() => {
 })
 
 describe('change-requests.vue 審査ボタンの判定（AC-A1 / AC-A2）', () => {
-  it('AC-A1: チーム ADMIN / DEPUTY_ADMIN（useRoleAccess.isAdminOrDeputy）は他人の依頼に承認・却下を見る', async () => {
+  it('AC-A1: チーム ADMIN / MANAGE_SHIFTS 付き DEPUTY_ADMIN（canManageShift）は他人の依頼に承認・却下を見る', async () => {
     mocks.isAdminOrDeputy.value = true
     const wrapper = await mountPage()
     expect(wrapper.find('[data-testid="change-request-approve-1"]').exists()).toBe(true)

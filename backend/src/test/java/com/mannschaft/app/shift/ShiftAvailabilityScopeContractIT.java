@@ -136,12 +136,11 @@ class ShiftAvailabilityScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-4b: user_rolesにのみADMIN行を持ちmembershipsを持たない利用者は200"
-                + "（isMember単独判定では落ちる）")
-        void userRoles限定ADMINは200() throws Exception {
+        @DisplayName("AC-4b（CMP-261125-2114 で改訂）: user_rolesにのみADMIN行を持ちmembershipsを持たない利用者（退会済み）は在籍が無いので403")
+        void userRoles限定ADMINは403() throws Exception {
             setAuth(adminUserRoleOnlyId);
             mockMvc.perform(get(BASE).param("teamId", teamAId.toString()))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
@@ -163,11 +162,12 @@ class ShiftAvailabilityScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-7: SYSTEM_ADMINは所属していなくても200")
-        void SYSTEM_ADMINは200() throws Exception {
+        @DisplayName("AC-7（CMP-261125-2114で改訂）: チームロールを持たないSYSTEM_ADMINは非メンバーと同じ403（特別扱いしない）")
+        void SYSTEM_ADMINは403() throws Exception {
             setAuth(systemAdminId);
             mockMvc.perform(get(BASE).param("teamId", teamAId.toString()))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error.code").value("COMMON_002"));
         }
 
         @Test
@@ -222,13 +222,13 @@ class ShiftAvailabilityScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-4b: user_rolesにのみADMIN行を持ちmembershipsを持たない利用者は200")
-        void userRoles限定ADMINは200() throws Exception {
+        @DisplayName("AC-4b（CMP-261125-2114 で改訂）: user_rolesにのみADMIN行を持ちmembershipsを持たない利用者（退会済み）は在籍が無いので403")
+        void userRoles限定ADMINは403() throws Exception {
             setAuth(adminUserRoleOnlyId);
             mockMvc.perform(put(BASE).param("teamId", teamAId.toString())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(bulkBody())))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
@@ -254,13 +254,17 @@ class ShiftAvailabilityScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-7: SYSTEM_ADMINは所属していなくても200")
-        void SYSTEM_ADMINは200() throws Exception {
+        @DisplayName("AC-7（CMP-261125-2114で改訂）: チームロールを持たないSYSTEM_ADMINは非メンバーと同じ403 かつデータ非変更")
+        void SYSTEM_ADMINは403() throws Exception {
             setAuth(systemAdminId);
             mockMvc.perform(put(BASE).param("teamId", teamAId.toString())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(bulkBody())))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error.code").value("COMMON_002"));
+            assertThat(availabilityRepository
+                    .findByUserIdAndTeamIdOrderByDayOfWeekAscStartTimeAsc(systemAdminId, teamAId))
+                    .isEmpty();
         }
 
         @Test
@@ -371,11 +375,11 @@ class ShiftAvailabilityScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-4b: user_rolesにのみADMIN行を持ちmembershipsを持たない利用者は204")
-        void userRoles限定ADMINは204() throws Exception {
+        @DisplayName("AC-4b（CMP-261125-2114 で改訂）: user_rolesにのみADMIN行を持ちmembershipsを持たない利用者（退会済み）は在籍が無いので403")
+        void userRoles限定ADMINは403() throws Exception {
             setAuth(adminUserRoleOnlyId);
             mockMvc.perform(delete(BASE).param("teamId", teamAId.toString()))
-                    .andExpect(status().isNoContent());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
@@ -397,11 +401,16 @@ class ShiftAvailabilityScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-7: SYSTEM_ADMINは所属していなくても204")
-        void SYSTEM_ADMINは204() throws Exception {
+        @DisplayName("AC-7（CMP-261125-2114で改訂）: チームロールを持たないSYSTEM_ADMINは非メンバーと同じ403 かつデータ非変更")
+        void SYSTEM_ADMINは403() throws Exception {
+            saveAvailability(systemAdminId, teamAId);
             setAuth(systemAdminId);
             mockMvc.perform(delete(BASE).param("teamId", teamAId.toString()))
-                    .andExpect(status().isNoContent());
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error.code").value("COMMON_002"));
+            assertThat(availabilityRepository
+                    .findByUserIdAndTeamIdOrderByDayOfWeekAscStartTimeAsc(systemAdminId, teamAId))
+                    .isNotEmpty();
         }
 
         @Test

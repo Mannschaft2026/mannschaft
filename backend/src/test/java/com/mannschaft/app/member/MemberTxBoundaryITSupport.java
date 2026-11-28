@@ -6,7 +6,6 @@ import com.mannschaft.app.auth.service.AuditLogService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.role.service.DefaultAccessControlService;
 import com.mannschaft.app.common.NameResolverService;
-import com.mannschaft.app.common.visibility.RolePriority;
 import com.mannschaft.app.dashboard.MinRole;
 import com.mannschaft.app.member.entity.MemberProfileEntity;
 import com.mannschaft.app.member.entity.MemberSubtabRoleVisibilityEntity;
@@ -20,6 +19,7 @@ import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
 import com.mannschaft.app.support.test.MembershipTestHelper;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.awaitility.Awaitility;
@@ -408,8 +408,7 @@ abstract class MemberTxBoundaryITSupport extends AbstractMySqlIntegrationTest {
     }
 
     private void seedRole(String name) {
-        jdbc.update("INSERT IGNORE INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                + "VALUES (?, ?, ?, 1, NOW(), NOW())", name, name, RolePriority.priority(name));
+        RoleSeedSupport.ensureCanonical(jdbc, name);
     }
 
     private Long insertUser(String label) {

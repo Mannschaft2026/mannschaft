@@ -11,6 +11,7 @@ import com.mannschaft.app.notification.fanout.NotificationFanoutJobService;
 import com.mannschaft.app.notification.fanout.NotificationFanoutJobStatus;
 import com.mannschaft.app.notification.fanout.NotificationFanoutWorker;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
@@ -263,17 +264,12 @@ class AffiliationFanoutRecipientSourcesIT extends AbstractMySqlIntegrationTest {
 
     /**
      * roles はグローバル参照テーブルで、IT のスキーマは Hibernate 生成のため初期行が無い。
-     * 既存なら再利用し、無ければ入れる（同一 name の二重 INSERT は UNIQUE 違反になるため冪等化する）。
+     * このクラスは @Transactional でなく commit されて残るため、seed と同じ正準 priority で upsert し、
+     * 既存行の誤った priority も直す（後続 IT の認可判定を壊さない。CMP-261126-0906）。
      */
     private void ensureRoles() {
-        int[] priorities = {1, 2, 3};
-        String[] names = {"ADMIN", "DEPUTY_ADMIN", "MEMBER"};
-        for (int i = 0; i < names.length; i++) {
-            Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM roles WHERE name = ?", Integer.class, names[i]);
-            if (count == null || count == 0) {
-                jdbc.update("INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                        + "VALUES (?, ?, ?, 1, NOW(), NOW())", names[i], names[i], priorities[i]);
-            }
+        for (String name : new String[] {"ADMIN", "DEPUTY_ADMIN", "MEMBER"}) {
+            RoleSeedSupport.ensureCanonical(jdbc, name);
         }
     }
 

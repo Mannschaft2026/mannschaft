@@ -17,6 +17,7 @@ import com.mannschaft.app.role.entity.UserPermissionGroupEntity;
 import com.mannschaft.app.role.entity.UserRoleEntity;
 import com.mannschaft.app.shiftbudget.service.ThresholdAlertEvaluationService;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import com.mannschaft.app.team.entity.TeamEntity;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -124,28 +125,20 @@ class PermissionGroupScopeIntegrationTest extends AbstractMySqlIntegrationTest {
         return user.getId();
     }
 
-    private Long persistRoleIfNeeded(String name, int priority) {
-        List<?> found = em.createNativeQuery("SELECT id FROM roles WHERE name = :name")
-                .setParameter("name", name)
-                .getResultList();
-        if (!found.isEmpty()) {
-            return ((Number) found.get(0)).longValue();
-        }
-        RoleEntity role = RoleEntity.builder()
-                .name(name)
-                .displayName(name)
-                .priority(priority)
-                .isSystem(true)
-                .build();
-        em.persist(role);
-        em.flush();
-        return role.getId();
+    /**
+     * roles を正準 priority で用意して id を返す。一部のテストは NOT_SUPPORTED で commit されるため、
+     * 誤った priority を残さないよう ensureCanonical で既存行も直す（CMP-261126-0906）。
+     */
+    private Long persistRoleIfNeeded(String name) {
+        RoleSeedSupport.ensureCanonical(em, name);
+        return ((Number) em.createNativeQuery("SELECT id FROM roles WHERE name = :name")
+                .setParameter("name", name).getSingleResult()).longValue();
     }
 
-    private void grantOrgRole(Long userId, Long organizationId, String roleName, int priority) {
+    private void grantOrgRole(Long userId, Long organizationId, String roleName) {
         UserRoleEntity ur = UserRoleEntity.builder()
                 .userId(userId)
-                .roleId(persistRoleIfNeeded(roleName, priority))
+                .roleId(persistRoleIfNeeded(roleName))
                 .organizationId(organizationId)
                 .build();
         em.persist(ur);
@@ -153,7 +146,7 @@ class PermissionGroupScopeIntegrationTest extends AbstractMySqlIntegrationTest {
     }
 
     private void addMembership(Long userId, Long organizationId, RoleKind roleKind) {
-        persistRoleIfNeeded(roleKind.name(), roleKind == RoleKind.MEMBER ? 4 : 5);
+        persistRoleIfNeeded(roleKind.name());
         MembershipEntity ms = MembershipEntity.builder()
                 .userId(userId)
                 .scopeType(ScopeType.ORGANIZATION)
@@ -257,7 +250,7 @@ class PermissionGroupScopeIntegrationTest extends AbstractMySqlIntegrationTest {
         Long budgetAdminPermissionId = persistPermission(BUDGET_ADMIN);
 
         Long admin = persistActiveUser();
-        grantOrgRole(admin, orgId, "ADMIN", 2);
+        grantOrgRole(admin, orgId, "ADMIN");
 
         // 権限グループ経由で BUDGET_ADMIN を持つ非役職者。
         // ADMIN / DEPUTY_ADMIN にすると findAdminUserIdsByOrganizationId 側だけで拾えてしまい、
@@ -288,7 +281,7 @@ class PermissionGroupScopeIntegrationTest extends AbstractMySqlIntegrationTest {
         persistPermission(BUDGET_ADMIN);
 
         Long admin = persistActiveUser();
-        grantOrgRole(admin, orgId, "ADMIN", 2);
+        grantOrgRole(admin, orgId, "ADMIN");
         Long member = persistActiveUser();
         addMembership(member, orgId, RoleKind.MEMBER);
         flushClear();
@@ -318,9 +311,9 @@ class PermissionGroupScopeIntegrationTest extends AbstractMySqlIntegrationTest {
         Long orgB = persistOrganization();
 
         Long adminOfA = persistActiveUser();
-        grantOrgRole(adminOfA, orgA, "ADMIN", 2);
+        grantOrgRole(adminOfA, orgA, "ADMIN");
         Long targetUser = persistActiveUser();
-        grantOrgRole(targetUser, orgA, "DEPUTY_ADMIN", 3);
+        grantOrgRole(targetUser, orgA, "DEPUTY_ADMIN");
 
         // B 社の権限グループ（A 社の ADMIN には触れる権限が無いはず）
         Long groupOfB = persistOrgPermissionGroup(orgB);
@@ -355,9 +348,9 @@ class PermissionGroupScopeIntegrationTest extends AbstractMySqlIntegrationTest {
         Long orgA = persistOrganization();
 
         Long adminOfA = persistActiveUser();
-        grantOrgRole(adminOfA, orgA, "ADMIN", 2);
+        grantOrgRole(adminOfA, orgA, "ADMIN");
         Long targetUser = persistActiveUser();
-        grantOrgRole(targetUser, orgA, "DEPUTY_ADMIN", 3);
+        grantOrgRole(targetUser, orgA, "DEPUTY_ADMIN");
         Long groupOfA = persistOrgPermissionGroup(orgA);
         flushClear();
 
@@ -380,9 +373,9 @@ class PermissionGroupScopeIntegrationTest extends AbstractMySqlIntegrationTest {
     void cmp048_duplicateGroupIdsCreateOneAssignment() {
         Long orgId = persistOrganization();
         Long admin = persistActiveUser();
-        grantOrgRole(admin, orgId, "ADMIN", 2);
+        grantOrgRole(admin, orgId, "ADMIN");
         Long targetUser = persistActiveUser();
-        grantOrgRole(targetUser, orgId, "DEPUTY_ADMIN", 3);
+        grantOrgRole(targetUser, orgId, "DEPUTY_ADMIN");
         Long groupId = persistOrgPermissionGroup(orgId);
         flushClear();
 
@@ -438,9 +431,9 @@ class PermissionGroupScopeIntegrationTest extends AbstractMySqlIntegrationTest {
             Long orgA = persistOrganization();
             Long orgB = persistOrganization();
             Long adminOfA = persistActiveUser();
-            grantOrgRole(adminOfA, orgA, "ADMIN", 2);
+            grantOrgRole(adminOfA, orgA, "ADMIN");
             Long targetUser = persistActiveUser();
-            grantOrgRole(targetUser, orgA, "DEPUTY_ADMIN", 3);
+            grantOrgRole(targetUser, orgA, "DEPUTY_ADMIN");
             Long groupOfA = persistOrgPermissionGroup(orgA);
             Long groupOfB = persistOrgPermissionGroup(orgB);
             // 被害者は既に自組織の正当な権限束を持っている
@@ -565,7 +558,7 @@ class PermissionGroupScopeIntegrationTest extends AbstractMySqlIntegrationTest {
             Long otherScopeId = persistUpdateScope(scopeType);
             Long adminId = persistActiveUser();
             em.persist(UserRoleEntity.builder().userId(adminId)
-                    .roleId(persistRoleIfNeeded("ADMIN", 2))
+                    .roleId(persistRoleIfNeeded("ADMIN"))
                     .teamId(scopeType == ScopeType.TEAM ? scopeId : null)
                     .organizationId(scopeType == ScopeType.ORGANIZATION ? scopeId : null).build());
             em.persist(MembershipEntity.builder().userId(adminId).scopeType(scopeType)
@@ -689,7 +682,7 @@ class PermissionGroupScopeIntegrationTest extends AbstractMySqlIntegrationTest {
 
         // 宛先 1 名の組織
         Long soloAdmin = persistActiveUser();
-        grantOrgRole(soloAdmin, smallOrg, "ADMIN", 2);
+        grantOrgRole(soloAdmin, smallOrg, "ADMIN");
 
         // 宛先 10 名の組織（ADMIN 5 名 + 権限グループ経由の BUDGET_ADMIN 保有者 5 名）。
         // 後者は GUEST ロールにして、権限グループ経路でしか宛先に入らないようにする。
@@ -697,7 +690,7 @@ class PermissionGroupScopeIntegrationTest extends AbstractMySqlIntegrationTest {
         addPermissionToGroup(largeGroupId, budgetAdminPermissionId);
         for (int i = 0; i < 5; i++) {
             Long admin = persistActiveUser();
-            grantOrgRole(admin, largeOrg, "ADMIN", 2);
+            grantOrgRole(admin, largeOrg, "ADMIN");
             Long holder = persistActiveUser();
             addMembership(holder, largeOrg, RoleKind.MEMBER);
             assignGroupToUser(holder, largeGroupId);

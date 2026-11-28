@@ -69,7 +69,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.never;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -132,6 +131,10 @@ class ShiftScheduleSlotFacadeRaceAndQueryIT extends AbstractMySqlIntegrationTest
     @MockitoSpyBean
     @SuppressWarnings("unused")
     private ScopeConcealingAccessGate gate;
+    /** 同上（CMP-261125-2114）: 他の W2 系 IT が足した {@code ShiftManageAccessGate} の spy も揃えて、コンテキストを共有する。 */
+    @MockitoSpyBean
+    @SuppressWarnings("unused")
+    private com.mannschaft.app.shift.service.ShiftManageAccessGate manageGate;
 
     @PersistenceContext
     private EntityManager em;
@@ -329,6 +332,9 @@ class ShiftScheduleSlotFacadeRaceAndQueryIT extends AbstractMySqlIntegrationTest
             return result;
         };
         Mockito.doAnswer(afterReal).when(accessControlService).isAdminOrAbove(any(), any(), any());
+        // CMP-261125-2114: 管理操作の判定は hasAdminOrPermissionInScope（ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN）。
+        Mockito.doAnswer(afterReal).when(accessControlService)
+                .hasAdminOrPermissionInScope(any(), any(), any(), any());
         Mockito.doAnswer(afterReal).when(accessControlService).isMember(any(), any(), any());
         Mockito.doAnswer(afterReal).when(accessControlService).isSupporter(any(), any(), any());
         Mockito.doAnswer(afterReal).when(accessControlService).checkAdminOrAbove(any(), any(), any());
@@ -569,9 +575,7 @@ class ShiftScheduleSlotFacadeRaceAndQueryIT extends AbstractMySqlIntegrationTest
             m.print(w.name());
         }
         assertThat(m.status).isEqualTo(w.status);
-        assertThat(m.authzSql).as("認可のクエリ数は是正前（isSystemAdmin＋isAdminOrAbove 単体）と同じ").isEqualTo(baseline);
-        // 在籍判定は拒否経路だけ（許可経路では足さない）。
-        Mockito.verify(accessControlService, never()).isMember(any(), any(), any());
+        assertThat(m.authzSql).as("認可のクエリ数は管理判定（hasAdminOrPermissionInScope＋在籍 isMember）と同じ").isEqualTo(baseline);
         assertThat(m.beforeAuthz().stream().filter(ShiftScheduleSlotFacadeRaceAndQueryIT::isForUpdate).toList())
                 .as("認可の前に FOR UPDATE を発行しない").isEmpty();
         for (String table : w.scopeTables) {
@@ -617,11 +621,14 @@ class ShiftScheduleSlotFacadeRaceAndQueryIT extends AbstractMySqlIntegrationTest
         }
     }
 
-    /** 是正前の管理者判定（isSystemAdmin＋isAdminOrAbove の単体）のクエリ数。初回コストを外すため 1 度流してから測る。 */
+    /**
+     * 管理判定（hasAdminOrPermissionInScope＋在籍 isMember。CMP-261125-2114 で是正前の isSystemAdmin＋isAdminOrAbove から置換、
+     * ADMIN にも在籍を要求）のクエリ数。初回コストを外すため 1 度流してから測る。
+     */
     private long adminCheckBaseline() {
         Runnable check = () -> {
-            accessControlService.isSystemAdmin(adminId);
-            accessControlService.isAdminOrAbove(adminId, teamId, "TEAM");
+            accessControlService.hasAdminOrPermissionInScope(adminId, teamId, "TEAM", "MANAGE_SHIFTS");
+            accessControlService.isMember(adminId, teamId, "TEAM");
         };
         long baseline = countSql(check);
         assertThat(baseline).as("SQL 記録が有効であること").isPositive();
@@ -718,6 +725,7 @@ class ShiftScheduleSlotFacadeRaceAndQueryIT extends AbstractMySqlIntegrationTest
         };
         Mockito.doAnswer(wrap).when(accessControlService).isSystemAdmin(any());
         Mockito.doAnswer(wrap).when(accessControlService).isAdminOrAbove(any(), any(), any());
+        Mockito.doAnswer(wrap).when(accessControlService).hasAdminOrPermissionInScope(any(), any(), any(), any());
         Mockito.doAnswer(wrap).when(accessControlService).isMember(any(), any(), any());
         Mockito.doAnswer(wrap).when(accessControlService).isSupporter(any(), any(), any());
         Mockito.doAnswer(wrap).when(accessControlService).checkAdminOrAbove(any(), any(), any());

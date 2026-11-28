@@ -10,6 +10,7 @@ import Button from 'primevue/button'
 import Textarea from 'primevue/textarea'
 import Page from './change-requests.vue'
 import PageHeader from '~/components/PageHeader.vue'
+import ShiftManageNotice from '~/components/shift/ShiftManageNotice.vue'
 import ShiftChangeRequestList from '~/components/shift/ShiftChangeRequestList.vue'
 import type { ChangeRequest, ChangeRequestStatus } from '~/types/shift'
 
@@ -33,8 +34,9 @@ function request(status: ChangeRequestStatus = 'OPEN', id = 7): ChangeRequest {
     version: 0,
   }
 }
-function permissions(roleName: string | null, scopeAdmin = false) {
-  return { data: { roleName, scopeAdmin, permissions: [] } }
+// BE の /me/permissions 相当。scopeAdmin は ADMIN 割当がある人だけ true。MANAGE_SHIFTS は DEPUTY_ADMIN に権限グループで付与された場合だけ入る。
+function permissions(roleName: string | null, scopeAdmin = false, granted: string[] = []) {
+  return { data: { roleName, scopeAdmin, permissions: granted } }
 }
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -42,6 +44,7 @@ function deferred<T>() {
   return { promise, resolve }
 }
 let role: string | null
+let deputyManage: boolean
 let rows: ChangeRequest[]
 let permissionError: boolean
 let listError: boolean
@@ -50,8 +53,12 @@ let reviewFailure: unknown
 let wrapper: VueWrapper | undefined
 function respond(url: string, options?: { body?: { decision: ChangeRequestStatus } }) {
   if (url.endsWith('/me/permissions')) {
-    return permissionError ? Promise.reject(new Error('permissions unavailable')) : Promise.resolve(permissions(role, true))
+    return permissionError
+      ? Promise.reject(new Error('permissions unavailable'))
+      : Promise.resolve(permissions(role, role === 'ADMIN', role === 'DEPUTY_ADMIN' && deputyManage ? ['MANAGE_SHIFTS'] : []))
   }
+  // MANAGE_SHIFTS 無しの副管理者の閲覧切替（既定 OFF）
+  if (url.endsWith('/shift-settings')) return Promise.resolve({ deputyShiftViewEnabled: false, deputyHourlyRateViewEnabled: false })
   // PR 版の page が呼ぶシフト表・チーム取得（チーム一致検証）。teamId と numericId を一致させる。
   if (/\/shifts\/schedules\/\d+$/.test(url)) return Promise.resolve({ data: { id: 425, teamId: 12, status: { status: 'COLLECTING' } } })
   if (/\/api\/v1\/teams\/[^/]+$/.test(url)) return Promise.resolve({ data: { numericId: 12 } })
@@ -70,13 +77,14 @@ function respond(url: string, options?: { body?: { decision: ChangeRequestStatus
 function renderPage() {
   wrapper = mount(Page, { global: {
     plugins: [[PrimeVue, { unstyled: true }]],
-    components: { ShiftChangeRequestList, DataTable, Column, Button },
+    components: { ShiftChangeRequestList, ShiftManageNotice, DataTable, Column, Button },
     mocks: { $t: (key: string) => key },
     stubs: {
       ShiftChangeRequestForm: true, PageHeader: true,
       SectionCard: { template: '<section><slot /></section>' },
       NuxtLink: { template: '<a><slot /></a>' },
       Tag: true, Textarea: true, PageLoading: true,
+      Message: { template: '<div><slot /></div>' },
       DashboardErrorState: { template: '<div data-testid="change-request-load-error" />' },
       Dialog: { props: ['visible'], template: '<div v-if="visible" data-testid="review-dialog"><slot /><slot name="footer" /></div>' },
     },
@@ -95,6 +103,7 @@ beforeEach(() => {
   params.scheduleId = '425'
   auth.user = { id: 1, systemRole: 'MEMBER' }
   role = 'ADMIN'
+  deputyManage = true
   rows = [request()]
   permissionError = false
   listError = false
@@ -156,14 +165,25 @@ describe('変更依頼のチーム権限による審査UI（CMP1432-A）', () =>
     expect(table.props('scrollable')).toBe(true)
   })
 
-  it('AC2 DEPUTY_ADMINも審査ボタンを表示する', async () => {
+  it('AC2 MANAGE_SHIFTS を持つ DEPUTY_ADMIN は審査ボタンを表示する', async () => {
     role = 'DEPUTY_ADMIN'
+    deputyManage = true
     renderPage()
     await flushPromises()
     expect(reviewButtons()).toHaveLength(2)
   })
 
-  it.each(['MEMBER', 'SUPPORTER', 'GUEST', null, 'SYSTEM_ADMIN'])('AC2 %sはscopeAdmin=trueでも表示しない（既存UI契約）', async (currentRole) => {
+  it('CMP-261125-2114: MANAGE_SHIFTS 無しの DEPUTY_ADMIN には審査ボタンを出さず、操作できない理由を案内する', async () => {
+    role = 'DEPUTY_ADMIN'
+    deputyManage = false
+    renderPage()
+    await flushPromises()
+    expect(reviewButtons()).toHaveLength(0)
+    expect(wrapper!.find('[data-testid="shift-manage-notice-deputy"]').exists()).toBe(true)
+    expect(wrapper!.text()).toContain('shift.permission.noManagePermission')
+  })
+
+  it.each(['MEMBER', 'SUPPORTER', 'GUEST', null, 'SYSTEM_ADMIN'])('AC2 %s は審査ボタンを表示しない（SYSTEM_ADMIN も特別扱いしない）', async (currentRole) => {
     role = currentRole
     renderPage()
     await flushPromises()
@@ -193,7 +213,7 @@ describe('変更依頼のチーム権限による審査UI（CMP1432-A）', () =>
     role = 'MEMBER'
     params.slug = 'team-b'
     await flushPromises()
-    old.resolve(permissions('ADMIN'))
+    old.resolve(permissions('ADMIN', true))
     await flushPromises()
     expect(reviewButtons()).toHaveLength(0)
   })
@@ -224,7 +244,7 @@ describe('変更依頼のチーム権限による審査UI（CMP1432-A）', () =>
     renderPage()
     await flushPromises()
     expect(reviewButtons()).toHaveLength(0)
-    pending.resolve(permissions('ADMIN'))
+    pending.resolve(permissions('ADMIN', true))
     await flushPromises()
     expect(reviewButtons()).toHaveLength(0)
   })

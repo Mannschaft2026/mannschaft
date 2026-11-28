@@ -7,6 +7,7 @@ import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.common.ScopeConcealingAccessGate;
+import com.mannschaft.app.shift.service.ShiftManageAccessGate;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.shift.entity.ShiftPositionEntity;
@@ -134,6 +135,9 @@ class ShiftRequestPositionFacadeRaceAndQueryIT extends AbstractMySqlIntegrationT
     /** 認可の「後」に割り込むための spy（実処理は呼んだ上で、直後にフックを走らせる）。 */
     @MockitoSpyBean
     private ScopeConcealingAccessGate gate;
+    /** シフト管理の判定（CMP-261125-2114）。管理操作・閲覧の認可の「後」に割り込むための spy。 */
+    @MockitoSpyBean
+    private ShiftManageAccessGate manageGate;
     @MockitoSpyBean
     private AccessControlService accessControlService;
 
@@ -210,7 +214,9 @@ class ShiftRequestPositionFacadeRaceAndQueryIT extends AbstractMySqlIntegrationT
 
     /** 親を消すタイミング（= どの認可呼び出しの「直後」か）と、何を消すか。 */
     private enum Hook {
-        GATE_MEMBER, GATE_ADMIN, GATE_OWNER_OR_ADMIN
+        GATE_MEMBER, GATE_ADMIN, GATE_OWNER_OR_ADMIN,
+        /** 閲覧扱い（希望一覧・サマリー）の認可。 */
+        GATE_VIEW
     }
 
     private enum Victim {
@@ -236,11 +242,11 @@ class ShiftRequestPositionFacadeRaceAndQueryIT extends AbstractMySqlIntegrationT
     static Stream<RaceCase> raceCases() {
         return Stream.of(
                 // --- シフト希望（親スケジュールが消える） ---
-                new RaceCase("希望一覧（管理者）", Hook.GATE_ADMIN, Victim.SCHEDULE,
+                new RaceCase("希望一覧（管理者）", Hook.GATE_VIEW, Victim.SCHEDULE,
                         ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND,
                         t -> new Req(t.adminId, get("/api/v1/shifts/requests")
                                 .param("scheduleId", String.valueOf(t.scheduleId)))),
-                new RaceCase("希望サマリー（管理者）", Hook.GATE_ADMIN, Victim.SCHEDULE,
+                new RaceCase("希望サマリー（管理者）", Hook.GATE_VIEW, Victim.SCHEDULE,
                         ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND,
                         t -> new Req(t.adminId, get("/api/v1/shifts/requests/summary")
                                 .param("scheduleId", String.valueOf(t.scheduleId)))),
@@ -335,12 +341,14 @@ class ShiftRequestPositionFacadeRaceAndQueryIT extends AbstractMySqlIntegrationT
             return result;
         };
         switch (hook) {
-            case GATE_MEMBER -> Mockito.doAnswer(afterReal).when(gate)
-                    .requireMemberOrConceal(any(), any(), any(), any(), anyBoolean());
-            case GATE_ADMIN -> Mockito.doAnswer(afterReal).when(gate)
-                    .requireAdminOrConceal(any(), any(), any(), any());
-            case GATE_OWNER_OR_ADMIN -> Mockito.doAnswer(afterReal).when(gate)
-                    .requireOwnerOrAdminOrConceal(any(), any(), any(), any(), any());
+            case GATE_MEMBER -> Mockito.doAnswer(afterReal).when(manageGate)
+                    .requireMemberOrConceal(any(), any(), any(), anyBoolean());
+            case GATE_ADMIN -> Mockito.doAnswer(afterReal).when(manageGate)
+                    .requireManageOrConceal(any(), any(), any());
+            case GATE_VIEW -> Mockito.doAnswer(afterReal).when(manageGate)
+                    .requireViewOrConceal(any(), any(), any());
+            case GATE_OWNER_OR_ADMIN -> Mockito.doAnswer(afterReal).when(manageGate)
+                    .requireOwnerOrManageOrConceal(any(), any(), any(), any());
         }
     }
 
@@ -467,10 +475,10 @@ class ShiftRequestPositionFacadeRaceAndQueryIT extends AbstractMySqlIntegrationT
         Long r2 = newRequest(memberId, LocalDate.of(2026, 3, 3));
         Long r3 = newRequest(memberId, LocalDate.of(2026, 3, 4));
         // JIT・キャッシュの初回コストを測定から外す（同種の呼び出しを 1 回流しておく）
-        gate.requireOwnerOrAdminOrConceal(adminId, teamId, "TEAM", memberId, ShiftErrorCode.SHIFT_REQUEST_NOT_FOUND);
+        manageGate.requireOwnerOrManageOrConceal(adminId, teamId, memberId, ShiftErrorCode.SHIFT_REQUEST_NOT_FOUND);
 
-        long gateQueries = countStatements(() -> gate.requireOwnerOrAdminOrConceal(
-                adminId, teamId, "TEAM", memberId, ShiftErrorCode.SHIFT_REQUEST_NOT_FOUND));
+        long gateQueries = countStatements(() -> manageGate.requireOwnerOrManageOrConceal(
+                adminId, teamId, memberId, ShiftErrorCode.SHIFT_REQUEST_NOT_FOUND));
         long scopeQueries = countStatements(() -> requestService.resolveRequestScope(r1));
         long bodyQueries = countStatements(() -> requestService.deleteRequest(r2));
         long facadeQueries = countStatements(() -> requestFacade.deleteRequest(r3, adminId));
@@ -493,10 +501,10 @@ class ShiftRequestPositionFacadeRaceAndQueryIT extends AbstractMySqlIntegrationT
         Long p2 = newPosition();
         Long p3 = newPosition();
         UpdatePositionRequest req = new UpdatePositionRequest(null, 7, null);
-        gate.requireAdminOrConceal(adminId, teamId, "TEAM", ShiftErrorCode.SHIFT_POSITION_NOT_FOUND);
+        manageGate.requireManageOrConceal(adminId, teamId, ShiftErrorCode.SHIFT_POSITION_NOT_FOUND);
 
         long gateQueries = countStatements(() ->
-                gate.requireAdminOrConceal(adminId, teamId, "TEAM", ShiftErrorCode.SHIFT_POSITION_NOT_FOUND));
+                manageGate.requireManageOrConceal(adminId, teamId, ShiftErrorCode.SHIFT_POSITION_NOT_FOUND));
         long scopeQueries = countStatements(() -> positionService.resolvePositionScope(p1));
         long bodyQueries = countStatements(() -> positionService.updatePosition(p2, req));
         long facadeQueries = countStatements(() -> positionFacade.updatePosition(p3, req, adminId));

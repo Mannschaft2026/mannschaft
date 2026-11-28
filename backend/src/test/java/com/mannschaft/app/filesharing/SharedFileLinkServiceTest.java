@@ -83,7 +83,7 @@ class SharedFileLinkServiceTest {
             given(fileService.getFileForSharedLink(FILE_ID)).willReturn(fileResponse);
 
             // When
-            FileResponse result = sharedFileLinkService.accessLink("valid-token", null);
+            com.mannschaft.app.filesharing.dto.PublicFileLinkResponse result = sharedFileLinkService.accessLinkPublic("valid-token", null);
 
             // Then
             assertThat(result.getName()).isEqualTo("test.pdf");
@@ -101,7 +101,7 @@ class SharedFileLinkServiceTest {
             given(linkRepository.findByTokenHash(HASHER.hash("expired-token"))).willReturn(Optional.of(link));
 
             // When & Then
-            assertThatThrownBy(() -> sharedFileLinkService.accessLink("expired-token", null))
+            assertThatThrownBy(() -> sharedFileLinkService.accessLinkPublic("expired-token", null))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(FileSharingErrorCode.LINK_EXPIRED));
@@ -121,7 +121,7 @@ class SharedFileLinkServiceTest {
             given(passwordEncoder.matches("wrong", "encoded_pw")).willReturn(false);
 
             // When & Then
-            assertThatThrownBy(() -> sharedFileLinkService.accessLink("pw-token", request))
+            assertThatThrownBy(() -> sharedFileLinkService.accessLinkPublic("pw-token", request))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(FileSharingErrorCode.LINK_PASSWORD_INVALID));
@@ -134,7 +134,7 @@ class SharedFileLinkServiceTest {
             given(linkRepository.findByTokenHash(HASHER.hash("unknown"))).willReturn(Optional.empty());
 
             // When & Then
-            assertThatThrownBy(() -> sharedFileLinkService.accessLink("unknown", null))
+            assertThatThrownBy(() -> sharedFileLinkService.accessLinkPublic("unknown", null))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(FileSharingErrorCode.LINK_NOT_FOUND));

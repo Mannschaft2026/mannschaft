@@ -469,16 +469,11 @@ com.mannschaft.app.service.service.ServiceRecordTemplateService#listTeamTemplate
 com.mannschaft.app.shift.service.MemberWorkConstraintService#getConstraint
 com.mannschaft.app.shift.service.MemberWorkConstraintService#getTeamDefault
 com.mannschaft.app.shift.service.ShiftAvailabilityService#checkTeamAccess
-com.mannschaft.app.shift.service.ShiftChangeRequestFacade#create
-com.mannschaft.app.shift.service.ShiftChangeRequestFacade#list
-com.mannschaft.app.shift.service.ShiftChangeRequestFacade#withdraw
 com.mannschaft.app.shift.service.ShiftHourlyRateAuthorizer#checkHourlyRateAccess
 com.mannschaft.app.shift.service.ShiftHourlyRateAuthorizer#checkHourlyRateWriteAccess
 com.mannschaft.app.shift.service.ShiftPdfFacade#authorize
 com.mannschaft.app.shift.service.ShiftPositionFacade#checkTeamMemberAccess
-com.mannschaft.app.shift.service.ShiftScheduleFacade#getSchedule
 com.mannschaft.app.shift.service.ShiftScheduleFacade#listSchedules
-com.mannschaft.app.shift.service.ShiftSlotFacade#listSlots
 com.mannschaft.app.shift.service.ShiftSwapFacade#checkListAccessAndIsPrivileged
 com.mannschaft.app.shift.service.ShiftSwapFacade#resolveSwapRequest
 

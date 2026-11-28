@@ -41,7 +41,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
  *   <li>越境（所属していない）は不在と同じ 404 SHIFT_001（是正前から。tx 本体の認可に頼らず Facade が畳む）</li>
  *   <li>user_roles のみの ADMIN は是正前から 403（許可を広げない）</li>
  *   <li>メンバー（非 SUPPORTER）は通り、tx 本体へ privileged=false を渡す</li>
- *   <li>SYSTEM_ADMIN は短絡して通り、privileged=true を渡す</li>
+ *   <li>チームロールを持たない SYSTEM_ADMIN は短絡せず、部外者と同じ 404（CMP-261125-2114）</li>
  *   <li>未公開は SUPPORTER にも 403 でなく 404（認可結果より先に隠す）</li>
  * </ol>
  */
@@ -80,9 +80,26 @@ class ShiftPdfFacadeAuthzTest {
         private ShiftPdfService pdfService;
         @Mock
         private AccessControlService accessControlService;
+        /** CMP-261125-2114: 管理者の形（ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN、閲覧切替 ON の DEPUTY_ADMIN）かの判定。 */
+        @Mock
+        private ShiftManageAccessGate manageGate;
 
         @InjectMocks
         private ShiftPdfFacade facade;
+
+        /**
+         * 在籍の判定（ゲートの requireMemberOrConceal）は accessControlService.isMember を見て、在籍していなければ
+         * 越境として不在コードを投げる形に委譲する（ゲート自体の所属判定・403 の作り分けは ShiftManageAccessGate の単体テストと IT で検証する）。
+         */
+        @org.junit.jupiter.api.BeforeEach
+        void wireMemberCheck() {
+            org.mockito.Mockito.lenient().doAnswer(inv -> {
+                if (!accessControlService.isMember(inv.getArgument(0), inv.getArgument(1), "TEAM")) {
+                    throw new BusinessException((ErrorCode) inv.getArgument(2));
+                }
+                return null;
+            }).when(manageGate).requireMemberOrConceal(any(), any(), any());
+        }
 
         @Test
         @DisplayName("越境（所属していない）は不在と同じ 404 SHIFT_001 で、tx 本体を呼ばない")
@@ -153,7 +170,7 @@ class ShiftPdfFacadeAuthzTest {
         @DisplayName("user_roles のみの ADMIN（在籍なし）は是正前どおり 403（許可を広げない）")
         void userRolesのみのADMINは403() {
             given(scheduleService.resolveScope(SCHEDULE_ID)).willReturn(publishedScope());
-            given(accessControlService.isAdminOrAbove(REQUESTER, TEAM_ID, "TEAM")).willReturn(true);
+            given(manageGate.canView(REQUESTER, TEAM_ID)).willReturn(true);
             given(accessControlService.isMember(REQUESTER, TEAM_ID, "TEAM")).willReturn(false);
 
             Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(
@@ -181,7 +198,7 @@ class ShiftPdfFacadeAuthzTest {
             byte[] expected = {0x25, 0x50, 0x44, 0x46};
             given(scheduleService.resolveScope(SCHEDULE_ID))
                     .willReturn(scope(ShiftScheduleStatus.DRAFT, null));
-            given(accessControlService.isAdminOrAbove(REQUESTER, TEAM_ID, "TEAM")).willReturn(true);
+            given(manageGate.canView(REQUESTER, TEAM_ID)).willReturn(true);
             given(accessControlService.isMember(REQUESTER, TEAM_ID, "TEAM")).willReturn(true);
             given(accessControlService.isSupporter(REQUESTER, TEAM_ID, "TEAM")).willReturn(false);
             given(pdfService.generatePersonalPdf(SCHEDULE_ID, REQUESTER, true)).willReturn(expected);
@@ -190,17 +207,33 @@ class ShiftPdfFacadeAuthzTest {
         }
 
         @Test
-        @DisplayName("SYSTEM_ADMIN は短絡して通り、チーム判定を撃たず privileged=true を渡す")
-        void SYSTEM_ADMINは短絡で通る() {
+        @DisplayName("CMP-261125-2114: チームロールを持たない SYSTEM_ADMIN は短絡せず、部外者と同じ 404 SHIFT_001（SYSTEM_ADMIN 判定を撃たない）")
+        void SYSTEM_ADMINは短絡で通らない() {
+            given(scheduleService.resolveScope(SCHEDULE_ID))
+                    .willReturn(scope(ShiftScheduleStatus.DRAFT, null));
+            given(manageGate.canView(REQUESTER, TEAM_ID)).willReturn(false);
+            given(accessControlService.isMember(REQUESTER, TEAM_ID, "TEAM")).willReturn(false);
+
+            Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(
+                    () -> facade.generateTeamPdf(SCHEDULE_ID, REQUESTER));
+
+            assertCode(thrown, ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
+            verify(accessControlService, never()).isSystemAdmin(anyLong());
+            verifyNoInteractions(pdfService);
+        }
+
+        @Test
+        @DisplayName("CMP-261125-2114: 閲覧切替 ON の DEPUTY_ADMIN（canView が真）は管理者の形で通り、privileged=true を渡す")
+        void 切替ONの副管理者は管理者の形で通る() {
             byte[] expected = {0x25, 0x50, 0x44, 0x46};
             given(scheduleService.resolveScope(SCHEDULE_ID))
                     .willReturn(scope(ShiftScheduleStatus.DRAFT, null));
-            given(accessControlService.isSystemAdmin(REQUESTER)).willReturn(true);
+            given(manageGate.canView(REQUESTER, TEAM_ID)).willReturn(true);
+            given(accessControlService.isMember(REQUESTER, TEAM_ID, "TEAM")).willReturn(true);
+            given(accessControlService.isSupporter(REQUESTER, TEAM_ID, "TEAM")).willReturn(false);
             given(pdfService.generateTeamPdf(SCHEDULE_ID, REQUESTER, true)).willReturn(expected);
 
             assertThat(facade.generateTeamPdf(SCHEDULE_ID, REQUESTER)).isEqualTo(expected);
-            verify(accessControlService, never()).isMember(anyLong(), anyLong(), any());
-            verify(accessControlService, never()).isAdminOrAbove(anyLong(), anyLong(), any());
         }
     }
 

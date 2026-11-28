@@ -4,7 +4,6 @@ import com.mannschaft.app.auth.service.UserStatusLookupService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
-import com.mannschaft.app.common.ScopeConcealingAccessGate;
 import com.mannschaft.app.shift.ShiftErrorCode;
 import com.mannschaft.app.shift.dto.BulkCreateShiftSlotRequest;
 import com.mannschaft.app.shift.dto.CreateShiftSlotRequest;
@@ -33,9 +32,11 @@ import java.util.List;
  * 部外者(越境)              404 SHIFT_001       404 SHIFT_001              404 SHIFT_002
  * 同チーム SUPPORTER        403 COMMON_002      403 COMMON_002             403 COMMON_002
  * 同チーム一般メンバー      200(公開済みのみ)   403 COMMON_002             403 COMMON_002
- * チーム ADMIN/DEPUTY_ADMIN 200                 201                        200/204
+ * ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN  200   201                        200/204
+ * MANAGE_SHIFTS 無しの DEPUTY_ADMIN  一覧は切替OFF=一般メンバーと同じ／閲覧切替ON=管理者の形。作成等は 403 COMMON_002
  * user_roles のみの ADMIN   200                 201                        200/204
- * SYSTEM_ADMIN(非/メンバー) 200                 201                        200/204
+ * user_roles のみの DEPUTY_ADMIN（MANAGE_SHIFTS 無し・切替 OFF） 403 COMMON_002（所属者。越境の 404 にはしない）  403 COMMON_002  403 COMMON_002
+ * SYSTEM_ADMIN(チームロール無し) 部外者と同じ（CMP-261125-2114: SYSTEM_ADMIN を特別扱いしない）
  * （枠間移動 POST /slots/{slotId}/assignments/move は「更新/割当/削除」列と同じ。移動先の不在・別シフト表・
  *  別チームも 404 SHIFT_002。CMP-261010-1432）
  * 対象不在                  404 SHIFT_001       404 SHIFT_001              404 SHIFT_002
@@ -51,7 +52,7 @@ public class ShiftSlotFacade {
     private static final String TEAM = "TEAM";
 
     private final ShiftSlotService slotService;
-    private final ScopeConcealingAccessGate accessGate;
+    private final ShiftManageAccessGate manageGate;
     private final AccessControlService accessControlService;
     private final UserStatusLookupService userStatusLookupService;
 
@@ -64,14 +65,12 @@ public class ShiftSlotFacade {
      */
     public List<ShiftSlotResponse> listSlots(Long scheduleId, Long userId) {
         ShiftScheduleScope scope = slotService.resolveScheduleScope(scheduleId);
-        boolean privileged = accessControlService.isSystemAdmin(userId)
-                || accessControlService.isAdminOrAbove(userId, scope.teamId(), TEAM);
+        boolean privileged = manageGate.canView(userId, scope.teamId());
         if (!privileged) {
             // 越境は不在と同じ 404、SUPPORTER は公開状態に依らず一律 403、未公開の 404 はその後
             // （SUPPORTER に 404/403 の差で公開状態を読ませない。CMP-260826-2127 D-2127-1）。
-            if (!accessControlService.isMember(userId, scope.teamId(), TEAM)) {
-                throw new BusinessException(ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
-            }
+            // 所属していない（越境）は不在と同じ 404、所属しているが在籍していない（user_roles のみの副管理者等）は 403。
+            manageGate.requireMemberOrConceal(userId, scope.teamId(), ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
             if (accessControlService.isSupporter(userId, scope.teamId(), TEAM)) {
                 throw new BusinessException(CommonErrorCode.COMMON_002);
             }
@@ -83,7 +82,7 @@ public class ShiftSlotFacade {
     }
 
     /**
-     * シフト枠を作成する（SYSTEM_ADMIN、または当該チームの ADMIN/DEPUTY_ADMIN）。
+     * シフト枠を作成する（当該チームの ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
      *
      * @param scheduleId スケジュールID
      * @param req        作成リクエスト
@@ -96,7 +95,7 @@ public class ShiftSlotFacade {
     }
 
     /**
-     * シフト枠を一括作成する（SYSTEM_ADMIN、または当該チームの ADMIN/DEPUTY_ADMIN）。
+     * シフト枠を一括作成する（当該チームの ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
      *
      * @param scheduleId スケジュールID
      * @param req        一括作成リクエスト
@@ -109,7 +108,7 @@ public class ShiftSlotFacade {
     }
 
     /**
-     * シフト枠を更新する（SYSTEM_ADMIN、または当該チームの ADMIN/DEPUTY_ADMIN）。
+     * シフト枠を更新する（当該チームの ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
      *
      * @param slotId シフト枠ID
      * @param req    更新リクエスト
@@ -123,7 +122,7 @@ public class ShiftSlotFacade {
     }
 
     /**
-     * シフト枠の割当ユーザーを差分更新する（SYSTEM_ADMIN、または当該チームの ADMIN/DEPUTY_ADMIN）。
+     * シフト枠の割当ユーザーを差分更新する（当該チームの ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
      *
      * @param slotId  シフト枠ID
      * @param request 差分割当リクエスト
@@ -156,7 +155,7 @@ public class ShiftSlotFacade {
     }
 
     /**
-     * シフト枠を削除する（SYSTEM_ADMIN、または当該チームの ADMIN/DEPUTY_ADMIN）。
+     * シフト枠を削除する（当該チームの ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
      *
      * @param slotId シフト枠ID
      * @param userId 操作者ユーザーID
@@ -169,8 +168,7 @@ public class ShiftSlotFacade {
     /** スケジュール起点の管理操作の認可。越境は不在と同一の {@code SHIFT_001}、権限不足は 403。 */
     private void requireScheduleAdmin(Long scheduleId, Long userId) {
         ShiftScheduleScope scope = slotService.resolveScheduleScope(scheduleId);
-        accessGate.requireAdminOrConceal(
-                userId, scope.teamId(), TEAM, ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
+        manageGate.requireManageOrConceal(userId, scope.teamId(), ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
     }
 
     /**
@@ -179,7 +177,7 @@ public class ShiftSlotFacade {
      */
     private Long requireSlotAdmin(Long slotId, Long userId) {
         Long teamId = slotService.resolveSlotTeamId(slotId);
-        accessGate.requireAdminOrConceal(userId, teamId, TEAM, ShiftErrorCode.SHIFT_SLOT_NOT_FOUND);
+        manageGate.requireManageOrConceal(userId, teamId, ShiftErrorCode.SHIFT_SLOT_NOT_FOUND);
         return teamId;
     }
 

@@ -46,6 +46,7 @@
       "analytics": "Analytics",
       "audit_logs": "Audit Logs",
       "settings": "Settings",
+      "shiftSettings": "Shift settings",
       "faqSettings": "FAQ Settings",
       "confirmableNotifications": "Quick Confirm",
       "billing": "Billing & plan management",

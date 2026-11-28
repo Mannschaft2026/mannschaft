@@ -1,5 +1,6 @@
 package com.mannschaft.app.role;
 
+import com.mannschaft.app.role.authorization.RolePriority;
 import com.mannschaft.app.role.entity.InviteTokenEntity;
 import com.mannschaft.app.role.entity.RoleEntity;
 import com.mannschaft.app.role.repository.InviteTokenRepository;
@@ -159,7 +160,7 @@ class InviteClosureGenerationIT extends AbstractMySqlIntegrationTest {
                             .supporterEnabled(true).build()).getId();
             RoleEntity role = roleRepository.findByName("MEMBER").orElseGet(() -> {
                 RoleEntity created = roleRepository.saveAndFlush(RoleEntity.builder().name("MEMBER")
-                        .displayName("メンバー").priority(4).isSystem(true).build());
+                        .displayName("メンバー").priority(RolePriority.priority("MEMBER")).isSystem(true).build());
                 createdRoleIds.add(created.getId());
                 return created;
             });

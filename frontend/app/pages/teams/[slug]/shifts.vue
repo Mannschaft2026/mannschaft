@@ -64,18 +64,10 @@ async function resolveTeamNumericId() {
     teamLoading.value = false
   }
 }
-const { isAdmin, isAdminOrDeputy, isMember, roleName, loadPermissions } = useRoleAccess('team', teamSlug)
-// シフトボードは当該チームの ADMIN / DEPUTY_ADMIN 限定。
-// 判定手段は board.vue（`shifts/[scheduleId]/board.vue` の isScopeAdmin）に合わせる。
-//
-// 【意図的に SYSTEM_ADMIN を含めない等値比較】(CMP-260909-1509)
-// プラットフォーム SYSTEM_ADMIN が同時にチームの ADMIN でも、実効ロール解決
-// （resolveEffectiveRoleName）は最強ロールである 'SYSTEM_ADMIN' を返すため、この等値比較では
-// 「シフトボード」ボタンは表示されない。これはバグではなく、「運営専用アカウントには一般の
-// チーム運営導線を出さない」というマスター確定の設計判断（docs/security/03_role_authority_model.md
-// §3.5）。BE 側の認可はこれと独立しており、SYSTEM_ADMIN は API を叩けば通る（UI 非表示は認可の代替
-// ではない）。SYSTEM_ADMIN を含めるように書き換えないこと。
-const isScopeAdmin = computed(() => roleName.value === 'ADMIN' || roleName.value === 'DEPUTY_ADMIN')
+// CMP-261125-2114: シフトの管理操作・閲覧の出し分けは useShiftPermission に集約する。
+// 管理操作（作成・公開・ポジション管理・ボード等）は、チーム ADMIN または MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけ。
+// SYSTEM_ADMIN は特別扱いしない（BE の ShiftManageAccessGate と同じ）。UI の出し分けは認可の代替ではない。
+const { canManageShift, isScopeAdmin, isMember, isDeputyWithoutManage, loadPermissions } = useShiftPermission(teamSlug, { autoLoad: false })
 const { userTimezone } = useDatetime()
 
 const activeTab = ref(0)
@@ -166,11 +158,16 @@ onMounted(() => {
       <template v-else-if="teamNumericId !== null">
         <PageHeader title="シフト管理" class="mb-4" />
 
+        <!-- 権限の変更を管理者へ告知し、MANAGE_SHIFTS 無しの副管理者には操作できない理由を示す -->
+        <ShiftManageNotice v-if="isScopeAdmin" variant="admin" :team-slug="teamSlug" />
+        <ShiftManageNotice v-else-if="isDeputyWithoutManage" variant="deputy" />
+
         <Tabs v-model:value="activeTab">
           <TabList>
             <Tab :value="0">シフト表</Tab>
             <Tab :value="1">シフト交換</Tab>
-            <Tab :value="2">ポジション管理</Tab>
+            <!-- ポジション管理は管理操作の権限（ADMIN / MANAGE_SHIFTS 付き DEPUTY）だけ。パネルと同じ条件でタブも出す -->
+            <Tab v-if="canManageShift" :value="2">ポジション管理</Tab>
           </TabList>
           <TabPanels>
             <TabPanel :value="0">
@@ -178,8 +175,8 @@ onMounted(() => {
                 ref="scheduleList"
                 :team-id="teamNumericId"
                 :team-slug="teamSlug"
-                :can-manage="isAdminOrDeputy"
-                :can-manage-board="isScopeAdmin"
+                :can-manage="canManageShift"
+                :can-manage-board="canManageShift"
                 :can-request-change="isMember"
                 @select="onScheduleSelect"
                 @create="showCreateDialog = true"
@@ -200,13 +197,13 @@ onMounted(() => {
               <ShiftSwapList
                 v-if="teamNumericId !== null"
                 :team-id="teamNumericId"
-                :can-manage="isAdminOrDeputy"
+                :can-manage="canManageShift"
               />
               <div v-else>
                 <Skeleton v-for="i in 3" :key="i" height="3rem" class="mb-2" />
               </div>
             </TabPanel>
-            <TabPanel v-if="isAdmin" :value="2">
+            <TabPanel v-if="canManageShift" :value="2">
               <ShiftPositionManager :team-id="teamNumericId" />
             </TabPanel>
           </TabPanels>

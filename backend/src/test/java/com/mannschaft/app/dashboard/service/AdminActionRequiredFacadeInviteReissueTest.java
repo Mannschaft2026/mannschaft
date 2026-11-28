@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -55,8 +56,15 @@ class AdminActionRequiredFacadeInviteReissueTest {
     @Mock private PaymentAdminQueryService paymentAdminQueryService;
     @Mock private PendingInviteAdminQueryService pendingInviteAdminQueryService;
     @Mock private InviteIssuerPolicy inviteIssuerPolicy;
+    /** CMP-261125-2114: SHIFT_REQUEST を含めるかの判定（本テストの関心は INVITE_REISSUE なので既定は「閲覧可」）。 */
+    @Mock private com.mannschaft.app.shift.service.ShiftManageAccessGate shiftManageAccessGate;
 
     @InjectMocks private AdminActionRequiredFacade facade;
+
+    @org.junit.jupiter.api.BeforeEach
+    void shiftViewAllowed() {
+        given(shiftManageAccessGate.canView(any(), any())).willReturn(true);
+    }
 
     private static PendingAggregate agg(long count, int items, String route) {
         List<PendingAggregate.Item> list = new java.util.ArrayList<>();

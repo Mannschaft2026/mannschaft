@@ -4,10 +4,16 @@
  *
  * 4ページに複製されていた nav を1か所に寄せ、ボード・変更依頼・PDF への導線を足した。
  * 出し分けはここで完結させる（ページ側に判定を散らさない）:
- * - 希望一覧・勤務制約・ボード … 当該チームの ADMIN / DEPUTY_ADMIN のみ
+ * - 希望一覧・勤務制約・ボード … 当該チームの ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ
+ *   （希望一覧は、閲覧切替が ON のときの MANAGE_SHIFTS 無し DEPUTY_ADMIN にも出す。CMP-261125-2114）
  * - 変更依頼 … teams 配下のため、利用者の myTeams にそのチームがあるときだけ
- * - PDF … myTeams にあり、かつ SUPPORTER でないとき（board.vue と同じ規則）
+ * - PDF … myTeams にあり、SUPPORTER でなく、かつ BE が発行を許すとき（board.vue と同じ規則）。
+ *   BE（ShiftPdfFacade）は、管理者の形（canViewShift）なら未公開でも発行でき、それ以外の会員は公開済みのシフト表だけ
+ *   発行できる（未公開は存在ごと秘匿して 404）。公開前に出して押させると「PDF の生成に失敗しました」になるため出さない。
  */
+import type { ShiftScheduleStatus } from '~/types/shift'
+import { isPdfReleasableToNonPrivileged } from '~/utils/shiftStatus'
+
 type TabKey = 'overview' | 'edit' | 'requests' | 'constraints'
 
 const props = defineProps<{
@@ -16,6 +22,8 @@ const props = defineProps<{
   teamId: number | null
   /** 現在表示しているタブ（リンクにしない） */
   current: TabKey
+  /** シフト表のステータス（PDF の出し分けに使う）。取得前・失敗時は null（管理者の形でなければ PDF を出さない）。 */
+  status?: { status: ShiftScheduleStatus, publishedAt: string | null } | null
 }>()
 
 const { t } = useI18n()
@@ -24,12 +32,14 @@ const teamStore = useTeamStore()
 const team = computed(() =>
   props.teamId === null ? undefined : teamStore.myTeams.find(m => m.id === props.teamId),
 )
-const canManage = computed(() =>
-  ['ADMIN', 'SYSTEM_ADMIN', 'DEPUTY_ADMIN'].includes(team.value?.role ?? ''),
-)
-/** シフトボードは ADMIN / DEPUTY_ADMIN のみ（ShiftScheduleList / board.vue と同じ規則） */
-const canOpenBoard = computed(() => ['ADMIN', 'DEPUTY_ADMIN'].includes(team.value?.role ?? ''))
-const showPdf = computed(() => team.value !== undefined && team.value.role !== 'SUPPORTER')
+const { canManageShift, canViewShift } = useShiftPermission(() => team.value?.slug ?? null)
+/** 希望一覧は閲覧権限（管理者＋閲覧切替 ON の副管理者）、勤務制約・ボードは管理操作の権限。 */
+const canOpenRequests = canViewShift
+const canOpenBoard = canManageShift
+const showPdf = computed(() =>
+  team.value !== undefined
+  && team.value.role !== 'SUPPORTER'
+  && (canViewShift.value || isPdfReleasableToNonPrivileged(props.status)))
 
 interface Tab {
   key: string
@@ -45,9 +55,13 @@ const tabs = computed<Tab[]>(() => {
     { key: 'overview', label: t('shift.detail.tabOverview'), icon: 'pi pi-calendar', to: base, current: props.current === 'overview' },
     { key: 'edit', label: t('shift.detail.tabEdit'), icon: 'pi pi-pencil', to: `${base}/edit`, current: props.current === 'edit' },
   ]
-  if (canManage.value) {
+  if (canOpenRequests.value) {
     list.push(
       { key: 'requests', label: t('shift.detail.tabRequests'), icon: 'pi pi-list', to: `${base}/requests`, current: props.current === 'requests' },
+    )
+  }
+  if (canManageShift.value) {
+    list.push(
       { key: 'constraints', label: t('shift.detail.tabConstraints'), icon: 'pi pi-shield', to: `${base}/work-constraints`, current: props.current === 'constraints' },
     )
   }

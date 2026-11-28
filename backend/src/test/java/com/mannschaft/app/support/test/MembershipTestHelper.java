@@ -4,7 +4,6 @@ import com.mannschaft.app.common.visibility.RolePriority;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.NoResultException;
 
 /**
  * 統合テスト用 memberships / user_roles INSERT ヘルパー。
@@ -154,6 +153,38 @@ public final class MembershipTestHelper {
     }
 
     /**
+     * チームの DEPUTY_ADMIN に、権限グループ経由で指定の Permission を付与する（CMP-261125-2114）。
+     *
+     * <p>シフト管理は「ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN」だけに許可されるため、DEPUTY_ADMIN を
+     * 管理者として使うテストはこのメソッドで {@code MANAGE_SHIFTS} を付ける。{@code permissions} 行が無ければ作り、
+     * 対象チームの DEPUTY_ADMIN 向け権限グループを新規に作って付与する（既存のグループには触れない）。
+     * 事前に {@link #insertUserRole} で当該チームの DEPUTY_ADMIN にしておくこと。</p>
+     *
+     * @param em             EntityManager
+     * @param userId         付与先ユーザー
+     * @param teamId         チーム ID
+     * @param permissionName 付与する Permission 名（例: {@code "MANAGE_SHIFTS"}）
+     */
+    public static void grantTeamDeputyPermission(EntityManager em, Long userId, Long teamId, String permissionName) {
+        em.createNativeQuery("INSERT INTO permissions (name, display_name, scope, created_at, updated_at) "
+                        + "SELECT :pn, :pn, 'TEAM', NOW(), NOW() FROM DUAL "
+                        + "WHERE NOT EXISTS (SELECT 1 FROM permissions WHERE name = :pn)")
+                .setParameter("pn", permissionName).executeUpdate();
+        String groupName = "test-pg-" + java.util.UUID.randomUUID();
+        em.createNativeQuery("INSERT INTO permission_groups (team_id, organization_id, target_role, name, "
+                        + "created_at, updated_at) VALUES (:tid, NULL, 'DEPUTY_ADMIN', :name, NOW(), NOW())")
+                .setParameter("tid", teamId).setParameter("name", groupName).executeUpdate();
+        Long groupId = ((Number) em.createNativeQuery("SELECT id FROM permission_groups WHERE name = :name")
+                .setParameter("name", groupName).getSingleResult()).longValue();
+        em.createNativeQuery("INSERT INTO permission_group_permissions (group_id, permission_id, created_at) "
+                        + "SELECT :gid, p.id, NOW() FROM permissions p WHERE p.name = :pn")
+                .setParameter("gid", groupId).setParameter("pn", permissionName).executeUpdate();
+        em.createNativeQuery("INSERT INTO user_permission_groups (user_id, group_id, created_at) "
+                        + "VALUES (:uid, :gid, NOW())")
+                .setParameter("uid", userId).setParameter("gid", groupId).executeUpdate();
+    }
+
+    /**
      * roles.name から id を 1 SQL で解決する。
      *
      * <p>未投入ならオンデマンドで INSERT してから再取得する。priority は正準表
@@ -164,30 +195,16 @@ public final class MembershipTestHelper {
      * 値を写経すると再び drift するため、本番と同じ定数表を直接参照する。</p>
      */
     private static Long resolveRoleIdByName(EntityManager em, String roleName) {
-        try {
-            Object result = em.createNativeQuery("SELECT id FROM roles WHERE name = :name")
-                    .setParameter("name", roleName)
-                    .getSingleResult();
-            return ((Number) result).longValue();
-        } catch (NoResultException e) {
-            // 統合テスト環境では application-test.yml で flyway.enabled=false のため
-            // V2.014__seed_roles.sql の固定 role が投入されない。
-            int priority = RolePriority.priority(roleName);
-            if (priority == Integer.MAX_VALUE) {
-                throw new IllegalStateException(
-                        "未知の role 名です（RolePriority に定義がありません）: " + roleName);
-            }
-            em.createNativeQuery(
-                    "INSERT INTO roles (name, display_name, priority, is_system, "
-                            + "created_at, updated_at) "
-                            + "VALUES (:name, :name, :priority, 0, NOW(), NOW())")
-                    .setParameter("name", roleName)
-                    .setParameter("priority", priority)
-                    .executeUpdate();
-            Object result = em.createNativeQuery("SELECT id FROM roles WHERE name = :name")
-                    .setParameter("name", roleName)
-                    .getSingleResult();
-            return ((Number) result).longValue();
+        if (RolePriority.priority(roleName) == Integer.MAX_VALUE) {
+            throw new IllegalStateException(
+                    "未知の role 名です（RolePriority に定義がありません）: " + roleName);
         }
+        // 既存行があっても priority を正準値へ直す（誤った priority の行が先に commit されて
+        // 残っていると hasRoleOrAbove の判定が壊れる。CMP-261126-0906）。
+        RoleSeedSupport.ensureCanonical(em, roleName);
+        Object result = em.createNativeQuery("SELECT id FROM roles WHERE name = :name")
+                .setParameter("name", roleName)
+                .getSingleResult();
+        return ((Number) result).longValue();
     }
 }

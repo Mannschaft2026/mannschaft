@@ -4,7 +4,7 @@ import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.security.AuthorizedInService;
 import com.mannschaft.app.filesharing.dto.AccessLinkRequest;
 import com.mannschaft.app.filesharing.dto.CreateLinkRequest;
-import com.mannschaft.app.filesharing.dto.FileResponse;
+import com.mannschaft.app.filesharing.dto.PublicFileLinkResponse;
 import com.mannschaft.app.filesharing.dto.LinkIssuedResponse;
 import com.mannschaft.app.filesharing.dto.LinkResponse;
 import com.mannschaft.app.filesharing.service.FolderScopeAccessGuard;
@@ -89,10 +89,10 @@ public class FileLinkController {
     @PostMapping("/shared-links/{token}/access")
     @Operation(summary = "共有リンクアクセス")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "アクセス成功")
-    public ResponseEntity<ApiResponse<FileResponse>> accessLink(
+    public ResponseEntity<ApiResponse<PublicFileLinkResponse>> accessLink(
             @PathVariable String token,
             @RequestBody(required = false) AccessLinkRequest request) {
-        FileResponse response = linkService.accessLink(token, request);
+        PublicFileLinkResponse response = linkService.accessLinkPublic(token, request);
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 }

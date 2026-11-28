@@ -15,6 +15,8 @@ public class TeamShiftSettingsResponse {
     private boolean reminder48hEnabled;
     private boolean reminder24hEnabled;
     private boolean reminder12hEnabled;
+    private boolean deputyShiftViewEnabled;
+    private boolean deputyHourlyRateViewEnabled;
 
     /**
      * エンティティからレスポンスDTOに変換する。
@@ -25,6 +27,8 @@ public class TeamShiftSettingsResponse {
                 .reminder48hEnabled(entity.isReminder48hEnabled())
                 .reminder24hEnabled(entity.isReminder24hEnabled())
                 .reminder12hEnabled(entity.isReminder12hEnabled())
+                .deputyShiftViewEnabled(entity.isDeputyShiftViewEnabled())
+                .deputyHourlyRateViewEnabled(entity.isDeputyHourlyRateViewEnabled())
                 .build();
     }
 }

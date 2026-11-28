@@ -121,7 +121,7 @@ public class ShiftScheduleService {
      * チームのシフトスケジュール一覧を取得する。
      *
      * @param teamId     チームID
-     * @param privileged 未公開も全量見てよい側（SYSTEM_ADMIN または当該チームの ADMIN 以上）なら true
+     * @param privileged 未公開も全量見てよい側（当該チームの管理者の形。SYSTEM_ADMIN は特別扱いしない）なら true
      * @return シフトスケジュール一覧
      */
     public List<ShiftScheduleResponse> listSchedules(Long teamId, boolean privileged) {

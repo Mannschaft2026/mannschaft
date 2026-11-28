@@ -10,6 +10,11 @@
 # docs/task-list/*.md を横断し配置違反も。CMP-261124-1222）だけを検査する。検査器は信頼できる merge_group.base_sha からワークスペース直下へ checkout したものだけを
 # 実行し、head_sha からは台帳（索引 docs/task-list.md と docs/task-list/）だけを別ディレクトリへ取得する（キュー内 PR が改変した検査器で
 # 自己承認させない）。権限は contents: read のみ。
+#
+# 変更申告（docs/task-list/changes/*.md。CMP-261124-1222 ④）: 構造検査は申告を適用した実効台帳に対して行い、申告の形式・名前・サイズ・
+# ID 一致・連鎖（fork・孤児・重複）・changes/ 配下の不正なものを赤にする。加えて --base .（信頼 base_sha の作業木）と group head を
+# 直接比べる等式検査（merge_group は実マージなので分岐点 = base）を行う。申告の改変・削除（正しい畳み込み以外）は赤、
+# 月別ファイルの直接編集は互換期間のため警告（::warning::）のみ。head の sparse-checkout は docs/task-list/ 配下（changes/ を含む）を取得する。
 
 name: Task-List PR Gate (merge queue)
 
@@ -53,4 +58,4 @@ jobs:
             echo "::error::信頼 base（merge_group.base_sha）に scripts/task-list-structure-check.mjs が無い。検査器なしで合格にはしない。"
             exit 1
           fi
-          node scripts/task-list-structure-check.mjs .merge-group-head/docs/task-list.md
+          node scripts/task-list-structure-check.mjs .merge-group-head/docs/task-list.md --base .

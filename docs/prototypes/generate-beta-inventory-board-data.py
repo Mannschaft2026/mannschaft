@@ -2,7 +2,7 @@
 """正本からローカル棚卸ボード用のJavaScriptデータを生成する。
 
 外部サービスへ送信せず、feature-inventory.yaml と台帳（docs/task-list.md。新配置では
-docs/task-list/*.md も。task_list_ledger.py）の相対パスを読み込んで beta-inventory-board-data.js を上書きする。B段階やGate前提工事は
+docs/task-list/*.md も。未畳み込みの変更申告 docs/task-list/changes/ を適用した実効台帳。task_list_ledger.py）の相対パスを読み込んで beta-inventory-board-data.js を上書きする。B段階やGate前提工事は
 正本に軸がないため、推測で補完しない。
 """
 
@@ -245,10 +245,11 @@ def parse_campaigns(markdown: str, source: str = "docs/task-list.md") -> list[di
 
 
 def parse_ledger_campaigns(root: Path) -> list[dict]:
-    """台帳の全ファイル（旧配置は docs/task-list.md、新配置は索引＋月別・legacy）から CMP 行を読む。source は行の所在ファイル。"""
+    """実効台帳（旧配置は docs/task-list.md、新配置は索引＋月別・legacy に未畳み込みの変更申告 docs/task-list/changes/ を
+    適用したもの。CMP-261124-1222 ④）から CMP 行を読む。source は行の所在ファイル（申告で足した行は ID の月のファイル）。"""
     campaigns = []
-    for path in task_list_ledger.ledger_files(root):
-        campaigns.extend(parse_campaigns(path.read_text(encoding="utf-8"), task_list_ledger.relative(root, path)))
+    for source, text in task_list_ledger.effective_files(root):
+        campaigns.extend(parse_campaigns(text, source))
     return campaigns
 
 
@@ -481,13 +482,15 @@ def build_data() -> dict:
         "generatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "sources": {
             "inventory": "docs/inventory/feature-inventory.yaml",
-            "taskList": "docs/task-list.md" if task_list_ledger.ledger_layout(ROOT) == "single" else "docs/task-list.md + docs/task-list/*.md",
+            "taskList": ("docs/task-list.md" if task_list_ledger.ledger_layout(ROOT) == "single" else "docs/task-list.md + docs/task-list/*.md")
+            + (" + docs/task-list/changes/*.md" if task_list_ledger.change_files(ROOT) else ""),
             "decisions": "docs/prototypes/beta-inventory-board-decisions.json",
             "b0Alicization": "docs/prototypes/beta-inventory-board-b0-alicization.json",
             "b0Coverage": "docs/prototypes/beta-inventory-board-b0-coverage.json",
             "gate": "docs/prototypes/beta-inventory-board-gate.json",
             "inventoryCommit": git_commit_for(INVENTORY_PATH),
-            "taskListCommit": git_commit_for(*task_list_ledger.ledger_files(ROOT)),
+            # 申告（docs/task-list/changes/）も実効台帳の入力なので含める（申告0件なら従来と同じ）。CMP-261124-1222 ④
+            "taskListCommit": git_commit_for(*task_list_ledger.ledger_source_files(ROOT)),
             "inventorySha256": hashlib.sha256(INVENTORY_PATH.read_bytes()).hexdigest(),
             "taskListSha256": task_list_ledger.ledger_sha256(ROOT),
             "decisionsSha256": hashlib.sha256(DECISIONS_PATH.read_bytes()).hexdigest(),

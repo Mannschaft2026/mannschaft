@@ -12,6 +12,7 @@ import com.mannschaft.app.pointcard.repository.PointCardProviderRepository;
 import com.mannschaft.app.pointcard.repository.PointCardProviderSynonymRepository;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.support.test.MembershipTestHelper;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.AfterEach;
@@ -171,12 +172,8 @@ class TournamentEntryPkTypeFlywayIT {
     @BeforeEach
     void setUp() {
         suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-        jdbc.update("INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                + "SELECT 'ADMIN', '管理者', 2, 0, NOW(), NOW() FROM DUAL "
-                + "WHERE NOT EXISTS (SELECT 1 FROM roles WHERE name = 'ADMIN')");
-        jdbc.update("INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                + "SELECT 'MEMBER', 'メンバー', 4, 0, NOW(), NOW() FROM DUAL "
-                + "WHERE NOT EXISTS (SELECT 1 FROM roles WHERE name = 'MEMBER')");
+        RoleSeedSupport.ensureCanonical(jdbc, "ADMIN");
+        RoleSeedSupport.ensureCanonical(jdbc, "MEMBER");
 
         orgId = insertOrganization("PK型ORG" + suffix);
         teamId = insertTeam("PK型TEAM" + suffix);

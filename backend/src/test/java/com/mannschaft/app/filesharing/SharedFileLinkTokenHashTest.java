@@ -12,6 +12,7 @@ import com.mannschaft.app.common.token.SecretTokenVault;
 import com.mannschaft.app.filesharing.dto.AccessLinkRequest;
 import com.mannschaft.app.filesharing.dto.CreateLinkRequest;
 import com.mannschaft.app.filesharing.dto.FileResponse;
+import com.mannschaft.app.filesharing.dto.PublicFileLinkResponse;
 import com.mannschaft.app.filesharing.dto.LinkIssuedResponse;
 import com.mannschaft.app.filesharing.dto.LinkResponse;
 import com.mannschaft.app.filesharing.dto.SharedFileDownloadUrlResponse;
@@ -140,7 +141,7 @@ class SharedFileLinkTokenHashTest {
                 null, USER_ID, 1, null, null, null, null);
         given(fileService.getFileForSharedLink(FILE_ID)).willReturn(file);
 
-        FileResponse result = service.accessLinkPublic(issued.token(), null);
+        PublicFileLinkResponse result = service.accessLinkPublic(issued.token(), null);
 
         assertThat(result.getName()).isEqualTo("a.pdf");
         assertThat(stored.getAccessCount()).isEqualTo(1);
