@@ -27,6 +27,7 @@ const loading = ref(false)
 const googleLoading = ref(false)
 const termsModalVisible = ref(false)
 const privacyModalVisible = ref(false)
+const commerceModalVisible = ref(false)
 
 // SSR 配信済み HTML に @submit.prevent が未結合の窓で送信ボタンを押されると、
 // ブラウザ標準のフォーム送信が走って入力が失われるため、ハイドレーション完了まで送信を封じる。
@@ -433,13 +434,13 @@ function applyGeneratedPassword(value: string): void {
       </div>
 
       <div class="text-center">
-        <NuxtLink
-          to="/commerce-disclosure"
-          target="_blank"
+        <button
+          type="button"
           class="text-xs text-surface-400 hover:text-primary hover:underline"
+          @click="commerceModalVisible = true"
         >
           {{ $t('landing.layout.footer_commerce') }}
-        </NuxtLink>
+        </button>
       </div>
 
       <Button
@@ -460,5 +461,6 @@ function applyGeneratedPassword(value: string): void {
 
     <TermsModal v-model:visible="termsModalVisible" />
     <PrivacyModal v-model:visible="privacyModalVisible" />
+    <CommerceDisclosureModal v-model:visible="commerceModalVisible" />
   </form>
 </template>

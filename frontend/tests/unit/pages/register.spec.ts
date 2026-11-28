@@ -64,6 +64,7 @@ const stubs = {
   NuxtLink: { template: '<a><slot /></a>' },
   TermsModal: true,
   PrivacyModal: true,
+  CommerceDisclosureModal: true,
   PasswordGeneratorActions: true,
 }
 
@@ -194,3 +195,22 @@ describe('register.vue 日本語直書き番人', () => {
     }
   }
 })
+
+describe('pages/register.vue 特商法モーダル', () => {
+  it('REG-006: 特商法リンクは button で、押すとモーダルが開き遷移しない', async () => {
+    const wrapper = mount(RegisterPage, {
+      attachTo: document.body,
+      global: { plugins: [PrimeVue], mocks: { $t: (k: string) => k }, stubs },
+    })
+    await flushPromises()
+    const modal = wrapper.findComponent({ name: 'CommerceDisclosureModal' })
+    expect(modal.props('visible')).toBe(false)
+    const btn = wrapper.findAll('button[type="button"]').find((b) => b.text() === 'landing.layout.footer_commerce')
+    expect(btn).toBeDefined()
+    expect(wrapper.findAll('a').some((a) => a.attributes('to') === '/commerce-disclosure')).toBe(false)
+    await btn!.trigger('click')
+    expect(modal.props('visible')).toBe(true)
+    wrapper.unmount()
+  })
+})
+

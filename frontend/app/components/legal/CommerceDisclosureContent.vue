@@ -1,6 +1,15 @@
 <script setup lang="ts">
-/** 特定商取引法に基づく表記の本文。ページ（commerce-disclosure.vue）から利用する。 */
+/** 特定商取引法に基づく表記の本文。ページ（commerce-disclosure.vue）と CommerceDisclosureModal から利用する。 */
 const { t, tm, rt } = useI18n()
+
+withDefaults(defineProps<{
+  /** モーダル内では Dialog の header と重複するため見出し(h1)を隠す */
+  hideTitle?: boolean
+  /** お問い合わせ項目に付ける id。ページとモーダルが同時に DOM にあっても重複しないよう、モーダルは空にする */
+  contactId?: string
+  /** ページ用の固定ヘッダー逃げ（scroll-mt-20）を付けるか。モーダル内では余計な余白になるため false にする */
+  scrollOffset?: boolean
+}>(), { hideTitle: false, contactId: 'contact', scrollOffset: true })
 
 interface DisclosureItem {
   key: string
@@ -25,16 +34,18 @@ const items = computed<DisclosureItem[]>(() => {
 
 <template>
   <div>
-    <h1 class="mb-2 text-3xl font-bold text-surface-900 dark:text-white">
+    <h1 v-if="!hideTitle" class="mb-2 text-3xl font-bold text-surface-900 dark:text-white">
       {{ t('landing.legal.commerce.title') }}
     </h1>
 
     <dl class="mt-8 space-y-6 text-left">
       <div
         v-for="item in items"
-        :id="item.key === 'contact' ? 'contact' : undefined"
+        :id="item.key === 'contact' && contactId ? contactId : undefined"
         :key="item.key"
-        class="scroll-mt-20 border-b border-surface-100 pb-4 last:border-b-0 dark:border-surface-700"
+        :class="{ 'scroll-mt-20': scrollOffset }"
+        :data-section="item.key === 'contact' ? 'contact' : undefined"
+        class="border-b border-surface-100 pb-4 last:border-b-0 dark:border-surface-700"
       >
         <dt class="mb-1 text-sm font-bold text-surface-900 dark:text-white">
           {{ item.label }}
