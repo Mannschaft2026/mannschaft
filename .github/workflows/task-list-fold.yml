@@ -1,0 +1,124 @@
+# =============================================================================
+# 台帳の変更申告の畳み込み bot — CMP-261124-1222 ④ 段2
+# =============================================================================
+# main の未畳み込み申告（docs/task-list/changes/*.md）を月別ファイル（docs/task-list/YYYY-MM.md）へ畳み込み、
+# bot 専用ブランチ ledger-bot/fold の畳み込み PR を作る/更新して auto-merge（SQUASH）を予約する。
+# ロジック本体: scripts/task-list-fold.mjs（試験: scripts/task-list-fold.test.mjs）
+#
+# 方針:
+# - 既定は dry-run。repo 変数 LEDGER_FOLD_ENABLED が 'true'（かつ App の設定がある）ときだけ --apply で書き込む。
+#   それ以外は計画（畳み込む件数・残す申告と理由・自己検査）をログに出すだけ。
+# - 起動: main への申告の push・毎時（threshold: 畳み込める申告が20件以上、または最古が6時間超のときだけ畳み込む）、
+#   1日1回の定期実行と手動（force: 1件でもあれば畳み込む）。
+# - 開いている畳み込み PR は常に1本。merge queue 投入中は触らない。未投入なら最新 main から作り直す
+#   （force push は bot 専用ブランチ ledger-bot/fold に限り、lease 付き）。
+# - 出す前に「畳み込み前後で実効台帳が一致する」等式を自己検査し、満たさなければ書き込まない。
+# - PR の head のコードは実行しない（checkout は main だけ。台帳は git の object から読む）。
+# - 多重実行は concurrency で直列化する（走りかけは打ち切らない）。
+# =============================================================================
+
+name: 台帳の変更申告の畳み込み
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/task-list/changes/**'
+  schedule:
+    # 毎時: 閾値判定（最古の申告が6時間を超えたものを拾う）
+    - cron: '23 * * * *'
+    # 1日1回: 定期の畳み込み（03:07 JST）
+    - cron: '7 18 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: task-list-fold
+  cancel-in-progress: false
+
+jobs:
+  fold:
+    name: 台帳の変更申告の畳み込み
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: 書き込みの可否を決める
+        id: config
+        env:
+          APP_ID: ${{ vars.LEDGER_BOT_APP_ID }}
+          HAS_KEY: ${{ secrets.LEDGER_BOT_PRIVATE_KEY != '' }}
+          FOLD_ENABLED: ${{ vars.LEDGER_FOLD_ENABLED == 'true' }}
+          EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          if [ -n "$APP_ID" ] && [ "$HAS_KEY" = "true" ]; then
+            echo "app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "app=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::vars.LEDGER_BOT_APP_ID / secrets.LEDGER_BOT_PRIVATE_KEY が無いため dry-run（計画の表示のみ）で動かす"
+          fi
+          if [ "$FOLD_ENABLED" = "true" ] && [ -n "$APP_ID" ] && [ "$HAS_KEY" = "true" ]; then
+            echo "apply=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "apply=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::LEDGER_FOLD_ENABLED が 'true' でないため dry-run（書き込みなし）"
+          fi
+          if [ "$EVENT" = "workflow_dispatch" ] || { [ "$EVENT" = "schedule" ] && [ "$SCHEDULE" = "7 18 * * *" ]; }; then
+            echo "mode=force" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=threshold" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: App token を発行
+        id: app-token
+        if: steps.config.outputs.app == 'true'
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.LEDGER_BOT_APP_ID }}
+          private-key: ${{ secrets.LEDGER_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      # main だけを取る。blob は必要な分だけ遅延取得（partial clone）。作業木は scripts/ だけ。
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: scripts
+          token: ${{ steps.app-token.outputs.token || github.token }}
+
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: bot の commit 署名者を決める
+        id: identity
+        if: steps.config.outputs.apply == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          USER_ID=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)
+          echo "name=${APP_SLUG}[bot]" >> "$GITHUB_OUTPUT"
+          echo "email=${USER_ID}+${APP_SLUG}[bot]@users.noreply.github.com" >> "$GITHUB_OUTPUT"
+
+      - name: 申告を畳み込む
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          LEDGER_BOT_NAME: ${{ steps.identity.outputs.name }}
+          LEDGER_BOT_EMAIL: ${{ steps.identity.outputs.email }}
+          APPLY: ${{ steps.config.outputs.apply }}
+          MODE: ${{ steps.config.outputs.mode }}
+        run: |
+          if [ "$APPLY" = "true" ]; then
+            node scripts/task-list-fold.mjs --mode "$MODE" --apply
+          else
+            node scripts/task-list-fold.mjs --mode "$MODE"
+          fi
