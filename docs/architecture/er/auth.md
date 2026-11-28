@@ -148,6 +148,7 @@ erDiagram
 | [activity](activity.md) | `activity_comments` | `user_id` | ID参照 | `users` |
 | [activity](activity.md) | `activity_participants` | `user_id` | ID参照 | `users` |
 | [activity](activity.md) | `activity_results` | `created_by` | ID参照 | `users` |
+| [activity](activity.md) | `activity_stats_settings` | `updated_by` | ID参照 | `users` |
 | [activity](activity.md) | `activity_templates` | `created_by` | ID参照 | `users` |
 | [admin](admin.md) | `admin_action_templates` | `created_by` | ID参照 | `users` |
 | [admin](admin.md) | `beta_restriction_config` | `updated_by` | ID参照 | `users` |

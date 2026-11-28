@@ -177,14 +177,14 @@ class ActivityTemplateServiceTest {
     // ========================================================================
 
     @Nested
-    @DisplayName("認可: listTemplates（参照系=checkMembership）")
+    @DisplayName("認可: listTemplates（参照系=checkScopeContentAccess）")
     class AuthzListTemplates {
         // AC-4
         @Test
         @DisplayName("listTemplates_他スコープ会員は403（COMMON_002）")
         void 一覧_他スコープ_403() {
             org.mockito.BDDMockito.willThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .given(scopeAccessGuard).checkMembership(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
+                    .given(scopeAccessGuard).checkScopeContentAccess(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
 
             assertThatThrownBy(() -> service.listTemplates(USER_ID, ActivityScopeType.TEAM, SCOPE_ID))
                     .isInstanceOf(BusinessException.class)
@@ -194,7 +194,7 @@ class ActivityTemplateServiceTest {
     }
 
     @Nested
-    @DisplayName("認可: getTemplate（参照系=checkMembership）")
+    @DisplayName("認可: getTemplate（参照系=checkScopeContentAccess）")
     class AuthzGetTemplate {
         // AC-4
         @Test
@@ -202,7 +202,7 @@ class ActivityTemplateServiceTest {
         void 詳細_他スコープ_403() {
             given(templateRepository.findById(TEMPLATE_ID)).willReturn(Optional.of(createTemplate()));
             org.mockito.BDDMockito.willThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .given(scopeAccessGuard).checkMembership(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
+                    .given(scopeAccessGuard).checkScopeContentAccess(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
 
             assertThatThrownBy(() -> service.getTemplate(TEMPLATE_ID, USER_ID))
                     .isInstanceOf(BusinessException.class)

@@ -352,4 +352,32 @@ public interface ActivityResultRepository extends JpaRepository<ActivityResultEn
             """)
     List<ActivityResultVisibilityProjection> findVisibilityProjectionsByIdIn(
             @Param("ids") Collection<Long> ids);
+
+    // ───────── 活動統計（F06.4 §15.2・CMP-261124-0159）。共通の述語: PUBLISHED・未削除（@SQLRestriction）・期間・任意のテンプレート ─────────
+
+    /** (1) 総数＋テンプレート別（テンプレート名も同じ 1 本で引く）。行: [templateId, templateName, count]。 */
+    @Query("""
+            SELECT r.templateId, t.name, COUNT(r.id) FROM ActivityResultEntity r
+            LEFT JOIN ActivityTemplateEntity t ON t.id = r.templateId
+            WHERE r.scopeType = :scopeType AND r.scopeId = :scopeId
+            AND r.status = com.mannschaft.app.activity.ActivityStatus.PUBLISHED
+            AND r.activityDate BETWEEN :dateFrom AND :dateTo
+            AND (:templateId IS NULL OR r.templateId = :templateId)
+            GROUP BY r.templateId, t.name
+            """)
+    List<Object[]> countStatsByTemplate(@Param("scopeType") ActivityScopeType scopeType, @Param("scopeId") Long scopeId,
+            @Param("dateFrom") LocalDate dateFrom, @Param("dateTo") LocalDate dateTo, @Param("templateId") Long templateId);
+
+    /** (2) 活動日別の件数と延べ参加数（バケットへの畳み込みと 0 埋めはアプリ側）。行: [activityDate, count, participations]。 */
+    @Query("""
+            SELECT r.activityDate, COUNT(DISTINCT r.id), COUNT(p.id) FROM ActivityResultEntity r
+            LEFT JOIN ActivityParticipantEntity p ON p.activityResultId = r.id
+            WHERE r.scopeType = :scopeType AND r.scopeId = :scopeId
+            AND r.status = com.mannschaft.app.activity.ActivityStatus.PUBLISHED
+            AND r.activityDate BETWEEN :dateFrom AND :dateTo
+            AND (:templateId IS NULL OR r.templateId = :templateId)
+            GROUP BY r.activityDate
+            """)
+    List<Object[]> countStatsByActivityDate(@Param("scopeType") ActivityScopeType scopeType, @Param("scopeId") Long scopeId,
+            @Param("dateFrom") LocalDate dateFrom, @Param("dateTo") LocalDate dateTo, @Param("templateId") Long templateId);
 }

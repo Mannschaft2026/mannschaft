@@ -28628,6 +28628,94 @@
         }
       }
     },
+    "/api/v1/activities/stats/settings": {
+      "get": {
+        "tags": [
+          "活動統計"
+        ],
+        "summary": "活動統計の設定取得",
+        "operationId": "getStatsSettings",
+        "parameters": [
+          {
+            "name": "scope_type",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scope_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "取得成功",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseActivityStatsSettingsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "活動統計"
+        ],
+        "summary": "活動統計の設定更新",
+        "operationId": "updateStatsSettings",
+        "parameters": [
+          {
+            "name": "scope_type",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scope_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateActivityStatsSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "更新成功",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseActivityStatsSettingsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/incoming/{token}": {
       "post": {
         "tags": [
@@ -153567,15 +153655,6 @@
             }
           },
           {
-            "name": "period",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "MONTH"
-            }
-          },
-          {
             "name": "date_from",
             "in": "query",
             "required": false,
@@ -153591,6 +153670,14 @@
             "schema": {
               "type": "string",
               "format": "date"
+            }
+          },
+          {
+            "name": "granularity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -179093,6 +179180,48 @@
         "properties": {
           "data": {
             "$ref": "#/components/schemas/ActivityCommentResponse"
+          }
+        }
+      },
+      "UpdateActivityStatsSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "topParticipantsVisibleToMembers": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "topParticipantsVisibleToMembers"
+        ]
+      },
+      "ActivityStatsSettingsResponse": {
+        "type": "object",
+        "properties": {
+          "scopeId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "scopeType": {
+            "type": "string"
+          },
+          "topParticipantsVisibleToMembers": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ApiResponseActivityStatsSettingsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ActivityStatsSettingsResponse"
           }
         }
       },
@@ -256720,10 +256849,13 @@
       "ActivityStatsResponse": {
         "type": "object",
         "properties": {
-          "byMonth": {
+          "averageParticipants": {
+            "type": "number"
+          },
+          "byPeriod": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/MonthCount"
+              "$ref": "#/components/schemas/PeriodCount"
             }
           },
           "byTemplate": {
@@ -256732,13 +256864,42 @@
               "$ref": "#/components/schemas/TemplateCount"
             }
           },
+          "dateFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "dateTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "granularity": {
+            "type": "string"
+          },
+          "scopeId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "scopeType": {
+            "type": "string"
+          },
           "topParticipants": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/TopParticipant"
             }
           },
+          "topParticipantsVisible": {
+            "type": "boolean"
+          },
           "totalActivities": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalParticipations": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "uniqueParticipants": {
             "type": "integer",
             "format": "int64"
           }
@@ -256752,15 +256913,23 @@
           }
         }
       },
-      "MonthCount": {
+      "PeriodCount": {
         "type": "object",
         "properties": {
           "count": {
             "type": "integer",
             "format": "int64"
           },
-          "month": {
+          "participations": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "periodLabel": {
             "type": "string"
+          },
+          "periodStart": {
+            "type": "string",
+            "format": "date"
           }
         }
       },

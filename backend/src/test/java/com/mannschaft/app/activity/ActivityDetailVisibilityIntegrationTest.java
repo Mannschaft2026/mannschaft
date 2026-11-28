@@ -298,8 +298,8 @@ class ActivityDetailVisibilityIntegrationTest extends AbstractMySqlIntegrationTe
     }
 
     @Test
-    @DisplayName("CSV エクスポート: SUPPORTER には MEMBERS_ONLY と他人の DRAFT の題名が出ず PUBLIC だけ出る。MEMBER には MEMBERS_ONLY も出る")
-    void CSVエクスポートは一覧と同じ可視性() throws Exception {
+    @DisplayName("CSV エクスポート: 管理者限定（CMP-261124-0159 AC-0159-81）。ADMIN には PUBLIC と MEMBERS_ONLY が出て他人の DRAFT は出ない。SUPPORTER・MEMBER・下書き作成者は 403 COMMON_002 で題名が出ない")
+    void CSVエクスポートは管理者限定で一覧と同じ可視性() throws Exception {
         activity(ActivityScopeType.TEAM, teamId, ADMIN, "内輪CSV-" + suffix,
                 ActivityVisibility.MEMBERS_ONLY, ActivityStatus.PUBLISHED, null, false);
         activity(ActivityScopeType.TEAM, teamId, ADMIN, "公開CSV-" + suffix,
@@ -307,13 +307,17 @@ class ActivityDetailVisibilityIntegrationTest extends AbstractMySqlIntegrationTe
         activity(ActivityScopeType.TEAM, teamId, DRAFT_AUTHOR, "下書きCSV-" + suffix,
                 ActivityVisibility.PUBLIC, ActivityStatus.DRAFT, null, false);
 
-        String supporterCsv = export(SUPPORTER);
-        assertThat(supporterCsv).contains("公開CSV-" + suffix)
-                .doesNotContain("内輪CSV-" + suffix).doesNotContain("下書きCSV-" + suffix);
-        String memberCsv = export(MEMBER);
-        assertThat(memberCsv).contains("公開CSV-" + suffix).contains("内輪CSV-" + suffix)
+        String adminCsv = export(ADMIN);
+        assertThat(adminCsv).contains("公開CSV-" + suffix).contains("内輪CSV-" + suffix)
                 .doesNotContain("下書きCSV-" + suffix);
-        assertThat(export(DRAFT_AUTHOR)).contains("下書きCSV-" + suffix);
+        for (long viewer : new long[]{SUPPORTER, MEMBER, DRAFT_AUTHOR}) {
+            MvcResult denied = mvc.perform(get("/api/v1/activities/export").with(user(Long.toString(viewer)))
+                    .param("scope_type", "TEAM").param("scope_id", teamId.toString())).andReturn();
+            assertThat(denied.getResponse().getStatus()).as("viewer=%s", viewer).isEqualTo(403);
+            assertThat(errorCode(denied)).as("viewer=%s", viewer).isEqualTo("COMMON_002");
+            assertThat(body(denied)).doesNotContain("公開CSV-" + suffix).doesNotContain("内輪CSV-" + suffix)
+                    .doesNotContain("下書きCSV-" + suffix);
+        }
     }
 
     // ───────────────────────── helpers ─────────────────────────

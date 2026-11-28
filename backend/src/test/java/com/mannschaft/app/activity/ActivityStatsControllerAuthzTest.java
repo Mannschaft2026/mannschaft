@@ -28,7 +28,7 @@ import org.mockito.Mock;
 /**
  * 活動統計コントローラーの認可ゲート契約テスト（AC-8）。
  *
- * <p>統計・エクスポートは Controller 層で {@link ActivityScopeAccessGuard#checkMembership} を先行実行し、
+ * <p>統計・エクスポートは Controller 層で {@link ActivityScopeAccessGuard#checkScopeContentAccess} を先行実行し、
  * 非会員には 403（COMMON_002）を返す。サービスへは委譲されないことを検証する。</p>
  */
 @ExtendWith(MockitoExtension.class)
@@ -38,6 +38,7 @@ class ActivityStatsControllerAuthzTest {
     @Mock private ActivityStatsService statsService;
     @Mock private ActivityScopeAccessGuard scopeAccessGuard;
     @Mock private com.mannschaft.app.activity.service.AutomaticActivityListService automaticAccess;
+    @Mock private com.mannschaft.app.activity.service.ActivityStatsSettingsService settingsService;
 
     private ActivityStatsController controller;
     private MockedStatic<SecurityUtils> securityUtils;
@@ -47,7 +48,7 @@ class ActivityStatsControllerAuthzTest {
 
     @BeforeEach
     void setUp() {
-        controller = new ActivityStatsController(statsService, scopeAccessGuard, automaticAccess);
+        controller = new ActivityStatsController(statsService, scopeAccessGuard, automaticAccess, settingsService);
         securityUtils = Mockito.mockStatic(SecurityUtils.class);
         securityUtils.when(SecurityUtils::getCurrentUserId).thenReturn(USER_ID);
     }
@@ -57,18 +58,19 @@ class ActivityStatsControllerAuthzTest {
         securityUtils.close();
     }
 
-    // AC-8: 統計取得は他スコープ会員で403、サービス非委譲
+    // AC-8 / AC-0159-71: 統計取得は MEMBER 以上でなければ403、サービス非委譲
     @Test
-    @DisplayName("getStats_他スコープ会員は403（COMMON_002）でサービス非委譲")
+    @DisplayName("getStats_閲覧資格なしは403（COMMON_002）でサービス非委譲")
     void 統計_他スコープ_403() {
         willThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                .given(scopeAccessGuard).checkMembership(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
+                .given(scopeAccessGuard).checkRegularMemberOrAbove(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
 
-        assertThatThrownBy(() -> controller.getStats("TEAM", SCOPE_ID, null, "MONTH", null, null))
+        assertThatThrownBy(() -> controller.getStats("TEAM", SCOPE_ID, null, null, null, null))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                         .isEqualTo("COMMON_002"));
-        verify(statsService, never()).getStatsWithAutomaticAccess(any(), any(), any(), any(), any(), any(), any());
+        verify(statsService, never()).getStats(any(), any(), any(), any(), any(), any(),
+                org.mockito.ArgumentMatchers.anyBoolean());
     }
 
     // AC-8: フィールド集計も同様に403、サービス非委譲
@@ -76,7 +78,7 @@ class ActivityStatsControllerAuthzTest {
     @DisplayName("getFieldStats_他スコープ会員は403（COMMON_002）でサービス非委譲")
     void フィールド集計_他スコープ_403() {
         willThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                .given(scopeAccessGuard).checkMembership(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
+                .given(scopeAccessGuard).checkScopeContentAccess(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
 
         assertThatThrownBy(() -> controller.getFieldStats("TEAM", SCOPE_ID, 1L, "key", "MONTH"))
                 .isInstanceOf(BusinessException.class)
@@ -90,7 +92,7 @@ class ActivityStatsControllerAuthzTest {
     @DisplayName("exportCsv_他スコープ会員は403（COMMON_002）でサービス非委譲")
     void エクスポート_他スコープ_403() {
         willThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                .given(scopeAccessGuard).checkMembership(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
+                .given(scopeAccessGuard).checkScopeContentAccess(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
 
         assertThatThrownBy(() -> controller.exportCsv("TEAM", SCOPE_ID, null, null, null, null))
                 .isInstanceOf(BusinessException.class)
@@ -100,15 +102,27 @@ class ActivityStatsControllerAuthzTest {
                 any(), any(), org.mockito.ArgumentMatchers.anyBoolean());
     }
 
-    // AC-2: 自スコープ会員は従来通り成功（非回帰）。membership検証後にサービスへ委譲される
+    // AC-0159-77: MEMBER は設定 OFF なら上位参加者を見せない、管理者は常に見せる
     @Test
-    @DisplayName("getStats_自スコープ会員は成功しサービスへ委譲（非回帰）")
-    void 統計_自スコープ_委譲() {
-        given(statsService.getStatsWithAutomaticAccess(any(), any(), any(), any(), any(), any(), any())).willReturn(null);
+    @DisplayName("getStats_MEMBERは設定OFFで上位参加者なし・管理者は常にあり（サービスへの可視フラグ）")
+    void 統計_上位参加者の可視フラグ() {
+        given(scopeAccessGuard.isAdminOrAbove(USER_ID, ActivityScopeType.TEAM, SCOPE_ID)).willReturn(false);
+        given(settingsService.topParticipantsVisibleToMembers(ActivityScopeType.TEAM, SCOPE_ID)).willReturn(false);
 
-        controller.getStats("TEAM", SCOPE_ID, null, "MONTH", null, null);
+        controller.getStats("TEAM", SCOPE_ID, null, null, null, null);
 
-        verify(scopeAccessGuard).checkMembership(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
-        verify(statsService).getStatsWithAutomaticAccess(ActivityScopeType.TEAM, SCOPE_ID, null, "MONTH", null, null, java.util.Set.of());
+        verify(scopeAccessGuard).checkRegularMemberOrAbove(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
+        verify(statsService).getStats(ActivityScopeType.TEAM, SCOPE_ID, null, null, null, null, false);
+    }
+
+    @Test
+    @DisplayName("getStats_管理者は設定を引かずに上位参加者あり")
+    void 統計_管理者は常に可視() {
+        given(scopeAccessGuard.isAdminOrAbove(USER_ID, ActivityScopeType.TEAM, SCOPE_ID)).willReturn(true);
+
+        controller.getStats("TEAM", SCOPE_ID, null, null, null, "WEEK");
+
+        verify(statsService).getStats(ActivityScopeType.TEAM, SCOPE_ID, null, null, null, "WEEK", true);
+        verify(settingsService, never()).topParticipantsVisibleToMembers(any(), any());
     }
 }

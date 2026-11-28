@@ -3252,7 +3252,7 @@ Resolver を通らない読み取り経路（スコープ単位の一覧・集�
 
 | パッケージ | 呼び出し数 | クラス（呼び出し数） | 分類 | 理由・備考 |
 |---|---|---|---|---|
-| `activity` | 21 | ActivityStatsController(1)、ActivityCommentService(1)、ActivityDetailService(2)、ActivityResultService(7)、ActivityScheduleSyncService(2)、ActivityScopeAccessGuard(4)、ActivityTemplateService(1)、AutomaticActivityListService(3) | 門 | 一覧・詳細・コメント・統計（F06.4 §15）。書き込みは書き込み用 |
+| `activity` | 21 | ActivityStatsController(1)、ActivityCommentService(1)、ActivityDetailService(2)、ActivityResultService(7)、ActivityScheduleSyncService(2)、ActivityScopeAccessGuard(4)、ActivityTemplateService(1)、AutomaticActivityListService(3) | 門 | 一覧・詳細・コメント・統計（F06.4 §15）。書き込みは書き込み用。**実装済み（PR-A1a）**: `ActivityScopeAccessGuard` を門の名前（`checkScopeContentAccess`／`canAccessScopeContent`／`checkMembershipForWrite`）に置き換え、読み取り（一覧・詳細・コメント一覧・テンプレート一覧/詳細・予定連携の auto 読み取り・同期プレビュー・統計/CSV）と中身を返す書き込み（複製・参加者の追加/削除。応答に元記録の中身・参加者一覧を含む）は門、中身を返さない書き込み（作成・下書き作成・コメント投稿・予定からの下書き作成・削除前参照）は書き込み用。`isMember` は common の `AutomaticActivityActualPolicy`（PR-Z で棚卸し）のためだけに `canAccessScopeContent` の別名として残す |
 | `admin` | 1 | FeedbackService(1) | 対象外 | プラットフォーム運営のフィードバック。チームの中身を返さない |
 | `analytics` | 2 | PageViewScopeType(1)、PageViewAnalyticsAccessGuard(1) | 門 | チームのアクセス解析（管理者向け読み取り） |
 | `auth` | 2 | PendingInviteService(2) | 対象外（入口表） | PendingInviteService は入口。F01.2 03 の入口表で TEAM_073 |
@@ -3508,6 +3508,11 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 - **AC-0159-39**: 通知一覧・未読件数・通知詳細で、送り元が非公開チームの通知は、そのチームで MEMBER 未満の閲覧者には出ない（未読件数にも数えない。詳細は不在と同一応答）。MEMBER 以上には従来どおり。外したことを知らせる通知は外された本人に見える。通知 100 件の一覧取得で追加の問い合わせは 1 本。
 
 #### A. 活動統計（F06.4 §15 の AC-0159-70〜83 を参照）
+
+- **AC-0159-101**: 記録 3 件（参加者 {u1,u2,u3}・{u1,u2}・{u1}、うち 1 件はテンプレートなし）で `totalParticipations=6`・`uniqueParticipants=3`・`averageParticipants=2.0`。四捨五入の境界（延べ 7／3 件 → 2.3、延べ 5／2 件 → 2.5）が仕様どおり。`byTemplate` にテンプレートなし行（`templateId=null`・`templateName=null`・件数）が最後に並ぶ。
+- **AC-0159-102**: 期間内の対象記録が 0 件のとき 200 で `totalActivities=0`・`totalParticipations=0`・`uniqueParticipants=0`・`averageParticipants=null`・`byTemplate=[]`・`byPeriod` は期間内の全バケットが 0 で昇順・`topParticipants` は見せる閲覧者には `[]`（見せない閲覧者には null）。
+- **AC-0159-104**: 集計の各問い合わせ（総数・バケット・参加者・上位・名前解決）のいずれかで例外を注入すると、部分集計の 200 を返さず 5xx（既存の共通エラー応答）。参加者取得の例外を空集合へ変換する旧処理が撤去されている。
+- **AC-0159-105**: 期間の日数＝`date_to − date_from + 1`（両端含む）とし、1,095 日・1,096 日は 200、1,097 日は 400 `ACTIVITY_025`（うるう日をまたぐ期間でも同じ算定）。算定式は F06.4 §15.2。
 
 #### E・T・M. サポーターの入口・非公開化・是正 migration（F01.2 03/04 の AC-0159-40〜68 を参照）
 
