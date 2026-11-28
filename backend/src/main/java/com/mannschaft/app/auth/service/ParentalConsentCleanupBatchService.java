@@ -118,7 +118,7 @@ public class ParentalConsentCleanupBatchService {
                             "PARENTAL_CONSENT_EXPIRED_ACCOUNT_DELETED",
                             "ja",
                             email,
-                            Map.of(),
+                            ParentalConsentMailContent.expiredAccountDeleted(),
                             "auth",
                             null,
                             null,

@@ -65,6 +65,10 @@ export default defineNuxtRouteMiddleware(async (to) => {
   const store = useFeatureFlagStore()
   const authStore = useAuthStore()
 
+  // 保護者同意待ちは公開フラグ API（BE ゲートで AUTH_070）を叩かず、未公開扱いの戻し・トーストもしない。
+  // 遷移の制御は auth ミドルウェアが担う。
+  if (authStore.isPendingParentalConsent) return
+
   // `import.meta.server` は Nuxt の型定義上 `boolean | undefined`（省略可）なので、
   // 純関数の boolean 契約へ渡す前にここで確定させる（undefined は「サーバーではない」）。
   const evaluate = () => decideGate({

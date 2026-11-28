@@ -2,8 +2,9 @@
 // 更新前のトークンは同意待ち（ppc）の印を持ったままで、参加待ち招待の GET が AUTH_070 になるため。
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mountSuspended, mockNuxtImport } from '@nuxt/test-utils/runtime'
-import { flushPromises } from '@vue/test-utils'
+import { flushPromises, type DOMWrapper } from '@vue/test-utils'
 import PendingPage from './pending.vue'
+import { useAuthStore } from '~/stores/useAuthStore'
 
 const mocks = vi.hoisted(() => ({
   getInvitations: vi.fn(),
@@ -12,9 +13,11 @@ const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
   logout: vi.fn(),
   error: vi.fn(),
+  sendInvitation: vi.fn(),
+  api: vi.fn(),
 }))
 mockNuxtImport('useParentalConsentApi', () => () => ({
-  sendInvitation: vi.fn(),
+  sendInvitation: mocks.sendInvitation,
   getInvitations: mocks.getInvitations,
   cancelInvitation: vi.fn(),
   getParents: mocks.getParents,
@@ -25,13 +28,26 @@ mockNuxtImport('handleAuthFailureLogout', () => mocks.logout)
 mockNuxtImport('useNotification', () => () => ({ success: vi.fn(), error: mocks.error }))
 mockNuxtImport('useDatetime', () => () => ({ formatDate: (v: string) => v }))
 mockNuxtImport('useI18n', () => () => ({ t: (key: string) => key }))
+// CMP-261123-1124 AC6: 承認後の本人（/users/me）取り直しを観測する
+mockNuxtImport('useApi', () => () => mocks.api)
 
 const options = { global: { mocks: { $t: (k: string) => k } } }
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // 既定は同意待ちの本人（pending 画面は同意待ち以外には開かない。CMP-261123-1124 D-2）
+  useAuthStore().$patch({
+    user: { id: 7, email: 'child@example.com', fullName: '山田 太郎', profileImageUrl: null, status: 'PENDING_PARENTAL_CONSENT' },
+  } as never)
   mocks.getInvitations.mockResolvedValue([])
   mocks.refresh.mockResolvedValue('refreshed')
+  // CMP-261123-1124 AC6: 承認後の /users/me 取り直しの既定応答（ACTIVE に戻った本人）
+  mocks.api.mockResolvedValue({
+    data: {
+      id: 7, email: 'child@example.com', lastName: '山田', firstName: '太郎',
+      avatarUrl: null, systemRole: null, locale: 'ja', timezone: 'Asia/Tokyo', status: 'ACTIVE',
+    },
+  })
 })
 
 describe('parental-consent/pending.vue の承認検出とトークン更新', () => {
@@ -86,5 +102,190 @@ describe('parental-consent/pending.vue の承認検出とトークン更新', ()
     await flushPromises()
     expect(mocks.logout).toHaveBeenCalledTimes(1)
     expect(mocks.navigate).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * CMP-261123-1124 試練（red 先行）
+ * - AC6: 承認検知 → トークン refresh 成功 → /users/me を取り直して同意待ちの印を外す → /parental-consent/manage。
+ *        refresh 失敗時は印を外さない（/users/me も取り直さない）。
+ * - AC5: 招待送信後に一覧へ反映する（送信値は入力したメールアドレス）。
+ */
+const pendingUser = {
+  id: 7, email: 'child@example.com', fullName: '山田 太郎', profileImageUrl: null, status: 'PENDING_PARENTAL_CONSENT',
+}
+const activeProfile = {
+  id: 7, email: 'child@example.com', lastName: '山田', firstName: '太郎',
+  avatarUrl: null, systemRole: null, locale: 'ja', timezone: 'Asia/Tokyo', status: 'ACTIVE',
+}
+
+function pendingFlag(): unknown {
+  return (useAuthStore() as unknown as { isPendingParentalConsent?: unknown }).isPendingParentalConsent
+}
+
+describe('parental-consent/pending.vue 承認後の印の解除（CMP-261123-1124 AC6）', () => {
+  beforeEach(() => {
+    useAuthStore().$patch({ user: pendingUser } as never)
+    mocks.api.mockImplementation(async (url: string) => {
+      if (url === '/api/v1/users/me') return { data: activeProfile }
+      throw new Error(`unexpected api call: ${url}`)
+    })
+  })
+
+  it('AC6-1: refresh 成功後に /users/me を取り直して印を外し、その後に manage へ遷移する', async () => {
+    expect(pendingFlag()).toBe(true)
+    mocks.getParents.mockResolvedValue([{ parentUserId: 9 }])
+    await mountSuspended(PendingPage, options)
+    await flushPromises()
+
+    expect(mocks.api).toHaveBeenCalledWith('/api/v1/users/me')
+    expect(pendingFlag()).toBe(false)
+    expect(mocks.navigate).toHaveBeenCalledWith('/parental-consent/manage')
+    const meCall = mocks.api.mock.calls.findIndex(([url]) => url === '/api/v1/users/me')
+    expect(mocks.refresh.mock.invocationCallOrder[0]!).toBeLessThan(mocks.api.mock.invocationCallOrder[meCall]!)
+    expect(mocks.api.mock.invocationCallOrder[meCall]!).toBeLessThan(mocks.navigate.mock.invocationCallOrder[0]!)
+  })
+
+  it.each(['transient', 'auth_failed', 'session_changed'])(
+    'AC6-2: refresh が %s のときは印を外さず /users/me も取り直さない',
+    async (result) => {
+      mocks.getParents.mockResolvedValue([{ parentUserId: 9 }])
+      mocks.refresh.mockResolvedValue(result)
+      await mountSuspended(PendingPage, options)
+      await flushPromises()
+
+      expect(mocks.api).not.toHaveBeenCalledWith('/api/v1/users/me')
+      if (result !== 'auth_failed') expect(pendingFlag()).toBe(true)
+      expect(mocks.navigate).not.toHaveBeenCalledWith('/parental-consent/manage')
+    },
+  )
+})
+
+describe('parental-consent/pending.vue 招待送信（CMP-261123-1124/1125 AC5）', () => {
+  it('AC5-UI: 送信すると入力値で招待し、取り直した一覧に反映する', async () => {
+    mocks.getParents.mockResolvedValue([])
+    mocks.sendInvitation.mockResolvedValue(undefined)
+    mocks.getInvitations
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { linkId: 'l1', parentEmail: 'parent@example.com', status: 'PENDING', expiresAt: '2026-12-01T00:00:00' },
+      ])
+    const wrapper = await mountSuspended(PendingPage, options)
+    await flushPromises()
+
+    await wrapper.find('input[type="email"]').setValue('parent@example.com')
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+
+    expect(mocks.sendInvitation).toHaveBeenCalledWith('parent@example.com')
+    expect(wrapper.text()).toContain('parent@example.com')
+  })
+})
+
+/**
+ * CMP-261123-1124 実機 D-2: 同意待ちでない利用者（一般成人 ACTIVE など）が /parental-consent/pending を開いても
+ * 「18歳未満のため…」を見せず、通常の遷移先へ戻す。招待 API や一覧取得も呼ばない。
+ */
+describe('parental-consent/pending.vue 同意待ち以外の利用者（CMP-261123-1124 D-2）', () => {
+  const activeUser = { id: 8, email: 'adult@example.com', fullName: '大人 太郎', profileImageUrl: null, status: 'ACTIVE' }
+
+  it('ACTIVE の利用者は /dashboard へ戻され、API を呼ばない', async () => {
+    useAuthStore().$patch({ user: activeUser } as never)
+    const wrapper = await mountSuspended(PendingPage, options)
+    await flushPromises()
+
+    expect(mocks.navigate).toHaveBeenCalledWith('/dashboard', { replace: true })
+    expect(mocks.getInvitations).not.toHaveBeenCalled()
+    expect(mocks.getParents).not.toHaveBeenCalled()
+    expect(wrapper.text()).not.toContain('parental_consent.pending_description')
+  })
+
+  it('SYSTEM_ADMIN は /system-admin へ戻される', async () => {
+    useAuthStore().$patch({ user: { ...activeUser, systemRole: 'SYSTEM_ADMIN' } } as never)
+    await mountSuspended(PendingPage, options)
+    await flushPromises()
+
+    expect(mocks.navigate).toHaveBeenCalledWith('/system-admin', { replace: true })
+  })
+
+  it('同意待ちの利用者は戻されない（回帰）', async () => {
+    mocks.getParents.mockResolvedValue([])
+    await mountSuspended(PendingPage, options)
+    await flushPromises()
+
+    expect(mocks.navigate).not.toHaveBeenCalledWith('/dashboard')
+    expect(mocks.getInvitations).toHaveBeenCalled()
+  })
+})
+
+/**
+ * CMP-261123-1124 アリシゼーション ALIC-3/ALIC-4
+ * - 招待の業務エラー（BE の応答は data.error.code）を業務コード別の案内にする。汎用の「エラーが発生しました」にしない。
+ *   トースト（積み重なる）ではなく画面内の 1 か所に出し、再送信や入力で消える
+ * - スマホでも押せるタップ領域（44x44px 以上）
+ */
+describe('parental-consent/pending.vue 招待エラーの案内（ALIC-3）', () => {
+  function apiError(code: string) {
+    return Object.assign(new Error('bad request'), { data: { error: { code } } })
+  }
+
+  async function sendWith(code: string) {
+    mocks.getParents.mockResolvedValue([])
+    mocks.sendInvitation.mockRejectedValue(apiError(code))
+    const wrapper = await mountSuspended(PendingPage, options)
+    await flushPromises()
+    await wrapper.find('input[type="email"]').setValue('parent@example.com')
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+    return wrapper
+  }
+
+  it.each([
+    ['AUTH_068', 'parental_consent.error_auth_068'],
+    ['AUTH_069', 'parental_consent.error_auth_069'],
+    ['AUTH_067', 'parental_consent.error_auth_067'],
+    ['COMMON_001', 'parental_consent.error_invalid_email'],
+  ])('%s は業務コード別の案内を画面内に出し、トーストは積まない', async (code, key) => {
+    const wrapper = await sendWith(code)
+
+    expect(wrapper.find('[role="alert"]').text()).toContain(key)
+    expect(wrapper.text()).not.toContain('error.unknown')
+    expect(mocks.error).not.toHaveBeenCalled()
+  })
+
+  it('未知のコードは汎用の案内（error.unknown）にフォールバックする', async () => {
+    const wrapper = await sendWith('SOMETHING_ELSE')
+
+    expect(wrapper.find('[role="alert"]').text()).toContain('error.unknown')
+  })
+
+  it('連続で失敗しても案内は 1 か所のまま、成功すると消える', async () => {
+    const wrapper = await sendWith('AUTH_068')
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(1)
+
+    mocks.sendInvitation.mockResolvedValue(undefined)
+    await wrapper.find('input[type="email"]').setValue('other@example.com')
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  })
+})
+
+describe('parental-consent/pending.vue タップ領域（ALIC-4）', () => {
+  it('「招待を取消」と「ログアウト」は 44x44px 以上（min-h-11 min-w-11）', async () => {
+    mocks.getParents.mockResolvedValue([])
+    mocks.getInvitations.mockResolvedValue([
+      { linkId: 'l1', parentEmail: 'parent@example.com', status: 'PENDING', expiresAt: '2026-12-01T00:00:00' },
+    ])
+    const wrapper = await mountSuspended(PendingPage, options)
+    await flushPromises()
+
+    for (const text of ['parental_consent.cancel_invite', 'button.logout']) {
+      const button = wrapper.findAll('button').find((b: DOMWrapper<Element>) => b.text() === text)
+      expect(button, text).toBeDefined()
+      expect(button!.classes(), text).toEqual(expect.arrayContaining(['min-h-11', 'min-w-11']))
+    }
   })
 })

@@ -5,7 +5,8 @@
 export default defineNuxtPlugin(() => {
   const authStore = useAuthStore()
 
-  if (authStore.isAuthenticated) {
+  // 同意待ちは BE ゲートで塞がれるため取得しない
+  if (authStore.isAuthenticated && !authStore.isPendingParentalConsent) {
     const store = useFeatureFlagStore()
     void store.loadPublicFlags().catch((error) => {
       // 握りつぶさず正直に出力する。ただしアプリ起動は妨げない。

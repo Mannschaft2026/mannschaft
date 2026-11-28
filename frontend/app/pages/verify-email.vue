@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { inviteRedirect } from '~/utils/inviteRedirect'
 definePageMeta({
   layout: 'auth',
 })
 
 const route = useRoute()
-const returnPath = computed(() => inviteRedirect(route.query.redirect))
+const returnPath = computed(() => returnRedirect(route.query.redirect))
 const loginTarget = computed(() => ({
   path: '/login',
   query: returnPath.value ? { redirect: returnPath.value } : {},

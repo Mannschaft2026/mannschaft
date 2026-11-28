@@ -48,6 +48,11 @@
     "error_auth_068": "已向此邮箱地址发送了邀请",
     "error_auth_069": "不能向自己的邮箱地址发送邀请",
     "error_auth_070": "监护人同意完成后即可使用",
-    "link_removed": "已解除链接"
+    "link_removed": "已解除链接",
+    "error_invalid_email": "邮箱地址格式不正确",
+    "go_manage": "前往监护人管理",
+    "go_dashboard": "前往仪表板",
+    "error_wrong_account": "请使用受邀邮箱地址对应的账号登录。当前账号无法批准或拒绝",
+    "relogin_button": "使用其他账号重新登录"
   }
 }

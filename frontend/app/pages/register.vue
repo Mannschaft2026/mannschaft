@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { inviteRedirect } from '~/utils/inviteRedirect'
 import dayjs from 'dayjs'
 import { useForm } from 'vee-validate'
 import { toTypedSchema } from '~/utils/toTypedSchema'
@@ -16,7 +15,7 @@ const { t, locale } = useI18n()
 const api = useApi()
 const { getGoogleAuthUrl } = useAuthApi()
 const route = useRoute()
-const returnPath = computed(() => inviteRedirect(route.query.redirect))
+const returnPath = computed(() => returnRedirect(route.query.redirect))
 const loginTarget = computed(() => ({
   path: '/login',
   query: returnPath.value ? { redirect: returnPath.value } : {},

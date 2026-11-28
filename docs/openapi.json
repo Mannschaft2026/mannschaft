@@ -204567,10 +204567,6 @@
           "parentEmail": {
             "type": "string",
             "minLength": 1
-          },
-          "parent_email": {
-            "type": "string",
-            "writeOnly": true
           }
         }
       },

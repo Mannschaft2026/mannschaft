@@ -59,12 +59,15 @@ class ParentalConsentApproveActivationTest {
         when(link.getStatus()).thenReturn(ParentalConsentLinkStatus.PENDING);
         when(link.getExpiresAt()).thenReturn(LocalDateTime.now().plusDays(1));
         when(link.getChildUserId()).thenReturn(childUserId);
+        when(link.getParentEmail()).thenReturn("parent@example.com");
         when(parentalConsentLinkRepository.findChildUserIdByTokenHash("token-hash")).thenReturn(Optional.of(childUserId));
         when(parentalConsentLinkRepository.findByTokenHashForUpdate("token-hash"))
                 .thenReturn(Optional.of(link));
 
         UserEntity parent = mock(UserEntity.class);
         when(parent.getBirthDate()).thenReturn(null); // 未成年保護者チェックはスキップ
+        when(parent.getEmail()).thenReturn("parent@example.com"); // 承認者は招待先メールのアカウントに限る
+        when(parent.getStatus()).thenReturn(UserEntity.UserStatus.ACTIVE);
         when(userRepository.findById(parentUserId)).thenReturn(Optional.of(parent));
 
         UserEntity child = mock(UserEntity.class);

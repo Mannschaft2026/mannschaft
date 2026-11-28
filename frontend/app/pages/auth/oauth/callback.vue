@@ -41,6 +41,7 @@ onMounted(async () => {
       return
     }
     authStore.setTokens(result.accessToken, result.refreshToken)
+    let isPendingConsent = false
     // プロフィールを取得してユーザー情報を更新
     try {
       const profile = await api<{
@@ -53,8 +54,10 @@ onMounted(async () => {
           systemRole: string | null
           locale: string
           timezone: string | null
+          status: string | null
         }
       }>('/api/v1/users/me')
+      isPendingConsent = profile.data.status === PENDING_PARENTAL_CONSENT_STATUS
       await authStore.setUser({
         id: profile.data.id,
         email: profile.data.email,
@@ -63,11 +66,20 @@ onMounted(async () => {
         systemRole: profile.data.systemRole ?? undefined,
         timezone: profile.data.timezone ?? undefined,
         locale: profile.data.locale || undefined,
+        status: profile.data.status ?? undefined,
       })
       // ログイン時もアカウント言語を正として Cookie と表示を揃える（CMP-261007-1243）。
-      await applyAccountLocale(profile.data.locale)
+      // 同意待ちは BE ゲートで塞がれる API を呼ばない。
+      if (!isPendingConsent) await applyAccountLocale(profile.data.locale)
     } catch {
-      // プロフィール取得失敗はサイレント（トークンは取得済み）
+      // プロフィール取得失敗はサイレント（トークンは取得済み）。
+      // ただし同意待ち（ppc=true）は本人を復元できず pending へ着けない（user=null だと auth ガードが /login へ戻す）。
+      // 通常扱いもしないので、共通のログイン失敗処理（サーバーログアウト）へ揃える。
+      if (isParentalConsentPendingToken(result.accessToken)) {
+        await authStore.serverLogout()
+        error.value = t('auth.oauth.callback_error')
+        return
+      }
     }
 
     // 本人の復元による世代更新が終わってからタイマーを武装する。
@@ -75,10 +87,19 @@ onMounted(async () => {
 
     // ログイン成立直後にアカウント設定（外観・ナビ）をサーバーから同期する。
     // 新ブラウザ（シークレット等）で localStorage が空でも BEの保存済み設定が反映される。
+    // 同意待ちは設定同期をせず pending 固定で遷移する。
+    if (isPendingConsent) {
+      await router.push(PARENTAL_CONSENT_PENDING_PATH)
+      return
+    }
     authStore.syncAccountSettings()
 
     notification.success(t('auth.login.success'))
-    if (authStore.isSystemAdmin) {
+    // 保護者の承認画面から来た場合は、保存済み token の承認画面へ戻る（一度きり）
+    const resumed = takeParentalConsentReturnPath()
+    if (resumed) {
+      await router.push(resumed)
+    } else if (authStore.isSystemAdmin) {
       await router.push('/system-admin')
     } else {
       await router.push('/dashboard')

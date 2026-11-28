@@ -17,7 +17,7 @@ public class InviteParentRequest {
     private final String parentEmail;
 
     @JsonCreator
-    public InviteParentRequest(@JsonProperty("parent_email") String parentEmail) {
+    public InviteParentRequest(@JsonProperty("parentEmail") String parentEmail) {
         this.parentEmail = parentEmail;
     }
 }

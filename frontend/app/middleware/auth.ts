@@ -16,4 +16,8 @@ export default defineNuxtRouteMiddleware((to) => {
       replace: isInitialSsrNavigation,
     })
   }
+  // 保護者同意待ちは pending 画面以外を開かせない（BE ゲートで塞がれる API を叩く前に戻す）。
+  if (authStore.isPendingParentalConsent && to.path !== PARENTAL_CONSENT_PENDING_PATH) {
+    return navigateTo(PARENTAL_CONSENT_PENDING_PATH, { replace: true })
+  }
 })

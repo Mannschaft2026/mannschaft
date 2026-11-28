@@ -170,7 +170,7 @@ public class ParentalConsentReleaseBatchService {
                             "PARENTAL_CONSENT_RELEASED",
                             user.getLocale() != null ? user.getLocale() : "ja",
                             user.getEmail(),
-                            Map.of("displayName", displayName),
+                            ParentalConsentMailContent.released(displayName),
                             "auth",
                             null,
                             null,

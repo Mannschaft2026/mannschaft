@@ -386,7 +386,13 @@ public class EmailOutboxServiceImpl implements EmailOutboxService {
                  "RESERVATION_RECEIVED_NOTIFY",
                  "GUARDIANSHIP_PROGRESSION_NOTICE",
                  "DIRECT_MAIL_AD",
-                 "PROVISIONING_ADMIN_INVITE" -> {
+                 "PROVISIONING_ADMIN_INVITE",
+                 // CMP-261123-1124: 保護者同意系（auth の ParentalConsentMailContent が組み立てる）
+                 "PARENTAL_CONSENT_INVITATION",
+                 "PARENTAL_CONSENT_APPROVED",
+                 "PARENTAL_CONSENT_REJECTED",
+                 "PARENTAL_CONSENT_EXPIRED_ACCOUNT_DELETED",
+                 "PARENTAL_CONSENT_RELEASED" -> {
                 String subject = vars.get("subject");
                 String htmlBody = vars.get("body");
                 if (subject == null || htmlBody == null) {

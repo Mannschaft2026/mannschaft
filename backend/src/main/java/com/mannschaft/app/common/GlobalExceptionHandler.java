@@ -369,6 +369,8 @@ public class GlobalExceptionHandler {
             Map.entry("AUTH_084", HttpStatus.NOT_FOUND),         // 自分の保留が無い → 404
             Map.entry("AUTH_085", HttpStatus.CONFLICT),          // 保留の状態不正 → 409
             Map.entry("AUTH_086", HttpStatus.CONFLICT),          // 保留の参加処理が進行中 → 409
+            Map.entry("AUTH_088", HttpStatus.CONFLICT),          // 保護者招待は同意待ちの本人のみ → 409
+            Map.entry("AUTH_089", HttpStatus.FORBIDDEN),         // 承認者は招待先メールのアカウントのみ → 403
             // F03.3 カレンダー同期: 非メンバーの同期トグルは IDOR 対策で 403 ではなく 404（存在秘匿）
             Map.entry("GCAL_010", HttpStatus.NOT_FOUND),
             // F02.5 行動メモ: IDOR 対策で 403 ではなく 404 を返す

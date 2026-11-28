@@ -48,6 +48,11 @@
     "error_auth_068": "이 이메일 주소로 이미 초대를 보냈습니다",
     "error_auth_069": "자신의 이메일 주소로는 초대를 보낼 수 없습니다",
     "error_auth_070": "보호자 동의 완료 후 이용할 수 있습니다",
-    "link_removed": "링크를 해제했습니다"
+    "link_removed": "링크를 해제했습니다",
+    "error_invalid_email": "이메일 주소 형식이 올바르지 않습니다",
+    "go_manage": "보호자 관리로 이동",
+    "go_dashboard": "대시보드로 이동",
+    "error_wrong_account": "초대받은 이메일 주소의 계정으로 로그인해 주세요. 현재 계정으로는 승인하거나 거부할 수 없습니다",
+    "relogin_button": "다른 계정으로 다시 로그인"
   }
 }

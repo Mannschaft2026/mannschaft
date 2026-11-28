@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => ({
   notifySuccess: vi.fn(),
   notifyError: vi.fn(),
   applyAccountLocale: vi.fn(),
+  serverLogout: vi.fn(),
 }))
 const routeState = vi.hoisted(() => ({ path: '/auth/oauth/callback', params: {}, query: {} as Record<string, string> }))
 
@@ -70,6 +71,7 @@ vi.mock('~/stores/useAuthStore', () => ({
     setTokens: mocks.setTokens,
     setUser: mocks.setUser,
     syncAccountSettings: mocks.syncAccountSettings,
+    serverLogout: mocks.serverLogout,
     isSystemAdmin: false,
     isAuthenticated: false,
     loadFromStorage: vi.fn(),
@@ -187,5 +189,82 @@ describe('pages/auth/oauth/callback.vue 応答三択の分岐（CMP-261012-0911�
     await flush()
 
     expect(mocks.loginWithOAuth).toHaveBeenCalledWith('google', { code: 'google-auth-code' })
+  })
+})
+
+/**
+ * CMP-261123-1124 試練（red 先行）AC1: OAuth コールバック経由でも同意待ちの未成年は pending に着く。
+ * 同意待ちでは設定同期（BE ゲートで AUTH_070）をせず、/dashboard へも送らない。
+ */
+describe('pages/auth/oauth/callback.vue 保護者同意待ち（CMP-261123-1124）', () => {
+  const pendingProfile = {
+    id: 1, email: 'u@example.com', lastName: '山田', firstName: '太郎',
+    avatarUrl: null, systemRole: null, locale: 'ja', timezone: 'Asia/Tokyo', status: 'PENDING_PARENTAL_CONSENT',
+  }
+
+  it('AC1: トークン応答で本人が同意待ちなら status 付きで保存し /parental-consent/pending へ', async () => {
+    mocks.loginWithOAuth.mockResolvedValue({ data: { accessToken: 'a', refreshToken: 'r' } })
+    mocks.api.mockResolvedValue({ data: pendingProfile })
+
+    mountCallback()
+    await flush()
+
+    expect(mocks.setTokens).toHaveBeenCalledWith('a', 'r')
+    expect(mocks.setUser).toHaveBeenCalledWith(expect.objectContaining({ id: 1, status: 'PENDING_PARENTAL_CONSENT' }))
+    expect(mocks.syncAccountSettings).not.toHaveBeenCalled()
+    const targets = navigatedTargets()
+    expect(targets.some(t => t.includes('/parental-consent/pending')), `遷移先: ${JSON.stringify(targets)}`).toBe(true)
+    expect(targets).not.toContain('/dashboard')
+  })
+
+  it('AC7: トークン応答で本人が ACTIVE なら従来どおり /dashboard へ（回帰）', async () => {
+    mocks.loginWithOAuth.mockResolvedValue({ data: { accessToken: 'a', refreshToken: 'r' } })
+    mocks.api.mockResolvedValue({ data: { ...pendingProfile, status: 'ACTIVE' } })
+
+    mountCallback()
+    await flush()
+
+    expect(mocks.syncAccountSettings).toHaveBeenCalledOnce()
+    expect(navigatedTargets()).toContain('/dashboard')
+    expect(navigatedTargets().some(t => t.includes('/parental-consent/pending'))).toBe(false)
+  })
+})
+
+/**
+ * CMP-261123-1124 AC1（失敗経路）: プロフィール取得に失敗した同意待ち（JWT ppc=true）は本人を復元できない。
+ * user=null のまま pending へ遷移すると auth ガードが /login へ戻すため、pending へ送らず
+ * 共通のログイン失敗処理（サーバーログアウト）へ揃える。通常ユーザー扱いで /dashboard へも送らない。
+ */
+function jwtWith(payload: Record<string, unknown>): string {
+  const b64url = (o: unknown) => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_')
+  return `${b64url({ alg: 'HS256', typ: 'JWT' })}.${b64url(payload)}.signature`
+}
+
+describe('pages/auth/oauth/callback.vue プロフィール取得失敗と同意待ち（CMP-261123-1124）', () => {
+  it('AC1: ppc=true でプロフィール取得に失敗したらログイン失敗処理へ（pending にも dashboard にも送らない）', async () => {
+    const ppcToken = jwtWith({ sub: '1', ppc: true, exp: Math.floor(Date.now() / 1000) + 900 })
+    mocks.loginWithOAuth.mockResolvedValue({ data: { accessToken: ppcToken, refreshToken: 'r' } })
+    mocks.api.mockRejectedValue(new Error('profile'))
+
+    mountCallback()
+    await flush()
+
+    expect(mocks.serverLogout).toHaveBeenCalledOnce()
+    expect(mocks.syncAccountSettings).not.toHaveBeenCalled()
+    const targets = navigatedTargets()
+    expect(targets).not.toContain('/dashboard')
+    expect(targets.some(t => t.includes('/parental-consent/pending'))).toBe(false)
+  })
+
+  it('AC7: ppc でないトークンのプロフィール取得失敗は従来どおり（サイレントで /dashboard へ）', async () => {
+    const activeToken = jwtWith({ sub: '1', ppc: false, exp: Math.floor(Date.now() / 1000) + 900 })
+    mocks.loginWithOAuth.mockResolvedValue({ data: { accessToken: activeToken, refreshToken: 'r' } })
+    mocks.api.mockRejectedValue(new Error('profile'))
+
+    mountCallback()
+    await flush()
+
+    expect(mocks.serverLogout).not.toHaveBeenCalled()
+    expect(navigatedTargets()).toContain('/dashboard')
   })
 })

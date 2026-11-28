@@ -349,9 +349,11 @@ class ParentalConsentServiceTest {
             // 子ユーザーを返す（拒否通知メール用）
             UserEntity childUser = buildChildUser(childUserId, "child@example.com");
             given(userRepository.findByIdForUpdateIncludingDeleted(childUserId)).willReturn(Optional.of(childUser));
+            // 拒否できるのは招待先メールの確認済みアカウントだけ（CMP-261123-1124）
+            given(userRepository.findById(2L)).willReturn(Optional.of(buildAdultParentUser(2L, "parent1@example.com")));
 
             // when
-            parentalConsentService.rejectParentalConsent("rawToken", "127.0.0.1");
+            parentalConsentService.rejectParentalConsent("rawToken", 2L, "127.0.0.1");
 
             // then: 子ユーザーの論理削除は実行されないこと
             verify(userRepository, never()).save(argThat(u -> u.getDeletedAt() != null));
@@ -379,9 +381,10 @@ class ParentalConsentServiceTest {
 
             UserEntity childUser = buildChildUser(childUserId, "child@example.com");
             given(userRepository.findByIdForUpdateIncludingDeleted(childUserId)).willReturn(Optional.of(childUser));
+            given(userRepository.findById(2L)).willReturn(Optional.of(buildAdultParentUser(2L, "parent@example.com")));
 
             // when
-            parentalConsentService.rejectParentalConsent("rawToken", "127.0.0.1");
+            parentalConsentService.rejectParentalConsent("rawToken", 2L, "127.0.0.1");
 
             // then: 子ユーザーが論理削除されること
             verify(userRepository).save(argThat(u -> u.getDeletedAt() != null));

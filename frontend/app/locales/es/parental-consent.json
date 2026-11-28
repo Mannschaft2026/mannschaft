@@ -48,6 +48,11 @@
     "error_auth_068": "Ya se ha enviado una invitación a esta dirección de correo",
     "error_auth_069": "No puede enviarse una invitación a su propio correo electrónico",
     "error_auth_070": "Disponible después de completar el consentimiento de los padres",
-    "link_removed": "Vínculo eliminado"
+    "link_removed": "Vínculo eliminado",
+    "error_invalid_email": "El formato de la dirección de correo no es válido",
+    "go_manage": "Ir a la gestión de padres/tutores",
+    "go_dashboard": "Ir al panel",
+    "error_wrong_account": "Inicia sesión con la cuenta de la dirección de correo invitada. Con la cuenta actual no se puede aprobar ni rechazar",
+    "relogin_button": "Iniciar sesión con otra cuenta"
   }
 }

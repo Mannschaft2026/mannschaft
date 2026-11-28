@@ -81,5 +81,17 @@ public enum EmailTemplateKind {
 
     // 組織/チーム統治系 (柱②-2 販促プロビジョニング。骨格追加のみ・レンダラは出陣で実装)
     /** 柱②-2: SYSTEM_ADMIN による販促プロビジョニング招待メール (raw token 含む) */
-    PROVISIONING_ADMIN_INVITE
+    PROVISIONING_ADMIN_INVITE,
+
+    // 保護者同意系 (F01.9。auth が subject/body を組み立てて payloadVars に詰めるスルー方式。CMP-261123-1124)
+    /** 保護者への同意依頼（承認画面へのリンク含む。raw token 含む） */
+    PARENTAL_CONSENT_INVITATION,
+    /** 子への「保護者が同意した」通知 */
+    PARENTAL_CONSENT_APPROVED,
+    /** 子への「保護者が同意を拒否した」通知 */
+    PARENTAL_CONSENT_REJECTED,
+    /** 子への「同意が得られず期限切れでアカウントを削除した」通知 */
+    PARENTAL_CONSENT_EXPIRED_ACCOUNT_DELETED,
+    /** 子への「成人到達により保護者との連携を自動解除した」通知 */
+    PARENTAL_CONSENT_RELEASED
 }

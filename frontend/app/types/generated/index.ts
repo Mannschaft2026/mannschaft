@@ -67517,7 +67517,6 @@ export interface components {
         };
         InviteParentRequest: {
             parentEmail?: string;
-            parent_email?: string;
         };
         ApproveConsentRequest: {
             token?: string;

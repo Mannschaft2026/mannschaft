@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeAll, vi } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { mountSuspended, mockNuxtImport } from '@nuxt/test-utils/runtime'
 import type { SocialProfile } from '~/types/social-profile'
 import type { InvitationResponse, ParentLinkResponse } from '~/types/parental-consent'
+import { useAuthStore } from '~/stores/useAuthStore'
 
 /**
  * CMP-260909-1141 Phase 4 のユニットテスト。
@@ -23,6 +24,14 @@ const mockNavigateTo = vi.fn()
 mockNuxtImport('navigateTo', () => (...args: unknown[]) => mockNavigateTo(...args))
 // pending.vue は同意後にトークンを更新し、'refreshed' のときだけ遷移する（CMP-261107-1833）。更新の成否は外部境界なのでここで固定する
 mockNuxtImport('performTokenRefresh', () => () => Promise.resolve('refreshed'))
+
+// 承認後の本人取り直し（/users/me）。ACTIVE に戻った本人を返す（CMP-261123-1124 AC6）
+mockNuxtImport('useApi', () => () => () => Promise.resolve({
+  data: {
+    id: 7, email: 'child@example.com', lastName: '山田', firstName: '太郎',
+    avatarUrl: null, systemRole: null, locale: 'ja', timezone: 'Asia/Tokyo', status: 'ACTIVE',
+  },
+}))
 
 const invitations: InvitationResponse[] = []
 let mockParents: ParentLinkResponse[] = []
@@ -135,6 +144,13 @@ describe('Phase 4 設定ハブ導線', () => {
 })
 
 describe('Phase 4 保護者同意 pending → manage 遷移', () => {
+  // pending 画面は同意待ちの本人にだけ開く（同意待ち以外は /dashboard へ戻す。CMP-261123-1124 D-2）
+  beforeEach(() => {
+    useAuthStore().$patch({
+      user: { id: 7, email: 'child@example.com', fullName: '山田 太郎', profileImageUrl: null, status: 'PENDING_PARENTAL_CONSENT' },
+    } as never)
+  })
+
   it('P4-PENDING-001: 承認済み保護者がいれば /parental-consent/manage へ遷移する（/ ではない）', async () => {
     mockNavigateTo.mockClear()
     mockParents = [{ linkId: 'p1', parentEmail: 'parent@example.com', parentUserId: 1, approvedAt: '2026-01-01T00:00:00' }]
