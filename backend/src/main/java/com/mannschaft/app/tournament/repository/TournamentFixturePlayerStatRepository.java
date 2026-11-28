@@ -29,9 +29,16 @@ public interface TournamentFixturePlayerStatRepository extends JpaRepository<Tou
      * 試合完了イベント受信ごとに「当該 fixture の基本 statKey 行を delete → match 集計から再 insert」
      * することで冪等（再 COMPLETED で二重計上しない・05 §H.2 (d)）にする。大会固有の独自 statKey
      * （H.6）は削除対象に含めないため、本メソッドは statKey を明示指定で受ける。</p>
+     *
+     * <p>全置換（delete → 再 insert）用の一括 DELETE（CMP-261127-2135）。派生 delete（deleteBy...）は
+     * 行を読んで remove を予約するだけで、DB への DELETE は flush まで遅れる。その間に IDENTITY 主キーの
+     * save は INSERT を即時に流し、UUID 主キーでも flush は INSERT を DELETE より先に流すため、
+     * 同じ一意キーでの再 insert が一意制約に当たる。JPQL の一括 DELETE はその場で DB に流れるので、
+     * 後続の insert より必ず先に効く。{@code flushAutomatically} で呼び出し前の未確定の変更を先に流す。</p>
      */
-    @Modifying
-    void deleteByMatchIdAndStatKeyIn(Long matchId, Collection<String> statKeys);
+    @Modifying(flushAutomatically = true)
+    @Query("DELETE FROM TournamentFixturePlayerStatEntity e WHERE e.matchId = :matchId AND e.statKey IN :statKeys")
+    void deleteByMatchIdAndStatKeyIn(@Param("matchId") Long matchId, @Param("statKeys") Collection<String> statKeys);
 
     @Query("SELECT ps FROM TournamentFixturePlayerStatEntity ps " +
            "JOIN TournamentFixtureEntity m ON ps.matchId = m.id " +

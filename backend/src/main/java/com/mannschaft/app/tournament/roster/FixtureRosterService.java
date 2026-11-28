@@ -141,7 +141,9 @@ public class FixtureRosterService {
             return buildResponse(match, participant);
         }
 
-        // 全置換（上書き or 新規）でテンプレを複製
+        // 全置換（上書き or 新規）でテンプレを複製。delete は JPQL の一括 DELETE で、この時点で DB に流れる。
+        // 派生 delete だと DELETE が flush まで遅れ、IDENTITY の saveAll が先に INSERT して
+        // uq_tmr_match_user に当たり 500 になっていた（CMP-261127-2135）。
         rosterRepository.deleteByMatchIdAndParticipantId(match.getId(), participant.getId());
         staffRepository.deleteByMatchIdAndParticipantId(match.getId(), participant.getId());
 
@@ -348,6 +350,8 @@ public class FixtureRosterService {
 
     private void replacePlayers(Long matchId, TournamentParticipantEntity participant,
                                 SubmitRosterRequest request, Long userId) {
+        // 旧行の DELETE を、後続の saveAll（IDENTITY のため persist で即 INSERT）より先に DB へ流す。
+        // 派生 delete では DELETE が flush まで遅れ、再提出が uq_tmr_match_user に当たっていた（CMP-261127-2135）。
         rosterRepository.deleteByMatchIdAndParticipantId(matchId, participant.getId());
         if (request.getPlayers() == null || request.getPlayers().isEmpty()) {
             return;
