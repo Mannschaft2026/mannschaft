@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-260909-0304",
+  "scope": "app",
+  "implementation": {
+    "pr": 4883,
+    "sha": "7bfaa7ab372a6c0237c1d9f89b2ef16aaada9422"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-0304-1",
+      "description": "期限切れの REQUESTED / REQUIRES_PAYMENT_METHOD に承諾を試みると EXPIRED が commit される",
+      "tests": [
+        {
+          "name": "BillingPayerHandoverStateMachineIT（expiredAcceptAttemptCommitsExpiredStatus）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/billing/BillingPayerHandoverStateMachineIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-0304-2",
+      "description": "ACCEPTED 以降の期限切れ行は承諾試行で直接 EXPIRED にならない",
+      "tests": [
+        {
+          "name": "BillingPayerHandoverStateMachineIT（expiredAcceptAttemptDoesNotExpireAcceptedRow）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/billing/BillingPayerHandoverStateMachineIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-0304-3",
+      "description": "通知 actionUrl が実在する課金設定ページを指す",
+      "tests": [
+        {
+          "name": "BillingPayerHandoverNotificationListenerActionUrlTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/billing/BillingPayerHandoverNotificationListenerActionUrlTest.java"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 45984973777
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4883"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-260909-0304-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-260909-0304-real.md"
+    }
+  },
+  "regressions": []
+}
