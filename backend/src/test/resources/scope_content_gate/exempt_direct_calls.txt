@@ -12,6 +12,7 @@ com.mannschaft.app.committee.service.CommitteeInvitationService	対象外: COMMI
 com.mannschaft.app.committee.service.CommitteeService	対象外: COMMITTEE スコープ（チームではない）
 com.mannschaft.app.joinrequest.service.JoinRequestService	対象外（入口表）: 参加申請。申請者は非所属が前提。SUPPORTER を作る経路は入口表（PR-E）
 com.mannschaft.app.organization.service.OrganizationExtendedProfileService	対象外: 組織スコープ（F00 §20.10 K-1）
+com.mannschaft.app.role.service.InviteReissueRequestService	対象外（権限管理）: 再招待の管理操作。依頼者が既に在籍かを見るだけで中身を返さない。SUPPORTER 招待の発行は入口表（MembershipInviteTokenIssuer・PR-E）
 com.mannschaft.app.role.service.MembershipInviteService	対象外（権限管理）: 招待の管理操作。入口は入口表（PR-E）
 com.mannschaft.app.role.service.OwnershipTransferOfferService	対象外（権限管理）: オーナー委譲の管理操作
 com.mannschaft.app.role.service.PermissionGroupService	対象外（権限管理）: 権限グループの管理操作

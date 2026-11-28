@@ -224,6 +224,7 @@
 
 > - 共有招待・個人招待（承諾型）とも、付与できるのは MEMBER / SUPPORTER だけ（ADMIN / DEPUTY_ADMIN / GUEST / SYSTEM_ADMIN は 422 ROLE_009）。管理者への引き上げは参加後のロール変更・オーナー委譲で行う
 > - 実装: `InviteRolePolicy`（発行: `InviteService#createInviteToken`・`MembershipInviteService`、承諾: `InviteAcceptanceWriter`、付与: `MembershipGrantService`）
+> - 非公開チーム（CMP-261124-0159）: TEAM の SUPPORTER 招待は、role 専属の発行TX（共有: `SharedInviteTokenIssuer#issue`、DM・再招待: `MembershipInviteTokenIssuer#issue` / `#stageForReissue` / `#activateStaged`）の中で、invite_tokens に触れる前にチーム行を `FOR SHARE` で読み、`MEMBERS_AND_ABOVE` なら行を作らず（有効にせず）403 `TEAM_073`。認可（ADMIN / INVITE_MEMBERS の DEPUTY_ADMIN）の判定の後に行うので、招待権限の無い者には従来の拒否が返る（AC-0159-40）
 > - 共有/DM発行は非TX入口→親専属primary読取→role専属発行TXのcommit→親専属の短いFOR SHARE再確認の順に行う。201応答・DMカード投稿の前に、親の利用可能状態と発行世代一致を再確認する。事前に閉鎖済みならtoken/cardを作らない。発行commit後に閉鎖・世代前進を検出した場合は生成tokenを補償失効して拒否し、監査可能な失効行を保持する。親とtokenの更新TXは混在させない。
 
 ### 招待参加フロー
@@ -245,6 +246,12 @@
    - 組織招待（invite_tokens.organization_id IS NOT NULL）の場合:
      organization_blocks に (organization_id = invite_tokens.organization_id, user_id = current_user_id) が存在すれば 403
 7. memberships に当該スコープのアクティブエントリが既存か確認（left_at IS NULL） → 存在すれば 409
+7a. 非公開チームへの SUPPORTER 招待（CMP-261124-0159・AC-0159-41/91）: TEAM の SUPPORTER 招待では、grant TX
+    （`MembershipGrantService#grantRole`。user 行 → claim 行のロックの後、user_roles・memberships のロック付き読み取りの前）で
+    チーム行を `FOR SHARE` で読み、`MEMBERS_AND_ABOVE` なら付与せず 403 `TEAM_073`。TX ごと巻き戻るので claim に付与印は立たず、
+    Facade の既存の補償（`InviteAcceptanceFacade` の T8）が claim を戻し `used_count` を承諾前の値に戻す。claim TX（T6）はチーム行を
+    ロックしない（invite_tokens → invite_token_claims の後にチーム行を取らない）。在籍済み（409）・claim 失効（ROLE_002）の判定はこの前に行い、
+    結果を変えない。保留承認（`/me/pending-invite/accept`）は `UNAVAILABLE`（失敗コード TEAM_073）
 8. user_roles に INSERT（role_id = invite_tokens.role_id）（権限ロールが ADMIN/DEPUTY_ADMIN の場合）
    + memberships に INSERT（scope_type/scope_id/role_kind/joined_at。role_kind は MEMBER または SUPPORTER）（F00.5 Phase 2 以降）
    - 招待ロール → 書き先（CMP-261124-0157。`MembershipGrantService` / `InviteRolePolicy`）:
@@ -1207,7 +1214,7 @@ WHERE o.archived_at IS NULL
 #### 手順（チームドメインの `TeamVisibilityTransitionFacade`）
 
 1. 認可（`PATCH /teams/{slug}` と同じ）。
-2. `SELECT ... FROM teams WHERE id = ? FOR UPDATE` でチーム行を排他ロックし、`version` を照合する（不一致は既存の楽観ロック競合 409）。**ロック順の規則: どの経路も `teams` 行のロックを最初に取り**、その後に memberships / user_roles / supporter_applications / invite_tokens / invite_token_claims / shared_file_links の順で触る（精査 M-3。逆順を作らないことでデッドロックを起こさない）。
+2. `SELECT ... FROM teams WHERE id = ? FOR UPDATE` でチーム行を排他ロックし、`version` を照合する（不一致は既存の楽観ロック競合 409）。**ロック順の規則（2026-11-25 第 2 版で改訂・PR-E で確定）: 各トランザクションで、非公開化のトランザクションも取る行（memberships・user_roles・invite_tokens・supporter_applications・shared_file_links・signage_access_tokens）より前に `teams` 行をロックする。** 非公開化のトランザクションが取らない行（users・invite_token_claims）の後でよい（精査 M-3。非公開化と同じ行を逆順で取る経路を作らないことでデッドロックを起こさない）。非公開化のトランザクション自身は `teams` 行を最初に取る。
 3. 遷移が「公開側 → MEMBERS_AND_ABOVE」で `confirmSupporterRemoval` が true でなければ 409 `TEAM_074`（何も変えずにロールバック）。
 4. `teams.visibility` を更新する。
 5. **同一トランザクション内**で、次を集合演算で行う（行単位のループ問い合わせをしない）。
@@ -1224,7 +1231,8 @@ WHERE o.archived_at IS NULL
 **@Transactional の越境（理由の明記）**: 手順 4〜5 はチーム・membership・role・supporter の 4 ドメインにまたがるが、「非公開チームにサポーター・ゲストが在籍しない」不変条件をコミットの時点で成立させるため、1 トランザクションに閉じる（`domain_db_design_principles.md` 原則 5 の例外。Facade のクラス Javadoc と該当メソッドに理由コメントを書く）。各ドメインには公開 Service メソッド経由でのみ触れ、他ドメインの Repository を直接使わない。通知は可用性のため AFTER_COMMIT のイベントに分離する（通知が失敗しても後始末は確定済み・中身の閲覧は F00 §20 の上限で既に拒否される）。
 
 **並行・二重実行**:
-- 入口側（下の「入口の関所」を通る全経路）は、在籍・ロールを作る同じトランザクションで、**他のどの行よりも先に** `SELECT visibility FROM teams WHERE id = ? FOR SHARE` でチーム行を共有ロックしてから公開範囲を判定する（招待承諾は claims 行のロックより前）。非公開化の排他ロック（手順 2）と直列化され、「非公開化の直後に古い判定で在籍が作られる」競合を起こさない。
+- 入口側（下の「入口の関所」を通る全経路）は、在籍・ロール・招待・申請の行を作る（変える）同じトランザクションで、手順 2 のロック順の規則に従い、非公開化も取る行より前に `SELECT visibility FROM teams WHERE id = ? FOR SHARE`（共通部品 `MembersOnlyTeamEntryGuard`）でチーム行を共有ロックしてから公開範囲を判定する。非公開化の排他ロック（手順 2）と直列化され、「非公開化の直後に古い判定で在籍が作られる」競合を起こさない。
+- 招待承諾は同期 Saga（claim TX と grant TX が別コミット。`InviteAcceptanceFacade`）なので、判定は grant TX（user 行 → claim 行のロックの後・在籍付与の前）で行う。claim TX はチーム行をロックしない。拒否は既存の補償に乗せる（「招待参加フロー」手順 7a。旧記載「招待承諾は claims 行のロックより前」は Saga の取得順 user → claim と衝突していたため、第 2 版 §0 #1 の裁定で改めた）。
 - 同じ `version` での二重送信は 2 回目が楽観ロック競合で 409 になり、後始末・通知は 1 回だけ。
 - 後始末の各 UPDATE は「在籍中」「PENDING」「未失効」を条件に持つため、再実行しても追加の変更は起きない（冪等）。
 
@@ -1238,9 +1246,9 @@ WHERE o.archived_at IS NULL
 |---|---|
 | `MembershipService#join` / 在籍の `role_kind` 変更（SUPPORTER を作る・MEMBER→SUPPORTER へ変える） | scope=TEAM かつチームが非公開なら 403 `TEAM_073`（チーム行を FOR SHARE で先に読む） |
 | `RoleService#assignRole` / `#changeRole`（GUEST・SUPPORTER の付与・降格） | 同上 |
-| `archived_membership_grants` の復元 | 非公開チームへの SUPPORTER / GUEST 行は復元対象から外す（例外にしない） |
+| `archived_membership_grants` の復元 | 非公開チームへの SUPPORTER / GUEST 行は復元対象から外す（例外にしない）。**2026-11-27 時点で復元処理（F14.3 §9.4）は未実装**（退避表と Entity だけがある）。復元を実装する PR が本規則と AC-0159-49 を同時に満たすこと |
 
-- ArchUnit `MembersOnlyTeamEntryChokePointTest`（F00 §20.6）で、関所以外から `memberships` の SUPPORTER 在籍・`user_roles` の GUEST 行を作れないことを固定する（入口の網羅の番人）。
+- ArchUnit `MembersOnlyTeamEntryChokePointTest`（F00 §20.6）で、関所以外から `memberships` の SUPPORTER 在籍・`user_roles` の GUEST 行を作れないことを固定する（入口の網羅の番人）。実装（PR-E）: `MembershipEntity` を組み立てられるのは `MembershipService#join` だけ、`UserRoleEntity` を組み立てられるのは関所（`RoleService#assignRole` / `#changeRole`）と理由付きの許可リスト（ADMIN / MEMBER 固定の付与・招待ポリシーで GUEST を作れない付与）だけ、関所と入口表の全経路が判定部品 `MembersOnlyTeamEntryGuard` を呼ぶこと、を固定し、迂回する見本で赤になることを自己検査する。
 - 番人と `MembersOnlyTeamSupporterInvariantIT` を条件に、中身を返さない書き込み経路は不変条件に依拠する（F00 §20.5.1）。
 
 #### サポーター入口の拒否（非公開チーム）
@@ -1254,7 +1262,8 @@ WHERE o.archived_at IS NULL
 | ロール変更・割当（GUEST・SUPPORTER への付与・降格） | `RoleService#assignRole` / `#changeRole`（関所） | 403 `TEAM_073` |
 | 参加申請の承認・組織経由の付与 | `JoinRequestService` ほか（関所を通る） | 403 `TEAM_073` |
 | アーカイブ復元 | `archived_membership_grants` の復元（関所） | SUPPORTER / GUEST 行を除外して復元 |
-| `TeamService#followTeam` | 死蔵 | 撤去 |
+| `TeamService#followTeam` | 死蔵 | 撤去（PR-E で削除済み） |
+| 再招待の仮発行・有効化（CMP-261107-1833） | `MembershipInviteTokenIssuer#stageForReissue` / `#activateStaged` | SUPPORTER の再招待は 403 `TEAM_073`（仮発行の後に非公開化された場合は有効にしない） |
 
 組織スコープの入口（組織の PRIVATE）は今回変えない（F00 §20.10 K-1）。
 
@@ -1269,6 +1278,7 @@ WHERE o.archived_at IS NULL
 - **AC-0159-46**: 公開チームでは招待発行・承諾・申請承認・一括承認・フォローの結果が本戦役前と同一（回帰）。
 - **AC-0159-47**: `TeamService#followTeam` がコードから消えている（コンパイル・ArchUnit）。
 - **AC-0159-48**: 非公開チームで ADMIN が `PATCH /teams/{slug}/members/{userId}/role` で MEMBER を SUPPORTER へ降格・非所属者に GUEST を付与すると 403 `TEAM_073`、在籍・`user_roles` は不変。ADMIN / DEPUTY_ADMIN / MEMBER 間の変更は 200。参加申請の承認・組織経由の付与で SUPPORTER を作る経路も 403 `TEAM_073`。`MembersOnlyTeamEntryChokePointTest` が緑で、関所を迂回する呼び出しを足すと赤になる。
+- **AC-0159-91**: 非公開チームの SUPPORTER トークンを承諾すると、grant TX（claim ロック後・在籍付与前）で 403 `TEAM_073` となり、既存の補償で claim が戻り（付与印なし）`used_count` が承諾前の値に復元され、在籍・`user_roles` は作られない。`InviteAcceptanceBoundaryArchTest`（Facade 非 TX 契約）が緑。claim TX は teams をロックしない（取得順を SQL 記録で検証）。
 - **AC-0159-49**: 非公開チームの `archived_membership_grants`（MEMBER 1・SUPPORTER 1・GUEST 1）を復元すると MEMBER だけが戻り、SUPPORTER・GUEST は戻らず、除外件数 2 が応答・監査ログに残る。公開チームでは 3 件とも戻る（回帰）。
 
 #### 受け入れ条件（T: 非公開化）

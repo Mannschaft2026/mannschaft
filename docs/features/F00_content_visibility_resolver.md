@@ -3303,7 +3303,7 @@ Resolver を通らない読み取り経路（スコープ単位の一覧・集�
 | `repairplan` | 12 | RepairPlanDashboardController(1)、RepairPlanQuoteKanbanController(1)、RepairPlanTimelineController(1)、BoardHandoverPackService(2)、RepairPlanItemService(2)、RepairPlanScenarioService(3)、TeamMemberTermService(2) | 門 | 修繕計画 |
 | `reservation` | 3 | ReservationDetailFacade(1)、ReservationSlotTemplateService(1)、ReservationViewAccessGuard(1) | 門 | 予約の内部読み取り |
 | `resident` | 12 | DwellingUnitService(4)、PropertyListingService(6)、ResidentDocumentService(1)、ResidentRegistryService(1) | 門 | 住民台帳・住戸・物件掲載・書類 |
-| `role` | 12 | DefaultAccessControlService(7)、MembershipInviteService(2)、OwnershipTransferOfferService(1)、PermissionGroupService(2) | 対象外（権限管理） | DefaultAccessControlService 本体・招待・オーナー委譲・権限グループ（管理操作。入口は入口表） |
+| `role` | 13 | DefaultAccessControlService(7)、MembershipInviteService(2)、OwnershipTransferOfferService(1)、PermissionGroupService(2)、InviteReissueRequestService(1) | 対象外（権限管理） | DefaultAccessControlService 本体・招待・再招待・オーナー委譲・権限グループ（管理操作。入口は入口表）。InviteReissueRequestService は CMP-261107-1833 PR3 で増えた再招待（依頼者が在籍済みかを見るだけ。PR-E で対象外へ登録） |
 | `safetycheck` | 7 | SafetyCheckService(2)、SafetyFollowupService(1)、SafetyResponseService(1)、SafetyTemplateService(3) | 門 | 安否確認 |
 | `schedule` | 11 | OrgAnnualScheduleController(2)、TeamAnnualScheduleController(2)、TeamEventCategoryController(1)、ScheduleCrossRefService(1)、ScheduleMediaAclService(2)、ScheduleMediaQueryService(1)、ScheduleService(2) | 門 | 予定・年間計画・イベントカテゴリ・予定メディア |
 | `school` | 3 | AttendanceRequirementService(2)、SchoolAttendanceAccessPolicy(1) | 門 | 出欠要件・出欠アクセス方針 |
@@ -3510,6 +3510,8 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 #### A. 活動統計（F06.4 §15 の AC-0159-70〜83 を参照）
 
 #### E・T・M. サポーターの入口・非公開化・是正 migration（F01.2 03/04 の AC-0159-40〜68 を参照）
+
+- **AC-0159-91**: 非公開チームの SUPPORTER トークンを承諾すると、grant TX（claim ロック後・在籍付与前）で 403 `TEAM_073` となり、既存の補償で claim が戻り（付与印なし）`used_count` が承諾前の値に復元され、在籍・`user_roles` は作られない。`InviteAcceptanceBoundaryArchTest`（Facade 非 TX 契約）が緑。claim TX は teams をロックしない（取得順を SQL 記録で検証）。本文の正本は F01.2 03「受け入れ条件（E: 入口）」。
 
 #### F. 画面（AC-0159-85 は F06.4 §15.7、86 は F05.5 §6.9、87 は F05.1 §6.9）
 

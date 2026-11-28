@@ -2,6 +2,7 @@ package com.mannschaft.app.membership.service;
 
 import com.mannschaft.app.common.MembershipScopeQueryService;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.MembersOnlyTeamEntryGuard;
 import com.mannschaft.app.auth.service.UserRowLockService;
 import com.mannschaft.app.membership.domain.EffortShareDisposition;
 import com.mannschaft.app.membership.domain.LeaveReason;
@@ -78,6 +79,7 @@ public class MembershipService {
     private final AdminRoleMutationLockService adminRoleMutationLockService;
     private final EntityManager entityManager;
     private final RolePermissionCleanupService rolePermissionCleanupService;
+    private final MembersOnlyTeamEntryGuard membersOnlyTeamEntryGuard;
 
     /**
      * 入会処理。
@@ -89,6 +91,12 @@ public class MembershipService {
      *   <li>memberships に INSERT</li>
      *   <li>MembershipChangedEvent(ASSIGNED) を発火</li>
      * </ol>
+     *
+     * <p><b>入口の関所</b>（CMP-261124-0159・F01.2 03「入口の関所」）: 在籍行を作る唯一の場所なので、ここで
+     * 「非公開チーム（{@code MEMBERS_AND_ABOVE}）に SUPPORTER 在籍を作らない」を一律に判定する。TEAM の SUPPORTER 入会では、
+     * 在籍行を読む前にチーム行を {@code FOR SHARE} で読み（ロック順の規則: memberships より前）、非公開なら 403 TEAM_073。
+     * 既に同じ区分で在籍している場合の冪等応答・別区分の 409 は従来どおり先に返す（新しい行を作らない経路の結果を変えない）。
+     * MEMBER の入会は判定しない。</p>
      */
     @Transactional
     public MembershipDto join(MembershipCreateRequest req) {
@@ -98,6 +106,9 @@ public class MembershipService {
         Objects.requireNonNull(req.getScopeId(), "scopeId must not be null");
         lockUser(req.getUserId());
         validateScope(req.getScopeType(), req.getScopeId());
+        boolean supporterIntoMembersOnlyTeam = req.getScopeType() == ScopeType.TEAM
+                && effectiveRoleKind(req.getRoleKind()) == RoleKind.SUPPORTER
+                && membersOnlyTeamEntryGuard.lockAndCheckMembersOnly(req.getScopeId());
 
         // 冪等性チェック（§13.7）
         Optional<MembershipEntity> existing = membershipRepository.findActiveByUserAndScope(
@@ -109,6 +120,10 @@ public class MembershipService {
                 return MembershipDto.from(active, false);
             }
             throw new BusinessException(MembershipBasisErrorCode.MEMBERSHIP_ACTIVE_EXISTS);
+        }
+        if (supporterIntoMembersOnlyTeam) {
+            // 入口の関所: 非公開チームには SUPPORTER 在籍を作らない（CMP-261124-0159）
+            throw MembersOnlyTeamEntryGuard.rejection();
         }
 
         // 再加入かどうかを履歴照会で算出

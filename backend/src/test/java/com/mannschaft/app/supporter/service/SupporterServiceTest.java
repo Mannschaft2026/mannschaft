@@ -1,5 +1,6 @@
 package com.mannschaft.app.supporter.service;
 
+import com.mannschaft.app.common.MembersOnlyTeamEntryGuard;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.common.ApiResponse;
@@ -74,6 +75,9 @@ class SupporterServiceTest {
 
     @Mock
     private ProvisioningGate provisioningGate;
+
+    /** CMP-261124-0159: 入口の関所の判定（既定は公開チーム扱い＝false・何もしない）。 */
+    @Mock private MembersOnlyTeamEntryGuard membersOnlyTeamEntryGuard;
 
     @InjectMocks
     private SupporterService service;
@@ -272,6 +276,31 @@ class SupporterServiceTest {
             assertThat(captor.getValue().getRoleKind()).isEqualTo(RoleKind.SUPPORTER);
             assertThat(captor.getValue().getSource()).isEqualTo("SUPPORTER_APPLICATION");
         }
+
+        @Test
+        @DisplayName("AC-0159-42: 非公開チームでは申請行に触れる前に 403 TEAM_073（申請は PENDING のまま・入会しない）")
+        void 非公開チームは承認しない() {
+            org.mockito.BDDMockito.willThrow(new BusinessException(com.mannschaft.app.team.TeamErrorCode.TEAM_073))
+                    .given(membersOnlyTeamEntryGuard).assertSupporterEntryAllowed(20L);
+
+            assertThatThrownBy(() -> service.approve(1L, "TEAM", 20L))
+                    .isInstanceOf(BusinessException.class)
+                    .hasFieldOrPropertyWithValue("errorCode", com.mannschaft.app.team.TeamErrorCode.TEAM_073);
+            verify(applicationRepository, never()).findById(any());
+            verify(membershipService, never()).join(any(MembershipCreateRequest.class));
+        }
+
+        @Test
+        @DisplayName("AC-0159-42: 組織の申請承認はチーム行を判定しない")
+        void 組織は判定しない() {
+            SupporterApplicationEntity app = pendingApp(10L, "ORGANIZATION", 30L);
+            ReflectionTestUtils.setField(app, "id", 1L);
+            given(applicationRepository.findById(1L)).willReturn(Optional.of(app));
+
+            service.approve(1L, "ORGANIZATION", 30L);
+
+            org.mockito.Mockito.verifyNoInteractions(membersOnlyTeamEntryGuard);
+        }
     }
 
     // ============================================================
@@ -299,6 +328,7 @@ class SupporterServiceTest {
 
             service.bulkApprove(req, "TEAM", 20L);
 
+            verify(membersOnlyTeamEntryGuard, org.mockito.Mockito.times(1)).assertSupporterEntryAllowed(20L);
             ArgumentCaptor<MembershipCreateRequest> captor =
                     ArgumentCaptor.forClass(MembershipCreateRequest.class);
             verify(membershipService, org.mockito.Mockito.times(2)).join(captor.capture());

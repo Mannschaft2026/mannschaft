@@ -1,5 +1,6 @@
 package com.mannschaft.app.membership.service;
 
+import com.mannschaft.app.common.MembersOnlyTeamEntryGuard;
 import com.mannschaft.app.auth.service.UserRowLockService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.ErrorCode;
@@ -67,6 +68,9 @@ class MembershipPositionScopeBodyParityTest {
     @Mock private UserRowLockService userRowLockService;
     @Mock private AdminRoleMutationLockService adminRoleMutationLockService;
     @Mock private EntityManager entityManager;
+    /** CMP-261124-0159: 入口の関所の判定（既定は公開チーム扱い＝false・何もしない）。 */
+    @Mock private MembersOnlyTeamEntryGuard membersOnlyTeamEntryGuard;
+
     @InjectMocks private MembershipService service;
 
     @Test

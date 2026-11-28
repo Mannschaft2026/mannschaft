@@ -42,8 +42,8 @@ import java.util.UUID;
  *       無ければ別経路の参加なので戻す）</li>
  *   <li>招待のハッシュで参加する</li>
  *   <li>結果を写像して自分の attempt で確定する。成功・在籍済み（TEAM_003）・参加後のフォルダ配置失敗は JOINED、
- *       失効・期限切れ（ROLE_002）・上限到達（ROLE_003）は EXPIRED、ブロック（TEAM_004）・特権ロール等（ROLE_009）は
- *       UNAVAILABLE。それ以外（原因不明）は PENDING に戻して例外をそのまま返す</li>
+ *       失効・期限切れ（ROLE_002）・上限到達（ROLE_003）は EXPIRED、ブロック（TEAM_004）・特権ロール等（ROLE_009）・
+ *       非公開チームへのサポーター招待（TEAM_073。CMP-261124-0159）は UNAVAILABLE。それ以外（原因不明）は PENDING に戻して例外をそのまま返す</li>
  * </ol>
  *
  * <p>確定が0行（自分の attempt が古い）なら何も書かず、他の attempt が確定した現状態を返す。
@@ -260,7 +260,8 @@ public class PendingInviteService {
         if (code == RoleErrorCode.ROLE_002 || code == RoleErrorCode.ROLE_003) {
             return PendingInviteStatus.EXPIRED;
         }
-        if (code == TeamErrorCode.TEAM_004 || code == RoleErrorCode.ROLE_009) {
+        if (code == TeamErrorCode.TEAM_004 || code == RoleErrorCode.ROLE_009 || code == TeamErrorCode.TEAM_073) {
+            // TEAM_073: 非公開チームへのサポーター招待（CMP-261124-0159・AC-0159-41）。在籍は作られていない。
             return PendingInviteStatus.UNAVAILABLE;
         }
         return null;

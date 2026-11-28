@@ -1,5 +1,6 @@
 package com.mannschaft.app.role.service;
 
+import com.mannschaft.app.common.MembersOnlyTeamEntryGuard;
 import com.mannschaft.app.auth.service.UserRowLockService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.membership.domain.RoleKind;
@@ -66,6 +67,9 @@ class MembershipGrantServiceTest {
 
     @Mock
     private InviteTokenRepository inviteTokenRepository;
+
+    /** CMP-261124-0159: 入口の関所の判定（既定は公開チーム扱い＝false・何もしない）。 */
+    @Mock private MembersOnlyTeamEntryGuard membersOnlyTeamEntryGuard;
 
     @InjectMocks
     private MembershipGrantService service;
@@ -208,6 +212,50 @@ class MembershipGrantServiceTest {
             order.verify(membershipService).isActiveMemberForUpdate(USER_ID, ScopeType.TEAM, TEAM_ID);
             order.verify(userRoleRepository).save(any(UserRoleEntity.class));
             order.verify(membershipService).join(any(MembershipCreateRequest.class));
+        }
+
+        @Test
+        @DisplayName("AC-0159-41/91: 非公開チームへの SUPPORTER 招待は、在籍のロック付き読み取りの前にチーム行を判定し、403 TEAM_073 で何も書かない")
+        void 非公開チームのSUPPORTER招待は付与しない() {
+            userIs(UserRowLockService.UserState.ACTIVE);
+            inviteRoleIs("SUPPORTER");
+            given(membersOnlyTeamEntryGuard.lockAndCheckMembersOnly(TEAM_ID)).willReturn(true);
+
+            assertThatThrownBy(() -> service.grantRole("TEAM", TEAM_ID, USER_ID, ROLE_ID, GRANTED_BY, "INVITE_TOKEN"))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            e -> assertThat(e.getErrorCode()).isEqualTo(TeamErrorCode.TEAM_073));
+
+            InOrder order = inOrder(userRowLockService, membersOnlyTeamEntryGuard, userRoleRepository);
+            order.verify(userRowLockService).lock(USER_ID);
+            order.verify(membersOnlyTeamEntryGuard).lockAndCheckMembersOnly(TEAM_ID);
+            order.verify(userRoleRepository).findByUserIdAndTeamIdForUpdate(USER_ID, TEAM_ID);
+            verify(userRoleRepository, never()).save(any(UserRoleEntity.class));
+            verify(membershipService, never()).join(any(MembershipCreateRequest.class));
+        }
+
+        @Test
+        @DisplayName("AC-0159-41: 非公開チームでも既に在籍なら従来どおり ALREADY_JOINED（TEAM_073 にしない）")
+        void 非公開チームでも在籍済みは従来どおり() {
+            userIs(UserRowLockService.UserState.ACTIVE);
+            inviteRoleIs("SUPPORTER");
+            given(membersOnlyTeamEntryGuard.lockAndCheckMembersOnly(TEAM_ID)).willReturn(true);
+            given(membershipService.isActiveMemberForUpdate(USER_ID, ScopeType.TEAM, TEAM_ID)).willReturn(true);
+
+            assertThat(service.grantRole("TEAM", TEAM_ID, USER_ID, ROLE_ID, GRANTED_BY, "INVITE_TOKEN"))
+                    .isEqualTo(GrantOutcome.ALREADY_JOINED);
+            verify(membershipService, never()).join(any(MembershipCreateRequest.class));
+        }
+
+        @Test
+        @DisplayName("AC-0159-41: 非公開チームでも MEMBER 招待は判定しない（チーム行を読まない）")
+        void 非公開チームのMEMBER招待は判定しない() {
+            userIs(UserRowLockService.UserState.ACTIVE);
+            inviteRoleIs("MEMBER");
+            given(userRoleRepository.save(any(UserRoleEntity.class))).willAnswer(inv -> inv.getArgument(0));
+
+            assertThat(service.grantRole("TEAM", TEAM_ID, USER_ID, ROLE_ID, GRANTED_BY, "INVITE_TOKEN"))
+                    .isEqualTo(GrantOutcome.GRANTED);
+            verifyNoInteractions(membersOnlyTeamEntryGuard);
         }
 
         @Test

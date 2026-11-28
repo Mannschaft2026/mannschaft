@@ -1,5 +1,6 @@
 package com.mannschaft.app.role;
 
+import com.mannschaft.app.common.MembersOnlyTeamEntryGuard;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.membership.domain.LeaveReason;
 import com.mannschaft.app.membership.domain.MembershipEndCause;
@@ -84,6 +85,9 @@ class RoleServiceTest {
     @Mock private UserRowLockService userRowLockService;
     @Mock private RolePermissionCleanupService rolePermissionCleanupService;
     @Mock private AdminRoleMutationLockService adminRoleMutationLockService;
+
+    /** CMP-261124-0159: 入口の関所の判定（既定は公開チーム扱い＝false・何もしない）。 */
+    @Mock private MembersOnlyTeamEntryGuard membersOnlyTeamEntryGuard;
 
     @InjectMocks
     private RoleService roleService;

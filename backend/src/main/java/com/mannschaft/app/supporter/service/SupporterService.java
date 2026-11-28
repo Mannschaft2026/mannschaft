@@ -4,6 +4,7 @@ import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.MembersOnlyTeamEntryGuard;
 import com.mannschaft.app.common.PagedResponse;
 import com.mannschaft.app.common.storage.MediaUrlResolver;
 import com.mannschaft.app.membership.domain.LeaveReason;
@@ -57,6 +58,7 @@ public class SupporterService {
     private final UserRepository userRepository;
     private final MediaUrlResolver mediaUrlResolver;
     private final ProvisioningGate provisioningGate;
+    private final MembersOnlyTeamEntryGuard membersOnlyTeamEntryGuard;
 
     // ========================================
     // フォロー申請
@@ -84,6 +86,9 @@ public class SupporterService {
         if (alreadyMember) {
             throw new BusinessException(SupporterErrorCode.SUPPORTER_002);
         }
+        // 入口の関所（CMP-261124-0159・F01.2 03）: 非公開チームには SUPPORTER 在籍も PENDING 申請も作らない（403 TEAM_073）。
+        // 通常は入口の可視性ゲート（VISIBILITY_001）で止まる。ゲートを越えて呼ばれた場合の最後の防御。
+        requireSupporterEntryAllowed(scopeType, scopeId);
 
         boolean autoApprove = getSettings(scopeType, scopeId).autoApprove();
 
@@ -278,6 +283,8 @@ public class SupporterService {
      */
     @Transactional
     public void approve(Long applicationId, String scopeType, Long scopeId) {
+        // 入口の関所（CMP-261124-0159）: 申請行に触れる前にチーム行を FOR SHARE で読み、非公開なら 403 TEAM_073。
+        requireSupporterEntryAllowed(scopeType, scopeId);
         SupporterApplicationEntity app = findPendingApplicationOrThrow(applicationId, scopeType, scopeId);
         app.updateStatus(SupporterApplicationStatus.APPROVED);
 
@@ -314,6 +321,8 @@ public class SupporterService {
      */
     @Transactional
     public void bulkApprove(BulkApproveRequest request, String scopeType, Long scopeId) {
+        // 入口の関所（CMP-261124-0159）: 非公開チームでは全体を拒否する（1 件も承認しない）。
+        requireSupporterEntryAllowed(scopeType, scopeId);
         ScopeType scope = ScopeType.valueOf(scopeType);
         for (Long appId : request.getApplicationIds()) {
             SupporterApplicationEntity app = findPendingApplicationOrThrow(appId, scopeType, scopeId);
@@ -376,6 +385,16 @@ public class SupporterService {
     // ========================================
     // 内部ヘルパー
     // ========================================
+
+    /**
+     * TEAM なら、チーム行を FOR SHARE で読み、非公開チームなら 403 TEAM_073（F01.2 03「サポーター入口の拒否」）。
+     * ロック順の規則（supporter_applications・memberships より前にチーム行）を守るため、各入口の最初の書き込みより前に呼ぶ。
+     */
+    private void requireSupporterEntryAllowed(String scopeType, Long scopeId) {
+        if ("TEAM".equals(scopeType)) {
+            membersOnlyTeamEntryGuard.assertSupporterEntryAllowed(scopeId);
+        }
+    }
 
     private SupporterApplicationEntity findPendingApplicationOrThrow(
             Long applicationId, String scopeType, Long scopeId) {
