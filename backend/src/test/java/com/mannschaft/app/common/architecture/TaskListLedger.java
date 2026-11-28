@@ -6,10 +6,18 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -29,6 +37,10 @@ import java.util.stream.Stream;
  * Node 側の同じ実装は {@code scripts/task-list-ledger.mjs}（readLedger）と {@code scripts/task-list-structure-check.mjs}、
  * 両者が同じ判定を返すことを共有 fixture {@code scripts/fixtures/task-list-ledger-cases.json} で固定する。
  * 規則を変えるときは両方と fixture を同時に直すこと。</p>
+ *
+ * <h2>変更申告（CMP-261124-1222 ④）</h2>
+ * <p>{@code docs/task-list/changes/*.md} の申告を base 連鎖で適用した実効台帳を {@link Ledger#files()} に返す（{@code read(source, requireRows, true)} で生の本文）。
+ * 申告の形式・名前・サイズ・ID 一致・fork・孤児・重複・changes/ の不正なものは {@link Kind#CHANGE} の違反。</p>
  *
  * <p>ArchUnit 凍結ストアは使わない（Markdown の走査）。</p>
  */
@@ -71,13 +83,17 @@ final class TaskListLedger {
     record Row(String id, String line, String file, int lineNumber) {
     }
 
-    record Ledger(String layout, List<LedgerFile> files, List<Row> rows, List<String> missing) {
+    /**
+     * 読んだ台帳。files は既定で申告（docs/task-list/changes/）を適用した実効の本文（raw 指定時は生の本文）、
+     * rawFiles は常に生の本文、changes は申告の解析・適用結果。
+     */
+    record Ledger(String layout, List<LedgerFile> files, List<Row> rows, List<String> missing, List<LedgerFile> rawFiles, Changes changes) {
         boolean split() {
             return "split".equals(layout);
         }
     }
 
-    enum Kind { MISSING, EMPTY, SCAN, DUPLICATE, COLUMNS, PRIORITY, PLACEMENT }
+    enum Kind { MISSING, EMPTY, SCAN, DUPLICATE, COLUMNS, PRIORITY, PLACEMENT, CHANGE }
 
     record Violation(Kind kind, String message) {
     }
@@ -87,6 +103,18 @@ final class TaskListLedger {
         LedgerReadException(String message, Throwable cause) {
             super(message, cause);
         }
+    }
+
+    /**
+     * 表の行が終端の | で閉じているか（Node: closesTableRow）。終端の | が無い行は splitTableRow の要素数から列数を数えられない
+     * （"| … | 台帳 | EXTRA" が7列に見える）ため、列数の検査（月別ファイル・申告の両方）はこれを先に要求する。
+     */
+    static boolean closesTableRow(String line) {
+        int end = line.length();
+        while (end > 0 && line.charAt(end - 1) <= ' ') {
+            end--;
+        }
+        return end > 0 && line.charAt(end - 1) == '|' && !(end > 1 && line.charAt(end - 2) == '\\');
     }
 
     static boolean isLedgerFileName(String name) {
@@ -102,8 +130,13 @@ final class TaskListLedger {
         return OLD_FORM_ID.matcher(id).matches() ? DIR + "/" + LEGACY_FILE_NAME : null;
     }
 
-    /** 台帳を読む。requireRows が true なら索引の不在・行0件を例外にする。 */
+    /** 台帳を読む（申告を適用した実効台帳）。requireRows が true なら索引の不在・行0件を例外にする。 */
     static Ledger read(Source source, boolean requireRows) {
+        return read(source, requireRows, false);
+    }
+
+    /** 台帳を読む。raw が true なら files を申告適用前の生の本文で返す（Node: readLedger の { raw: true }）。 */
+    static Ledger read(Source source, boolean requireRows, boolean raw) {
         List<String> entries;
         String index;
         try {
@@ -111,15 +144,17 @@ final class TaskListLedger {
         } catch (IOException e) {
             throw new LedgerReadException(DIR + "/ の一覧の取得に失敗した（不在とは扱わない）: " + e.getMessage(), e);
         }
-        List<String> names = entries == null ? List.of() : entries.stream().sorted().toList();
+        List<String> listed = entries == null ? List.of() : entries.stream().sorted().toList();
+        boolean hasChanges = listed.contains(CHANGES_DIR_NAME);
+        List<String> names = listed.stream().filter(n -> !CHANGES_DIR_NAME.equals(n)).toList();
         String layout = names.stream().anyMatch(TaskListLedger::isLedgerFileName) ? "split" : "single";
         try {
             index = source.readFile(INDEX_PATH);
         } catch (IOException e) {
             throw new LedgerReadException(INDEX_PATH + " の取得に失敗した（不在とは扱わない）: " + e.getMessage(), e);
         }
-        List<LedgerFile> files = new ArrayList<>();
-        files.add(new LedgerFile(INDEX_PATH, index));
+        List<LedgerFile> rawFiles = new ArrayList<>();
+        rawFiles.add(new LedgerFile(INDEX_PATH, index));
         if ("split".equals(layout)) {
             for (String name : names) {
                 String path = DIR + "/" + name;
@@ -132,16 +167,22 @@ final class TaskListLedger {
                 if (content == null) {
                     throw new LedgerReadException(path + " は一覧にあるのに本文を読めない", null);
                 }
-                files.add(new LedgerFile(path, content));
+                rawFiles.add(new LedgerFile(path, content));
             }
         }
+        ReadChanges readChanges = hasChanges ? readChanges(source) : new ReadChanges(List.of(), List.of());
+        Applied effective = applyChanges(rawFiles, layout, readChanges.entries());
+        List<LedgerFile> files = raw ? List.copyOf(rawFiles) : effective.files();
         List<Row> rows = new ArrayList<>();
         List<String> missing = new ArrayList<>();
         for (LedgerFile f : files) {
+            if (f.content() != null) {
+                rows.addAll(extractRows(f.content(), f.path()));
+            }
+        }
+        for (LedgerFile f : rawFiles) {
             if (f.content() == null) {
                 missing.add(f.path());
-            } else {
-                rows.addAll(extractRows(f.content(), f.path()));
             }
         }
         if (requireRows) {
@@ -152,7 +193,10 @@ final class TaskListLedger {
                 throw new LedgerReadException("台帳（" + layout + " 配置）から CMP 行を1件も読めなかった。0件は正常とみなさない", null);
             }
         }
-        return new Ledger(layout, List.copyOf(files), List.copyOf(rows), List.copyOf(missing));
+        List<Problem> problems = new ArrayList<>(readChanges.problems());
+        problems.addAll(effective.problems());
+        Changes changes = new Changes(List.copyOf(readChanges.entries()), raw ? List.of() : effective.applied(), List.copyOf(problems));
+        return new Ledger(layout, files, List.copyOf(rows), List.copyOf(missing), List.copyOf(rawFiles), changes);
     }
 
     /** 先頭セルが CMP-ID そのものである表の行（行本文は行末の CR を除く）。 */
@@ -250,7 +294,10 @@ final class TaskListLedger {
                 }
                 rowTotal++;
                 int columns = cells.size() - 2;
-                if (columns != EXPECTED_COLUMN_COUNT) {
+                if (!closesTableRow(line)) {
+                    v.add(new Violation(Kind.COLUMNS, file.path() + ": 列数: " + firstCell + " の行が | で閉じていない（終端の | が無い行は列数を数えられない。"
+                            + "7列の各セルを | で囲むこと）。"));
+                } else if (columns != EXPECTED_COLUMN_COUNT) {
                     v.add(new Violation(Kind.COLUMNS, file.path() + ": 列数: " + firstCell + " の行は " + columns + " 列（期待 "
                             + EXPECTED_COLUMN_COUNT + " 列）。セル内の | は \\| にエスケープすること（コードスパン内でも）。"));
                 }
@@ -307,7 +354,340 @@ final class TaskListLedger {
         if (rowTotal == 0 && looseTotal > 0) {
             v.add(new Violation(Kind.SCAN, "先頭セルに CMP-ID を持つ表の行を1件も見つけられなかった。走査経路（splitTableRow / CMP_ID_FORM）が壊れている可能性がある。"));
         }
+        // 変更申告の形式・名前・サイズ・ID 一致・連鎖（fork・孤児・重複）・changes/ の不正なもの（CMP-261124-1222 ④）。
+        // 上の検査は申告を適用した実効台帳に対して行っている。
+        for (Problem p : ledger.changes().problems()) {
+            v.add(new Violation(Kind.CHANGE, p.message()));
+        }
         return v;
+    }
+
+    // ------------------------------------------------------------------
+    // 変更申告（docs/task-list/changes/*.md。CMP-261124-1222 ④）
+    // ------------------------------------------------------------------
+    // Node 側 scripts/task-list-ledger.mjs の「変更申告」節と同じ規則（共有 fixture の「申告:」case で一致を固定）。
+    // 申告: <CMP-ID>--<UTC yyyymmddThhmmssZ>--<6桁乱数>.md。LF・2行固定・16KiB 以下。
+    //   1行目 <!-- ledger-change v1 op=add|update id=<CMP-ID> base=none|sha256:<64hex> -->、2行目 完全な7列行。
+    // base = 実効台帳上の対象行（CR 除去・UTF-8）の sha256。実効台帳 = 月別ファイル＋申告を base 連鎖で適用したもの。
+    // 同じ base の update 2件以上 = fork、どの版とも繋がらない update = 孤児、既に実効台帳にある ID への add = 重複（いずれも適用しない）。
+
+    static final String CHANGES_DIR_NAME = "changes";
+    static final String CHANGES_DIR = DIR + "/" + CHANGES_DIR_NAME;
+    static final int MAX_CHANGE_BYTES = 16 * 1024;
+    static final String TABLE_HEADER = "| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |";
+    static final String TABLE_SEPARATOR = "|----|------|------|------|---------|----------------|------|";
+    private static final Pattern CHANGE_FILE_NAME = Pattern.compile("^(" + CMP_ID_FORM + ")--(\\d{8}T\\d{6}Z)--(\\d{6})\\.md$");
+    private static final Pattern CHANGE_META = Pattern.compile(
+            "^<!-- ledger-change v1 op=(add|update) id=(" + CMP_ID_FORM + ") base=(none|sha256:[0-9a-f]{64}) -->$");
+    private static final String CHANGE_NAME_RULE = "<CMP-ID>--<UTC yyyymmddThhmmssZ>--<6桁乱数>.md";
+
+    /** 申告の問題（kind: entry / name / size / format / id / fork / orphan / duplicate）。message はパスを前置きする。 */
+    record Problem(String kind, String path, List<String> paths, String message) {
+    }
+
+    /** 解析した申告1件。valid が false なら errors に理由。 */
+    record Change(String path, String name, String id, String time, String rand, String op, String base, String line,
+                  String content, boolean valid, List<Problem> errors) {
+    }
+
+    record Changes(List<Change> entries, List<String> applied, List<Problem> problems) {
+        static Changes none() {
+            return new Changes(List.of(), List.of(), List.of());
+        }
+    }
+
+    private static Problem problem(String kind, String path, String message) {
+        return new Problem(kind, path, List.of(path), path + ": 申告: " + message);
+    }
+
+    /** 申告の base（対象行の CR を除いた UTF-8 の sha256）。 */
+    static String changeRowHash(String line) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(line.replace("\r", "").getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder("sha256:");
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** 月別ファイルの新規作成時の本文（Node: newFileSkeleton）。 */
+    static String newFileSkeleton(String path) {
+        String name = path.substring(path.lastIndexOf('/') + 1);
+        String heading;
+        if (LEGACY_FILE_NAME.equals(name)) {
+            heading = "# 台帳 旧形式 ID（CMP-003 等）の行\n\n旧形式 ID の行はここに置く（月が決まらないため）。新しい行は ID の月のファイル docs/task-list/YYYY-MM.md の末尾に追加する。規約は [索引](../task-list.md) を参照。\n";
+        } else {
+            String month = name.substring(0, name.length() - 3);
+            heading = "# 台帳 " + month + "（ID が CMP-" + month.substring(2, 4) + month.substring(5, 7)
+                    + "DD-HHMM の行）\n\n新しい行は本ファイルの末尾に追加する。規約は [索引](../task-list.md) を参照。\n";
+        }
+        return heading + "\n" + TABLE_HEADER + "\n" + TABLE_SEPARATOR + "\n";
+    }
+
+    /** 申告1件を解析する（Node: parseChangeFile）。 */
+    static Change parseChange(String path, String content) {
+        String name = path.substring(path.lastIndexOf('/') + 1);
+        Matcher m = CHANGE_FILE_NAME.matcher(name);
+        List<Problem> errors = new ArrayList<>();
+        if (!m.matches()) {
+            errors.add(problem("name", path, "ファイル名が不正（名前は " + CHANGE_NAME_RULE + " に限る）。"));
+            return new Change(path, name, null, null, null, null, null, null, content, false, errors);
+        }
+        String fileId = m.group(1);
+        int bytes = content.getBytes(StandardCharsets.UTF_8).length;
+        if (bytes > MAX_CHANGE_BYTES) {
+            errors.add(problem("size", path, "サイズが " + bytes + " バイトで上限 " + MAX_CHANGE_BYTES + " バイト（16KiB）を超える。"));
+            return new Change(path, name, fileId, m.group(2), m.group(3), null, null, null, content, false, errors);
+        }
+        String text = content.replace("\r\n", "\n");
+        String body = text.endsWith("\n") ? text.substring(0, text.length() - 1) : text;
+        String[] lines = body.split("\n", -1);
+        if (text.contains("\r") || lines.length != 2) {
+            errors.add(problem("format", path, "形式: 2行（メタ行と表の行）でない（" + lines.length + " 行）。"));
+            return new Change(path, name, fileId, m.group(2), m.group(3), null, null, null, content, false, errors);
+        }
+        Matcher meta = CHANGE_META.matcher(lines[0]);
+        if (!meta.matches()) {
+            errors.add(problem("format", path, "形式: 1行目が <!-- ledger-change v1 op=add|update id=<CMP-ID> base=none|sha256:<64hex> --> でない。"));
+            return new Change(path, name, fileId, m.group(2), m.group(3), null, null, null, content, false, errors);
+        }
+        String op = meta.group(1);
+        String id = meta.group(2);
+        String base = meta.group(3);
+        if ("add".equals(op) && !"none".equals(base)) {
+            errors.add(problem("format", path, "形式: add の base は none に限る。"));
+        }
+        if ("update".equals(op) && "none".equals(base)) {
+            errors.add(problem("format", path, "形式: update の base は sha256:<64hex>（対象行のハッシュ）が要る。"));
+        }
+        if (!id.equals(fileId)) {
+            errors.add(problem("id", path, "ID 不一致: ファイル名の ID " + fileId + " とメタ行の ID " + id + " が違う。"));
+        }
+        String line = lines[1];
+        List<String> cells = line.startsWith("|") ? splitTableRow(line) : List.of();
+        if (cells.size() < 3) {
+            errors.add(problem("format", path, "形式: 2行目が表の行（| で始まる7列行）でない。"));
+        } else if (!closesTableRow(line)) {
+            errors.add(problem("format", path, "形式: 2行目の列数を数えられない（行末が | で閉じていない）。7列の各セルを | で囲むこと。"));
+        } else if (cells.size() - 2 != EXPECTED_COLUMN_COUNT) {
+            // 申告ごとに7列を検査する（壊れた中間行を経由する連鎖を通さない）
+            errors.add(problem("format", path, "形式: 2行目の列数が " + (cells.size() - 2) + "（期待 7 列）。セル内の | は \\| にエスケープすること。"));
+        } else if (!cells.get(1).trim().equals(id)) {
+            errors.add(problem("id", path, "ID 不一致: メタ行の ID " + id + " と行の先頭セル " + cells.get(1).trim() + " が違う。"));
+        }
+        return new Change(path, name, fileId, m.group(2), m.group(3), op, base, line, content, errors.isEmpty(), errors);
+    }
+
+    private record ReadChanges(List<Change> entries, List<Problem> problems) {
+    }
+
+    private static ReadChanges readChanges(Source source) {
+        List<Change> entries = new ArrayList<>();
+        List<Problem> problems = new ArrayList<>();
+        List<String> listed;
+        try {
+            listed = source.listDir(CHANGES_DIR);
+        } catch (IOException e) {
+            throw new LedgerReadException(CHANGES_DIR + "/ の一覧の取得に失敗した（不在とは扱わない）: " + e.getMessage(), e);
+        }
+        if (listed == null) {
+            problems.add(problem("entry", CHANGES_DIR, CHANGES_DIR + " がディレクトリでない。"));
+            return new ReadChanges(entries, problems);
+        }
+        for (String name : listed.stream().sorted().toList()) {
+            String path = CHANGES_DIR + "/" + name;
+            if (!name.endsWith(".md")) {
+                problems.add(problem("entry", path, CHANGES_DIR + "/ に .md 以外のもの（サブディレクトリを含む）を置かない。"));
+                continue;
+            }
+            if (!CHANGE_FILE_NAME.matcher(name).matches()) {
+                problems.add(problem("name", path, "ファイル名が不正（名前は " + CHANGE_NAME_RULE + " に限る）。"));
+                continue;
+            }
+            String content;
+            try {
+                content = source.readFile(path);
+            } catch (IOException e) {
+                throw new LedgerReadException(path + " の取得に失敗した（不在とは扱わない）: " + e.getMessage(), e);
+            }
+            if (content == null) {
+                problems.add(problem("entry", path, "本文を読めない（サブディレクトリ＝ネストは置かない）。"));
+                continue;
+            }
+            Change c = parseChange(path, content);
+            entries.add(c);
+            problems.addAll(c.errors());
+        }
+        return new ReadChanges(entries, problems);
+    }
+
+    private static final Comparator<Change> CHANGE_ORDER = Comparator.comparing(Change::time)
+            .thenComparing(Change::rand).thenComparing(Change::name);
+
+    /** 申告の適用先の1ファイル（既存の行＋末尾に足す行）。 */
+    private static final class Doc {
+        final String path;
+        final String[] lines;
+        final List<String> appended = new ArrayList<>();
+        final boolean isNew;
+
+        Doc(String path, String content, boolean isNew) {
+            this.path = path;
+            this.lines = content.split("\n", -1);
+            this.isNew = isNew;
+        }
+
+        String render() {
+            String text = String.join("\n", lines);
+            if (appended.isEmpty()) {
+                return text;
+            }
+            StringBuilder sb = new StringBuilder(text);
+            if (!text.isEmpty() && !text.endsWith("\n")) {
+                sb.append('\n');
+            }
+            appended.forEach(a -> sb.append(a).append('\n'));
+            return sb.toString();
+        }
+    }
+
+    private static final class Loc {
+        final Doc doc;
+        final boolean appended;
+        final int idx;
+        final boolean cr;
+        final String source;
+
+        Loc(Doc doc, boolean appended, int idx, boolean cr, String source) {
+            this.doc = doc;
+            this.appended = appended;
+            this.idx = idx;
+            this.cr = cr;
+            this.source = source;
+        }
+
+        String get() {
+            if (appended) {
+                return doc.appended.get(idx);
+            }
+            String l = doc.lines[idx];
+            return l.endsWith("\r") ? l.substring(0, l.length() - 1) : l;
+        }
+
+        void set(String v) {
+            if (appended) {
+                doc.appended.set(idx, v);
+            } else {
+                doc.lines[idx] = v + (cr ? "\r" : "");
+            }
+        }
+    }
+
+    record Applied(List<LedgerFile> files, List<String> applied, List<Problem> problems) {
+    }
+
+    /** 申告を生の台帳ファイルへ base 連鎖で適用する（Node: applyChanges）。 */
+    static Applied applyChanges(List<LedgerFile> rawFiles, String layout, List<Change> entries) {
+        List<Change> valid = entries.stream().filter(Change::valid).toList();
+        Map<String, Doc> docs = new LinkedHashMap<>();
+        Map<String, Loc> loc = new HashMap<>();
+        for (LedgerFile f : rawFiles) {
+            if (f.content() == null) {
+                continue;
+            }
+            Doc doc = new Doc(f.path(), f.content(), false);
+            docs.put(f.path(), doc);
+            for (Row r : extractRows(f.content(), f.path())) {
+                loc.putIfAbsent(r.id(), new Loc(doc, false, r.lineNumber() - 1, doc.lines[r.lineNumber() - 1].endsWith("\r"), f.path()));
+            }
+        }
+        List<Problem> problems = new ArrayList<>();
+        Set<String> applied = new TreeSet<>();
+        for (Change e : valid.stream().filter(c -> "add".equals(c.op())).sorted(CHANGE_ORDER).toList()) {
+            Loc existing = loc.get(e.id());
+            if (existing != null) {
+                // paths に既存側（先の add 申告または月別ファイル）も入れる（仮想マージでどちらが PR 側でも競合を拾う）
+                problems.add(new Problem("duplicate", e.path(), List.of(e.path(), existing.source), e.path() + ": 申告: 重複: 既に実効台帳にある ID "
+                        + e.id() + " への add（" + existing.source + "）。新しい ID を採るか update にすること。"));
+                continue;
+            }
+            String target = "split".equals(layout) ? expectedFile(e.id()) : INDEX_PATH;
+            Doc doc = docs.get(target);
+            if (doc == null) {
+                doc = new Doc(target, "split".equals(layout) ? newFileSkeleton(target) : "", true);
+                docs.put(target, doc);
+            }
+            doc.appended.add(e.line());
+            loc.put(e.id(), new Loc(doc, true, doc.appended.size() - 1, false, e.path()));
+            applied.add(e.path());
+        }
+        Map<String, List<Change>> updatesById = new TreeMap<>();
+        for (Change e : valid) {
+            if ("update".equals(e.op())) {
+                updatesById.computeIfAbsent(e.id(), k -> new ArrayList<>()).add(e);
+            }
+        }
+        for (Map.Entry<String, List<Change>> entry : updatesById.entrySet()) {
+            String id = entry.getKey();
+            List<Change> list = entry.getValue().stream().sorted(CHANGE_ORDER).toList();
+            Map<String, List<Change>> byBase = new LinkedHashMap<>();
+            for (Change u : list) {
+                byBase.computeIfAbsent(u.base(), k -> new ArrayList<>()).add(u);
+            }
+            Set<String> forked = new HashSet<>();
+            for (Map.Entry<String, List<Change>> g : byBase.entrySet()) {
+                if (g.getValue().size() < 2) {
+                    continue;
+                }
+                forked.add(g.getKey());
+                List<String> paths = g.getValue().stream().map(Change::path).toList();
+                problems.add(new Problem("fork", paths.get(0), paths, paths.get(0) + ": 申告: fork（分岐）: " + id + " に同じ base の update が "
+                        + paths.size() + " 件ある（" + String.join(", ", paths) + "）。一本の連鎖（前の申告の行を base に）に直すこと。"));
+            }
+            Loc l = loc.get(id);
+            Set<Change> used = new HashSet<>();
+            if (l != null) {
+                while (true) {
+                    String h = changeRowHash(l.get());
+                    List<Change> group = byBase.get(h);
+                    if (group == null || forked.contains(h) || used.contains(group.get(0))) {
+                        break;
+                    }
+                    l.set(group.get(0).line());
+                    used.add(group.get(0));
+                    applied.add(group.get(0).path());
+                }
+            }
+            for (Change u : list) {
+                if (used.contains(u) || forked.contains(u.base())) {
+                    continue;
+                }
+                problems.add(problem("orphan", u.path(), "孤児: " + id + " の update の base が実効台帳のどの版とも繋がらない"
+                        + (l == null ? "（対象の行が無い）" : "") + "。最新の実効行から base を計算し直すこと。"));
+            }
+        }
+        List<LedgerFile> files = new ArrayList<>();
+        for (LedgerFile f : rawFiles) {
+            files.add(f.content() == null ? f : new LedgerFile(f.path(), docs.get(f.path()).render()));
+        }
+        for (Doc doc : docs.values()) {
+            if (doc.isNew) {
+                files.add(new LedgerFile(doc.path, doc.render()));
+            }
+        }
+        files.sort((a, b) -> INDEX_PATH.equals(a.path()) ? -1 : INDEX_PATH.equals(b.path()) ? 1 : a.path().compareTo(b.path()));
+        return new Applied(List.copyOf(files), List.copyOf(applied), List.copyOf(problems));
+    }
+
+    /** 実効台帳の ID→行 の対応表（同じ ID が複数あれば最初の行）。 */
+    static Map<String, String> rowMap(Ledger ledger) {
+        Map<String, String> map = new LinkedHashMap<>();
+        ledger.rows().forEach(r -> map.putIfAbsent(r.id(), r.line()));
+        return map;
     }
 
     /**
@@ -367,10 +747,11 @@ final class TaskListLedger {
             @Override
             public List<String> listDir(String dir) {
                 String prefix = dir + "/";
+                // 直下の名前（ファイルとサブディレクトリ）。サブディレクトリは名前だけを返し、readFile では null（作業木と同じ）。
                 List<String> names = files.keySet().stream()
                         .filter(p -> p.startsWith(prefix))
-                        .map(p -> p.substring(prefix.length()))
-                        .filter(n -> !n.contains("/"))
+                        .map(p -> p.substring(prefix.length()).split("/", -1)[0])
+                        .distinct()
                         .toList();
                 return names.isEmpty() ? null : names;
             }

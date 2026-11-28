@@ -11,6 +11,7 @@ import {
   fsLedgerReader,
   gitLedgerReader,
   isLedgerFileName,
+  ledgerRowMap,
   ledgerText,
   readLedger,
 } from './task-list-ledger.mjs';
@@ -38,6 +39,13 @@ for (const c of cases) {
     if (c.expectOk) assert.deepEqual(result.errors, []);
     else if (c.reason) assert.ok(result.errors.join('\n').includes(c.reason), c.reason + ' が理由に無い: ' + JSON.stringify(result.errors));
     if (c.expectRows) assert.deepEqual(ledger.rows.map((r) => [r.id, r.file]), c.expectRows);
+    // 申告（docs/task-list/changes/）を含む case: 理由はすべて含まれる・実効行・実効の月別ファイル本文（CMP-261124-1222 ④）
+    for (const r of c.reasons ?? []) assert.ok(result.errors.join('\n').includes(r), r + ' が理由に無い: ' + JSON.stringify(result.errors));
+    if (c.expectLines) {
+      const map = ledgerRowMap(ledger);
+      for (const [id, line] of Object.entries(c.expectLines)) assert.equal(map.get(id), line, id);
+    }
+    for (const [p, content] of Object.entries(c.expectFiles ?? {})) assert.equal(ledger.files.find((f) => f.path === p)?.content, content, p);
   });
 }
 
@@ -189,7 +197,7 @@ test('AC-2: CLI は索引と同じディレクトリの task-list/ を読み、�
 
 test('新試験が PR 軽量検査（pr-light-checks.yml）で走る', () => {
   const light = readFileSync(join(repoRoot, '.github/workflows/pr-light-checks.yml'), 'utf8');
-  for (const name of ['scripts/task-list-ledger.test.mjs', 'scripts/task-list-ledger-consumers.test.mjs', 'scripts/completion-evidence-ledger.test.mjs']) {
+  for (const name of ['scripts/task-list-ledger.test.mjs', 'scripts/task-list-ledger-consumers.test.mjs', 'scripts/task-list-ledger-changes.test.mjs', 'scripts/completion-evidence-ledger.test.mjs']) {
     assert.ok(light.includes(name), name + ' が登録されていない');
   }
 });

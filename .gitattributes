@@ -19,3 +19,6 @@ docs/task-list.md merge=union
 # 新配置（索引＋docs/task-list/YYYY-MM.md・legacy.md。CMP-261124-1222）の月別ファイルも同じ扱い（同じ月ファイルの add/add も両行が残る）。
 # 月別ファイルは新規作成なので最初から LF に固定する（Windows の checkout でも CRLF にしない）。
 docs/task-list/*.md text eol=lf merge=union
+# 変更申告（docs/task-list/changes/*.md。CMP-261124-1222 ④）は1ファイル1変更で衝突しない。LF に固定し、union は付けない
+# （申告は追加のみで、同名の申告どうしを union で混ぜると2行固定の形式が壊れるため）。
+docs/task-list/changes/*.md text eol=lf

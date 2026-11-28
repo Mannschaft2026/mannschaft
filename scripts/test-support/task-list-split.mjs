@@ -55,7 +55,8 @@ export function memoryLedgerReader(files) {
   return {
     listDir(dir) {
       const prefix = dir + '/';
-      const names = Object.keys(files).filter((p) => p.startsWith(prefix)).map((p) => p.slice(prefix.length)).filter((n) => !n.includes('/'));
+      // 直下の名前（ファイルとサブディレクトリ）。サブディレクトリは名前だけを返し、readFile では null（作業木の reader と同じ）。
+      const names = [...new Set(Object.keys(files).filter((p) => p.startsWith(prefix)).map((p) => p.slice(prefix.length).split('/')[0]))];
       return names.length ? names : null;
     },
     readFile(path) {

@@ -1,5 +1,5 @@
 {
-  "description": "台帳（docs/task-list.md と docs/task-list/*.md）の構造検査の共有 fixture（CMP-261124-1222）。scripts/task-list-ledger.test.mjs と backend の TaskListCmpIdDuplicateGuardTest が同じ判定（expectOk・reason の部分一致・expectRows の行集合）を期待する。files はリポジトリ相対パス→本文。",
+  "description": "台帳（docs/task-list.md と docs/task-list/*.md）の構造検査の共有 fixture（CMP-261124-1222）。scripts/task-list-ledger.test.mjs と backend の TaskListCmpIdDuplicateGuardTest が同じ判定（expectOk・reason の部分一致・expectRows の行集合）を期待する。files はリポジトリ相対パス→本文。申告ファイル（docs/task-list/changes/*.md）を含む case は実効台帳（申告適用後）で判定する。expectLines は ID→実効行、expectFiles は実効の月別ファイル本文、reasons はすべて含まれるべき理由（Node / Java / Python で同じ実効台帳）。",
   "cases": [
     {
       "name": "旧配置: 完了行のみの正常台帳",
@@ -452,6 +452,702 @@
       },
       "expectOk": false,
       "reason": "重複: CMP-261101-0000"
+    },
+    {
+      "name": "申告: changes/ が無い新配置は従来どおり（0件は正常）",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": true,
+      "expectRows": [
+        [
+          "CMP-261101-0000",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-261124-1222",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-003",
+          "docs/task-list/legacy.md"
+        ]
+      ],
+      "expectLines": {
+        "CMP-261124-1222": "| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |"
+      }
+    },
+    {
+      "name": "申告: add 1件は ID の月ファイルの末尾に入る",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261127-0900--20261127T000000Z--123456.md": "<!-- ledger-change v1 op=add id=CMP-261127-0900 base=none -->\n| CMP-261127-0900 | 戦役 | P3 未着手 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": true,
+      "expectRows": [
+        [
+          "CMP-261101-0000",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-261124-1222",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-261127-0900",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-003",
+          "docs/task-list/legacy.md"
+        ]
+      ],
+      "expectFiles": {
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n| CMP-261127-0900 | 戦役 | P3 未着手 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectLines": {
+        "CMP-261127-0900": "| CMP-261127-0900 | 戦役 | P3 未着手 | — | 条件 | 証拠 | ledger |"
+      }
+    },
+    {
+      "name": "申告: update 1件はその行を置き換える（位置は変えない）",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | P2 実装中（④着手） | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": true,
+      "expectRows": [
+        [
+          "CMP-261101-0000",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-261124-1222",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-003",
+          "docs/task-list/legacy.md"
+        ]
+      ],
+      "expectFiles": {
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中（④着手） | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectLines": {
+        "CMP-261124-1222": "| CMP-261124-1222 | 戦役 | P2 実装中（④着手） | — | 条件 | 証拠 | ledger |"
+      }
+    },
+    {
+      "name": "申告: A→B→C の連鎖（ファイル名時刻が順）",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | P2 実装中（④着手） | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T020000Z--000002.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:1ea01838687a15abf1bbdd178e1256442175759e80037bfbf3d0fecb98a80ddf -->\n| CMP-261124-1222 | 戦役 | 完了 | — | 条件 [証拠](../evidence/CMP-261124-1222.json) | 証拠 | ledger |\n"
+      },
+      "expectOk": true,
+      "expectRows": [
+        [
+          "CMP-261101-0000",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-261124-1222",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-003",
+          "docs/task-list/legacy.md"
+        ]
+      ],
+      "expectLines": {
+        "CMP-261124-1222": "| CMP-261124-1222 | 戦役 | 完了 | — | 条件 [証拠](../evidence/CMP-261124-1222.json) | 証拠 | ledger |"
+      }
+    },
+    {
+      "name": "申告: A→B→C の連鎖（ファイル名時刻を逆にしても同じ結果）",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T020000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | P2 実装中（④着手） | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000002.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:1ea01838687a15abf1bbdd178e1256442175759e80037bfbf3d0fecb98a80ddf -->\n| CMP-261124-1222 | 戦役 | 完了 | — | 条件 [証拠](../evidence/CMP-261124-1222.json) | 証拠 | ledger |\n"
+      },
+      "expectOk": true,
+      "expectRows": [
+        [
+          "CMP-261101-0000",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-261124-1222",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-003",
+          "docs/task-list/legacy.md"
+        ]
+      ],
+      "expectLines": {
+        "CMP-261124-1222": "| CMP-261124-1222 | 戦役 | 完了 | — | 条件 [証拠](../evidence/CMP-261124-1222.json) | 証拠 | ledger |"
+      }
+    },
+    {
+      "name": "申告: 同じ base の update 2件は fork（両方のファイル名を報告）",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | P2 実装中（④着手） | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000002.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | 完了 | — | 条件 [証拠](../evidence/CMP-261124-1222.json) | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "fork",
+      "reasons": [
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000002.md",
+        "fork"
+      ],
+      "expectLines": {
+        "CMP-261124-1222": "| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |"
+      }
+    },
+    {
+      "name": "申告: base が実効行と一致しない update は孤児",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:1ea01838687a15abf1bbdd178e1256442175759e80037bfbf3d0fecb98a80ddf -->\n| CMP-261124-1222 | 戦役 | 完了 | — | 条件 [証拠](../evidence/CMP-261124-1222.json) | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "孤児",
+      "reasons": [
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md",
+        "孤児"
+      ],
+      "expectLines": {
+        "CMP-261124-1222": "| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |"
+      }
+    },
+    {
+      "name": "申告: 対象行の無い update は孤児",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261127-0901--20261127T010000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261127-0901 base=sha256:d20c7db66c248066b101fedf24b6da0685e4580af59b4d092253cf1a2e2a8afe -->\n| CMP-261127-0901 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/CMP-261127-0901--20261127T010000Z--000001.md",
+        "孤児"
+      ]
+    },
+    {
+      "name": "申告: 既存 ID への add は重複",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000003.md": "<!-- ledger-change v1 op=add id=CMP-261124-1222 base=none -->\n| CMP-261124-1222 | 戦役 | P2 実装中（④着手） | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000003.md",
+        "重複"
+      ],
+      "expectLines": {
+        "CMP-261124-1222": "| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |"
+      }
+    },
+    {
+      "name": "申告: 同じ新 ID への add 2件は後の方が重複",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261127-0900--20261127T000001Z--000001.md": "<!-- ledger-change v1 op=add id=CMP-261127-0900 base=none -->\n| CMP-261127-0900 | 戦役 | P1 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261127-0900--20261127T000000Z--000001.md": "<!-- ledger-change v1 op=add id=CMP-261127-0900 base=none -->\n| CMP-261127-0900 | 戦役 | P3 未着手 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/CMP-261127-0900--20261127T000001Z--000001.md",
+        "重複"
+      ],
+      "expectLines": {
+        "CMP-261127-0900": "| CMP-261127-0900 | 戦役 | P3 未着手 | — | 条件 | 証拠 | ledger |"
+      }
+    },
+    {
+      "name": "申告: add した行への update（同じ変更集合内の連鎖）",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261127-0900--20261127T000000Z--000001.md": "<!-- ledger-change v1 op=add id=CMP-261127-0900 base=none -->\n| CMP-261127-0900 | 戦役 | P3 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261127-0900--20261127T000000Z--000002.md": "<!-- ledger-change v1 op=update id=CMP-261127-0900 base=sha256:fb2c49425d354f1089cc7d6d9cac095972ac30c88f97babfc4644c20dd15748f -->\n| CMP-261127-0900 | 戦役 | P3 未着手（更新） | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": true,
+      "expectLines": {
+        "CMP-261127-0900": "| CMP-261127-0900 | 戦役 | P3 未着手（更新） | — | 条件 | 証拠 | ledger |"
+      }
+    },
+    {
+      "name": "申告: 月またぎ 261130-2359→261201-0000（新月ファイルは雛形から作る）",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261130-2359--20261130T145900Z--000001.md": "<!-- ledger-change v1 op=add id=CMP-261130-2359 base=none -->\n| CMP-261130-2359 | 戦役 | P3 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261201-0000--20261130T150000Z--000001.md": "<!-- ledger-change v1 op=add id=CMP-261201-0000 base=none -->\n| CMP-261201-0000 | 戦役 | P3 未着手 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": true,
+      "expectRows": [
+        [
+          "CMP-261101-0000",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-261124-1222",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-261130-2359",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-261201-0000",
+          "docs/task-list/2026-12.md"
+        ],
+        [
+          "CMP-003",
+          "docs/task-list/legacy.md"
+        ]
+      ],
+      "expectFiles": {
+        "docs/task-list/2026-12.md": "# 台帳 2026-12（ID が CMP-2612DD-HHMM の行）\n\n新しい行は本ファイルの末尾に追加する。規約は [索引](../task-list.md) を参照。\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|----|------|------|------|---------|----------------|------|\n| CMP-261201-0000 | 戦役 | P3 未着手 | — | 条件 | 証拠 | ledger |\n"
+      }
+    },
+    {
+      "name": "申告: legacy 行（旧形式 ID）の update",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-003--20261127T000000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-003 base=sha256:48a6469010816e71ef6d6be60406ab47d61c218e13753cc9e3e8efbdf11c81f3 -->\n| CMP-003 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": true,
+      "expectRows": [
+        [
+          "CMP-261101-0000",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-261124-1222",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-003",
+          "docs/task-list/legacy.md"
+        ]
+      ],
+      "expectFiles": {
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      }
+    },
+    {
+      "name": "申告: セル内の \\| は列区切りにしない（7列のまま）",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261127-0902--20261127T000000Z--000001.md": "<!-- ledger-change v1 op=add id=CMP-261127-0902 base=none -->\n| CMP-261127-0902 | 戦役 | P3 未着手 | — | `a \\| b` を含む条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": true,
+      "expectLines": {
+        "CMP-261127-0902": "| CMP-261127-0902 | 戦役 | P3 未着手 | — | `a \\| b` を含む条件 | 証拠 | ledger |"
+      }
+    },
+    {
+      "name": "申告: CRLF の申告は LF と同じ結果（base は CR 除去で計算）",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\r\n| CMP-261124-1222 | 戦役 | P2 実装中（④着手） | — | 条件 | 証拠 | ledger |\r\n"
+      },
+      "expectOk": true,
+      "expectLines": {
+        "CMP-261124-1222": "| CMP-261124-1222 | 戦役 | P2 実装中（④着手） | — | 条件 | 証拠 | ledger |"
+      }
+    },
+    {
+      "name": "申告: 16KiB ちょうど（16384 バイト）は可",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | 証拠 | ledger |\n"
+      },
+      "expectOk": true,
+      "expectLines": {
+        "CMP-261124-1222": "| CMP-261124-1222 | 戦役 | P2 実装中 | — | xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | 証拠 | ledger |"
+      }
+    },
+    {
+      "name": "申告: 16KiB 超過（16385 バイト）は赤",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md",
+        "16384"
+      ],
+      "expectLines": {
+        "CMP-261124-1222": "| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |"
+      }
+    },
+    {
+      "name": "申告: 空ファイルは形式違反",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md": ""
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md",
+        "形式"
+      ]
+    },
+    {
+      "name": "申告: メタ行の破損は形式違反",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md": "<!-- ledger-change v2 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | P2 実装中（④着手） | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md",
+        "形式"
+      ]
+    },
+    {
+      "name": "申告: 3行以上は形式違反",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | P2 実装中（④着手） | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中（④着手） | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md",
+        "形式"
+      ]
+    },
+    {
+      "name": "申告: add に base=sha256 は形式違反",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261127-0900--20261127T000000Z--000001.md": "<!-- ledger-change v1 op=add id=CMP-261127-0900 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261127-0900 | 戦役 | P3 未着手 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/CMP-261127-0900--20261127T000000Z--000001.md",
+        "形式"
+      ]
+    },
+    {
+      "name": "申告: update に base=none は形式違反",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=none -->\n| CMP-261124-1222 | 戦役 | P2 実装中（④着手） | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md",
+        "形式"
+      ]
+    },
+    {
+      "name": "申告: 2行目が表の行でないと形式違反",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\nCMP-261124-1222 完了\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md",
+        "形式"
+      ]
+    },
+    {
+      "name": "申告: ファイル名の ID とメタ行の ID が違うと赤",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1221--20261127T010000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | P2 実装中（④着手） | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/CMP-261124-1221--20261127T010000Z--000001.md",
+        "ID"
+      ]
+    },
+    {
+      "name": "申告: メタ行の ID と行の ID が違うと赤",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261101-0000 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md",
+        "ID"
+      ]
+    },
+    {
+      "name": "申告: changes/ の不正なファイル名（.md）は赤",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/note.md": "メモ\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/note.md",
+        "名前"
+      ]
+    },
+    {
+      "name": "申告: changes/ の .md 以外は赤",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.txt": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | P2 実装中（④着手） | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.txt",
+        ".md 以外"
+      ]
+    },
+    {
+      "name": "申告: changes/ のサブディレクトリ（ネスト）は赤",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/sub/CMP-261124-1222--20261127T010000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | P2 実装中（④着手） | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/sub",
+        "サブディレクトリ"
+      ],
+      "expectLines": {
+        "CMP-261124-1222": "| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |"
+      }
+    },
+    {
+      "name": "申告: UTC 時刻の形が違うファイル名は赤",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127-010000--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | P2 実装中（④着手） | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "名前"
+      ]
+    },
+    {
+      "name": "申告: add の行が6列だと申告の解析で列数違反（適用しない）",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261127-0900--20261127T000000Z--000001.md": "<!-- ledger-change v1 op=add id=CMP-261127-0900 base=none -->\n| CMP-261127-0900 | 戦役 | P3 未着手 | — | 条件 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/CMP-261127-0900--20261127T000000Z--000001.md",
+        "列数"
+      ],
+      "expectLines": {}
+    },
+    {
+      "name": "申告: add の行の優先度欠落は月ファイル上で優先度違反",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261127-0900--20261127T000000Z--000001.md": "<!-- ledger-change v1 op=add id=CMP-261127-0900 base=none -->\n| CMP-261127-0900 | 戦役 | 未着手 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/2026-11.md: 優先度"
+      ]
+    },
+    {
+      "name": "申告: 旧形式 ID の add は legacy.md の末尾",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-004--20261127T000000Z--000001.md": "<!-- ledger-change v1 op=add id=CMP-004 base=none -->\n| CMP-004 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": true,
+      "expectRows": [
+        [
+          "CMP-261101-0000",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-261124-1222",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-003",
+          "docs/task-list/legacy.md"
+        ],
+        [
+          "CMP-004",
+          "docs/task-list/legacy.md"
+        ]
+      ]
+    },
+    {
+      "name": "申告: A→B→A の巻き戻しの後に A からの update があると（偽）fork",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | P2 実装中（④着手） | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T020000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:1ea01838687a15abf1bbdd178e1256442175759e80037bfbf3d0fecb98a80ddf -->\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T030000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | 完了 | — | 条件 [証拠](../evidence/CMP-261124-1222.json) | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "fork"
+      ]
+    },
+    {
+      "name": "申告: A→（7列でない壊れた行・6列）→C の連鎖は、壊れた中間申告を列数違反で赤にし適用しない",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | P2 実装中（壊れた中間） | — | 条件 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T020000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:441c6ebc3bf2f432421ff8667e444757825c5bc09275c7114a5dda02934c4c00 -->\n| CMP-261124-1222 | 戦役 | 完了 | — | 条件 [証拠](../evidence/CMP-261124-1222.json) | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md",
+        "列数",
+        "docs/task-list/changes/CMP-261124-1222--20261127T020000Z--000001.md",
+        "孤児"
+      ],
+      "expectLines": {
+        "CMP-261124-1222": "| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |"
+      }
+    },
+    {
+      "name": "申告: A→（7列でない壊れた行・8列）→C の連鎖は、壊れた中間申告を列数違反で赤にし適用しない",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | P2 実装中（壊れた中間） | — | a | b | c | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T020000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:b9405610cc1aa5eff965a1a4bfdfa2dfd9eca30bb924310550093c08714ab0cf -->\n| CMP-261124-1222 | 戦役 | 完了 | — | 条件 [証拠](../evidence/CMP-261124-1222.json) | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md",
+        "列数",
+        "docs/task-list/changes/CMP-261124-1222--20261127T020000Z--000001.md",
+        "孤児"
+      ],
+      "expectLines": {
+        "CMP-261124-1222": "| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |"
+      }
+    },
+    {
+      "name": "申告: A→（終端の | が無い8列行）→C の連鎖は、壊れた中間申告を列数違反で赤にし適用しない",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | P2 実装中（終端なし） | — | 条件 | 証拠 | ledger | EXTRA\n",
+        "docs/task-list/changes/CMP-261124-1222--20261127T020000Z--000001.md": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:3f948dd543fc557dd5491cbe2654c42de353959c52877a52f41565300ab67bf6 -->\n| CMP-261124-1222 | 戦役 | 完了 | — | 条件 [証拠](../evidence/CMP-261124-1222.json) | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes/CMP-261124-1222--20261127T010000Z--000001.md",
+        "列数",
+        "docs/task-list/changes/CMP-261124-1222--20261127T020000Z--000001.md",
+        "孤児"
+      ],
+      "expectLines": {
+        "CMP-261124-1222": "| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |"
+      }
+    },
+    {
+      "name": "新配置: 月別ファイルの行が | で閉じていない（終端の | が無い8列行）と列数違反",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中（終端なし） | — | 条件 | 証拠 | ledger | EXTRA\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/2026-11.md: 列数"
+      ]
+    },
+    {
+      "name": "申告: docs/task-list/changes が通常ファイル（ディレクトリでない）なら赤",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/changes": "<!-- ledger-change v1 op=update id=CMP-261124-1222 base=sha256:39e57c71a1ce8cfdc4e2b95e3efede8161c668578bfb203830cc4ca5b8f65010 -->\n| CMP-261124-1222 | 戦役 | 完了 | — | 条件 [証拠](../evidence/CMP-261124-1222.json) | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reasons": [
+        "docs/task-list/changes",
+        "ディレクトリでない"
+      ],
+      "expectLines": {
+        "CMP-261124-1222": "| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |"
+      }
     }
   ]
 }
