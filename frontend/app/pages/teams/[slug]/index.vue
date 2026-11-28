@@ -15,6 +15,7 @@ definePageMeta({
 const route = useRoute()
 const auth = useAuthStore()
 const teamSlug = computed(() => String(route.params.slug))
+const { state: gateState, error: gateError, load: reloadGate } = useTeamAccessGate(teamSlug)
 
 const {
   team,
@@ -33,17 +34,26 @@ const teamScopeNumericId = computed(() =>
 </script>
 
 <template>
-  <div class="mt-4">
-    <ScopeDashboard
-      :key="[teamSlug, auth.user?.id].join(':')"
-      scope-type="team"
-      :scope-id="teamSlug"
-      :scope-numeric-id="teamScopeNumericId"
-      :scope-name="displayName"
-      :scope-template="team?.location?.template"
-      :viewer-role="effectiveViewerRole"
-      :is-admin-or-deputy="adminLens && isAdminOrDeputy"
-      :visibility-map="widgetVisibilitySettings"
-    />
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+      <div class="mt-4">
+        <ScopeDashboard
+          :key="[teamSlug, auth.user?.id].join(':')"
+          scope-type="team"
+          :scope-id="teamSlug"
+          :scope-numeric-id="teamScopeNumericId"
+          :scope-name="displayName"
+          :scope-template="team?.location?.template"
+          :viewer-role="effectiveViewerRole"
+          :is-admin-or-deputy="adminLens && isAdminOrDeputy"
+          :visibility-map="widgetVisibilitySettings"
+        />
+      </div>
+    </template>
   </div>
 </template>

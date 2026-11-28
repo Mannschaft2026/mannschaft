@@ -1,9 +1,11 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mountSuspended, registerEndpoint } from '@nuxt/test-utils/runtime'
+import { mockNuxtImport, mountSuspended, registerEndpoint } from '@nuxt/test-utils/runtime'
 import { useRuntimeConfig, useRouter } from '#imports'
 import { useAuthStore } from '~/stores/useAuthStore'
 import { resolveSportModule } from '~/composables/match/sport/sportModuleRegistry'
 import LivePage from './live.vue'
+
+mockNuxtImport('useTeamApi', () => () => ({ getTeam: vi.fn().mockResolvedValue({ data: { id: 'x', numericId: 1 } }) }))
 
 const matchId = '00000000-0000-4000-8000-000000000124'
 const detailPath = `/api/v1/organizations/124/teams/124/matches/${matchId}`

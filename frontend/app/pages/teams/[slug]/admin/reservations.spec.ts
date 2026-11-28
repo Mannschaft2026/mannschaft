@@ -55,7 +55,7 @@ describe('独立した予約管理ページ', () => {
     await flushPromises()
     expect(wrapper.findComponent(Panel).exists()).toBe(false)
     expect(wrapper.findComponent(DashboardErrorState).exists()).toBe(true)
-    expect(handleApiError).toHaveBeenCalledWith(failure)
+    expect(handleApiError).toHaveBeenCalledWith(failure, expect.any(String))
 
     wrapper.findComponent(DashboardErrorState).vm.$emit('retry')
     await flushPromises()

@@ -10,6 +10,7 @@ const { t } = useI18n()
 const { formatDate } = useDatetime()
 const route = useRoute()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const notification = useNotification()
 const { markIfDenied } = useScopeNotFound()
 
@@ -64,56 +65,65 @@ function directionClass(direction?: string): string {
   return ''
 }
 
-onMounted(load)
+onGateOk(load)
 </script>
 
 <template>
-  <div class="p-4 max-w-3xl mx-auto">
-    <h1 class="text-2xl font-bold mb-6">
-      {{ $t('transfer.history_title') }}
-    </h1>
-
-    <div v-if="loading" class="text-center py-12 text-surface-500">
-      <i class="pi pi-spin pi-spinner text-2xl" />
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+      <div class="p-4 max-w-3xl mx-auto">
+        <h1 class="text-2xl font-bold mb-6">
+          {{ $t('transfer.history_title') }}
+        </h1>
 
-    <div v-else-if="transfers.length === 0" class="text-center py-12 text-surface-400">
-      <i class="pi pi-arrow-right-arrow-left text-4xl mb-3 block opacity-30" />
-      <p>{{ $t('transfer.empty_history') }}</p>
-    </div>
+        <div v-if="loading" class="text-center py-12 text-surface-500">
+          <i class="pi pi-spin pi-spinner text-2xl" />
+        </div>
 
-    <div v-else class="space-y-3">
-      <div
-        v-for="tr in transfers"
-        :key="tr.id"
-        class="p-4 border border-surface-200 rounded-lg"
-      >
-        <div class="flex items-center justify-between gap-4">
-          <div class="space-y-1">
-            <div class="flex items-center gap-2">
-              <span
-                class="px-2 py-0.5 rounded text-xs font-medium"
-                :class="statusClass(tr.status)"
-              >{{ statusLabel(tr.status) }}</span>
-              <span
-                class="text-sm font-semibold"
-                :class="directionClass(tr.direction)"
-              >{{ directionLabel(tr.direction) }}</span>
-              <span v-if="tr.season" class="text-sm text-surface-500">{{ tr.season }}</span>
-            </div>
-            <div class="text-sm text-surface-600">
-              <span v-if="tr.finalRank">{{ $t('transfer.rank') }}: {{ tr.finalRank }}位</span>
-              <span v-if="tr.fromOrganizationId" class="ml-3">
-                Org #{{ tr.fromOrganizationId }} → Org #{{ tr.toOrganizationId }}
-              </span>
-            </div>
-            <div v-if="tr.message" class="text-sm text-surface-500 italic">{{ tr.message }}</div>
-            <div v-if="tr.createdAt" class="text-xs text-surface-400">
-              {{ $t('transfer.created_at') }}: {{ formatDate(tr.createdAt) }}
+        <div v-else-if="transfers.length === 0" class="text-center py-12 text-surface-400">
+          <i class="pi pi-arrow-right-arrow-left text-4xl mb-3 block opacity-30" />
+          <p>{{ $t('transfer.empty_history') }}</p>
+        </div>
+
+        <div v-else class="space-y-3">
+          <div
+            v-for="tr in transfers"
+            :key="tr.id"
+            class="p-4 border border-surface-200 rounded-lg"
+          >
+            <div class="flex items-center justify-between gap-4">
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span
+                    class="px-2 py-0.5 rounded text-xs font-medium"
+                    :class="statusClass(tr.status)"
+                  >{{ statusLabel(tr.status) }}</span>
+                  <span
+                    class="text-sm font-semibold"
+                    :class="directionClass(tr.direction)"
+                  >{{ directionLabel(tr.direction) }}</span>
+                  <span v-if="tr.season" class="text-sm text-surface-500">{{ tr.season }}</span>
+                </div>
+                <div class="text-sm text-surface-600">
+                  <span v-if="tr.finalRank">{{ $t('transfer.rank') }}: {{ tr.finalRank }}位</span>
+                  <span v-if="tr.fromOrganizationId" class="ml-3">
+                    Org #{{ tr.fromOrganizationId }} → Org #{{ tr.toOrganizationId }}
+                  </span>
+                </div>
+                <div v-if="tr.message" class="text-sm text-surface-500 italic">{{ tr.message }}</div>
+                <div v-if="tr.createdAt" class="text-xs text-surface-400">
+                  {{ $t('transfer.created_at') }}: {{ formatDate(tr.createdAt) }}
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </template>
   </div>
 </template>

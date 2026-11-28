@@ -26,6 +26,7 @@ const api = useJobPostingApi()
 const { success, error } = useNotification()
 
 const teamSlug = computed(() => String(route.params.slug))
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const jobId = computed(() => Number(route.params.jobId))
 
 const job = ref<JobPostingResponse | null>(null)
@@ -152,53 +153,62 @@ function cancel() {
   router.push(`/teams/${teamSlug.value}/jobs/${jobId.value}`)
 }
 
-onMounted(() => load())
+onGateOk(() => load())
 </script>
 
 <template>
-  <div class="container mx-auto max-w-3xl p-4">
-    <PageHeader :title="t('jobmatching.edit.title')" :back-to="`/teams/${teamSlug}/jobs/${jobId}`" />
-    <p class="mb-4 text-sm text-surface-500">
-      {{ t('jobmatching.edit.description') }}
-    </p>
-
-    <div
-      v-if="loading"
-      class="flex justify-center p-8"
-    >
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
       <LoadingBounce />
     </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+      <div class="container mx-auto max-w-3xl p-4">
+        <PageHeader :title="t('jobmatching.edit.title')" :back-to="`/teams/${teamSlug}/jobs/${jobId}`" />
+        <p class="mb-4 text-sm text-surface-500">
+          {{ t('jobmatching.edit.description') }}
+        </p>
 
-    <div
-      v-else-if="!job"
-      class="rounded border border-dashed border-surface-300 p-8 text-center text-surface-500 dark:border-surface-600"
-    >
-      {{ t('jobmatching.detail.notFound') }}
-    </div>
+        <div
+          v-if="loading"
+          class="flex justify-center p-8"
+        >
+          <LoadingBounce />
+        </div>
 
-    <JobPostingForm
-      v-else
-      v-model="form"
-      :existing="job"
-      editing
-      :submitting="submitting"
-    >
-      <template #submit="{ submitting: busy }">
-        <Button
-          :label="t('jobmatching.edit.cancel')"
-          severity="secondary"
-          outlined
-          :disabled="busy"
-          @click="cancel"
-        />
-        <Button
-          :label="t('jobmatching.edit.save')"
-          icon="pi pi-check"
-          :loading="busy"
-          :disabled="busy"
-          @click="save"
-        />
-      </template>
-    </JobPostingForm>
+        <div
+          v-else-if="!job"
+          class="rounded border border-dashed border-surface-300 p-8 text-center text-surface-500 dark:border-surface-600"
+        >
+          {{ t('jobmatching.detail.notFound') }}
+        </div>
+
+        <JobPostingForm
+          v-else
+          v-model="form"
+          :existing="job"
+          editing
+          :submitting="submitting"
+        >
+          <template #submit="{ submitting: busy }">
+            <Button
+              :label="t('jobmatching.edit.cancel')"
+              severity="secondary"
+              outlined
+              :disabled="busy"
+              @click="cancel"
+            />
+            <Button
+              :label="t('jobmatching.edit.save')"
+              icon="pi pi-check"
+              :loading="busy"
+              :disabled="busy"
+              @click="save"
+            />
+          </template>
+        </JobPostingForm>
+      </div>
+    </template>
   </div>
 </template>

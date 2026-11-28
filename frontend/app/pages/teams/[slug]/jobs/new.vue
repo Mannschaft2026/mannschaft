@@ -25,6 +25,7 @@ const api = useJobPostingApi()
 const { success, error } = useNotification()
 
 const teamSlug = computed(() => String(route.params.slug))
+const { state: gateState, error: gateError, load: reloadGate } = useTeamAccessGate(teamSlug)
 
 // デフォルト値（未来の日時を入れて Future バリデータを通しやすくする）
 function createDefaultForm(): JobPostingFormState {
@@ -120,32 +121,41 @@ function cancel() {
 </script>
 
 <template>
-  <div class="container mx-auto max-w-3xl p-4">
-    <PageHeader :title="t('jobmatching.create.title')" :back-to="`/teams/${teamSlug}/jobs`" />
-    <p class="mb-4 text-sm text-surface-500">
-      {{ t('jobmatching.create.description') }}
-    </p>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+      <div class="container mx-auto max-w-3xl p-4">
+        <PageHeader :title="t('jobmatching.create.title')" :back-to="`/teams/${teamSlug}/jobs`" />
+        <p class="mb-4 text-sm text-surface-500">
+          {{ t('jobmatching.create.description') }}
+        </p>
 
-    <JobPostingForm
-      v-model="form"
-      :submitting="submitting"
-    >
-      <template #submit="{ submitting: busy }">
-        <Button
-          :label="t('jobmatching.create.cancel')"
-          severity="secondary"
-          outlined
-          :disabled="busy"
-          @click="cancel"
-        />
-        <Button
-          :label="t('jobmatching.create.saveDraft')"
-          icon="pi pi-save"
-          :loading="busy"
-          :disabled="busy"
-          @click="submitDraft"
-        />
-      </template>
-    </JobPostingForm>
+        <JobPostingForm
+          v-model="form"
+          :submitting="submitting"
+        >
+          <template #submit="{ submitting: busy }">
+            <Button
+              :label="t('jobmatching.create.cancel')"
+              severity="secondary"
+              outlined
+              :disabled="busy"
+              @click="cancel"
+            />
+            <Button
+              :label="t('jobmatching.create.saveDraft')"
+              icon="pi pi-save"
+              :loading="busy"
+              :disabled="busy"
+              @click="submitDraft"
+            />
+          </template>
+        </JobPostingForm>
+      </div>
+    </template>
   </div>
 </template>

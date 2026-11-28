@@ -19,6 +19,7 @@ definePageMeta({
 
 const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const eventId = computed(() => Number(route.params.eventId))
 
 const { candidates, sessionIds, loading, submitting, offlineQueued, loadCandidates, submit, loadSessions } =
@@ -99,47 +100,56 @@ async function onOpenHistory(): Promise<void> {
   await loadSessions()
 }
 
-onMounted(() => {
+onGateOk(() => {
   void reload()
 })
 </script>
 
 <template>
-  <div class="rc-page">
-    <header class="rc-page__header">
-      <BackButton
-        :to="`/teams/${teamSlug}/events/${eventId}`"
-        :label="$t('common.back')"
-      />
-      <h1 class="rc-page__title">
-        {{ $t('event.rollCall.title') }}
-      </h1>
-    </header>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+        <div class="rc-page">
+          <header class="rc-page__header">
+            <BackButton
+              :to="`/teams/${teamSlug}/events/${eventId}`"
+              :label="$t('common.back')"
+            />
+            <h1 class="rc-page__title">
+              {{ $t('event.rollCall.title') }}
+            </h1>
+          </header>
 
-    <main class="rc-page__main">
-      <PageLoading v-if="loading && candidates.length === 0" />
-      <DashboardErrorState
-        v-else-if="loadFailed"
-        testid="roll-call-error-state"
-        @retry="reload"
-      />
-      <RollCallSheet
-        v-else
-        :team-id="teamSlug"
-        :event-id="eventId"
-        :candidates="candidates"
-        :advance-notices="advanceNotices"
-        :submitting="submitting"
-        @submit="onSubmit"
-        @open-history="onOpenHistory"
-      />
-    </main>
+          <main class="rc-page__main">
+            <PageLoading v-if="loading && candidates.length === 0" />
+            <DashboardErrorState
+              v-else-if="loadFailed"
+              testid="roll-call-error-state"
+              @retry="reload"
+            />
+            <RollCallSheet
+              v-else
+              :team-id="teamSlug"
+              :event-id="eventId"
+              :candidates="candidates"
+              :advance-notices="advanceNotices"
+              :submitting="submitting"
+              @submit="onSubmit"
+              @open-history="onOpenHistory"
+            />
+          </main>
 
-    <RollCallHistoryDrawer
-      v-model:visible="showHistory"
-      :session-ids="sessionIds"
-      :loading="loading"
-    />
+          <RollCallHistoryDrawer
+            v-model:visible="showHistory"
+            :session-ids="sessionIds"
+            :loading="loading"
+          />
+        </div>
+    </template>
   </div>
 </template>
 

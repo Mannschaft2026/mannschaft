@@ -2,6 +2,8 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
 import TeamFormsIndexPage from '~/pages/teams/[slug]/forms/index.vue'
 
+mockNuxtImport('useTeamApi', () => () => ({ getTeam: vi.fn().mockResolvedValue({ data: { id: 'x', numericId: 1 } }) }))
+
 /**
  * CMP-260922-2045 第2陣 G5 の根治テスト（組織版と対になるチーム版）。
  *

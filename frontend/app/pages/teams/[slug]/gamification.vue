@@ -6,6 +6,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 
 const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const gamificationApi = useGamificationApi()
 const notification = useNotification()
 const { markIfDenied } = useScopeNotFound()
@@ -58,132 +59,141 @@ async function loadRankings() {
 }
 
 watch(rankingPeriod, loadRankings)
-onMounted(loadData)
+onGateOk(loadData)
 </script>
 
 <template>
-  <div class="mx-auto max-w-4xl">
-    <PageHeader title="ポイント・バッジ" class="mb-6" />
-
-    <PageLoading v-if="loading" />
-
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
     <template v-else>
-      <div v-if="points" class="mb-6 grid gap-4 md:grid-cols-3">
-        <Card>
-          <template #content>
-            <p class="text-sm text-surface-500">累計ポイント</p>
-            <p class="text-3xl font-bold text-primary">{{ points.totalPoints.toLocaleString() }}</p>
-          </template>
-        </Card>
-        <Card>
-          <template #content>
-            <p class="text-sm text-surface-500">今月のポイント</p>
-            <p class="text-3xl font-bold text-green-600">
-              {{ points.monthlyPoints.toLocaleString() }}
-            </p>
-          </template>
-        </Card>
-        <Card>
-          <template #content>
-            <p class="text-sm text-surface-500">獲得バッジ</p>
-            <p class="text-3xl font-bold text-yellow-600">{{ points.badgeCount }}</p>
-          </template>
-        </Card>
-      </div>
+      <div class="mx-auto max-w-4xl">
+        <PageHeader title="ポイント・バッジ" class="mb-6" />
 
-      <Tabs v-model:value="activeTab">
-        <TabList>
-          <Tab value="0">バッジ</Tab>
-          <Tab value="1">ランキング</Tab>
-        </TabList>
-        <TabPanels>
-          <TabPanel value="0">
-            <DashboardEmptyState
-              v-if="badges.length === 0"
-              icon="pi pi-star"
-              message="まだバッジを獲得していません"
-            />
-            <div v-else class="grid gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              <SectionCard
-                v-for="ub in badges"
-                :key="ub.id"
-                class="flex flex-col items-center"
-              >
-                <img
-                  v-if="ub.badge.iconUrl"
-                  :src="ub.badge.iconUrl"
-                  alt=""
-                  class="mb-2 h-16 w-16"
-                >
-                <div
-                  v-else
-                  class="mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-yellow-100 text-2xl"
-                >
-                  <i class="pi pi-star-fill text-yellow-500" />
-                </div>
-                <p class="text-sm font-semibold text-center">{{ ub.badge.name }}</p>
-                <p class="text-xs text-surface-500 text-center">{{ ub.badge.description }}</p>
-                <p class="mt-1 text-xs text-surface-400">
-                  {{ formatDate(ub.awardedAt) }}
+        <PageLoading v-if="loading" />
+
+        <template v-else>
+          <div v-if="points" class="mb-6 grid gap-4 md:grid-cols-3">
+            <Card>
+              <template #content>
+                <p class="text-sm text-surface-500">累計ポイント</p>
+                <p class="text-3xl font-bold text-primary">{{ points.totalPoints.toLocaleString() }}</p>
+              </template>
+            </Card>
+            <Card>
+              <template #content>
+                <p class="text-sm text-surface-500">今月のポイント</p>
+                <p class="text-3xl font-bold text-green-600">
+                  {{ points.monthlyPoints.toLocaleString() }}
                 </p>
-              </SectionCard>
-            </div>
-          </TabPanel>
-          <TabPanel value="1">
-            <div class="mb-4 flex justify-end">
-              <SelectButton
-                v-model="rankingPeriod"
-                :options="[
-                  { label: '週間', value: 'WEEKLY' },
-                  { label: '月間', value: 'MONTHLY' },
-                  { label: '年間', value: 'YEARLY' },
-                ]"
-                option-label="label"
-                option-value="value"
-              />
-            </div>
-            <DashboardEmptyState
-              v-if="rankings.length === 0"
-              icon="pi pi-chart-bar"
-              message="ランキングデータがありません"
-            />
-            <div v-else class="space-y-2">
-              <SectionCard
-                v-for="entry in rankings"
-                :key="entry.userId"
-                class="flex items-center gap-4"
-              >
-                <span
-                  class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold"
-                  :class="
-                    entry.rank <= 3
-                      ? 'bg-yellow-100 text-yellow-700'
-                      : 'bg-surface-100 text-surface-600'
-                  "
-                >
-                  {{ entry.rank }}
-                </span>
-                <img
-                  v-if="entry.avatarUrl"
-                  :src="entry.avatarUrl"
-                  alt=""
-                  class="h-10 w-10 rounded-full object-cover"
-                >
-                <div
-                  v-else
-                  class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary"
-                >
-                  <i class="pi pi-user" />
+              </template>
+            </Card>
+            <Card>
+              <template #content>
+                <p class="text-sm text-surface-500">獲得バッジ</p>
+                <p class="text-3xl font-bold text-yellow-600">{{ points.badgeCount }}</p>
+              </template>
+            </Card>
+          </div>
+
+          <Tabs v-model:value="activeTab">
+            <TabList>
+              <Tab value="0">バッジ</Tab>
+              <Tab value="1">ランキング</Tab>
+            </TabList>
+            <TabPanels>
+              <TabPanel value="0">
+                <DashboardEmptyState
+                  v-if="badges.length === 0"
+                  icon="pi pi-star"
+                  message="まだバッジを獲得していません"
+                />
+                <div v-else class="grid gap-4 sm:grid-cols-3 lg:grid-cols-4">
+                  <SectionCard
+                    v-for="ub in badges"
+                    :key="ub.id"
+                    class="flex flex-col items-center"
+                  >
+                    <img
+                      v-if="ub.badge.iconUrl"
+                      :src="ub.badge.iconUrl"
+                      alt=""
+                      class="mb-2 h-16 w-16"
+                    >
+                    <div
+                      v-else
+                      class="mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-yellow-100 text-2xl"
+                    >
+                      <i class="pi pi-star-fill text-yellow-500" />
+                    </div>
+                    <p class="text-sm font-semibold text-center">{{ ub.badge.name }}</p>
+                    <p class="text-xs text-surface-500 text-center">{{ ub.badge.description }}</p>
+                    <p class="mt-1 text-xs text-surface-400">
+                      {{ formatDate(ub.awardedAt) }}
+                    </p>
+                  </SectionCard>
                 </div>
-                <div class="flex-1">
-                  <p class="font-medium">{{ entry.displayName }}</p>
+              </TabPanel>
+              <TabPanel value="1">
+                <div class="mb-4 flex justify-end">
+                  <SelectButton
+                    v-model="rankingPeriod"
+                    :options="[
+                      { label: '週間', value: 'WEEKLY' },
+                      { label: '月間', value: 'MONTHLY' },
+                      { label: '年間', value: 'YEARLY' },
+                    ]"
+                    option-label="label"
+                    option-value="value"
+                  />
                 </div>
-                <p class="text-lg font-bold text-primary">{{ entry.points.toLocaleString() }} pt</p>
-              </SectionCard>
-            </div>
-          </TabPanel>
-        </TabPanels>
-      </Tabs>
+                <DashboardEmptyState
+                  v-if="rankings.length === 0"
+                  icon="pi pi-chart-bar"
+                  message="ランキングデータがありません"
+                />
+                <div v-else class="space-y-2">
+                  <SectionCard
+                    v-for="entry in rankings"
+                    :key="entry.userId"
+                    class="flex items-center gap-4"
+                  >
+                    <span
+                      class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold"
+                      :class="
+                        entry.rank <= 3
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-surface-100 text-surface-600'
+                      "
+                    >
+                      {{ entry.rank }}
+                    </span>
+                    <img
+                      v-if="entry.avatarUrl"
+                      :src="entry.avatarUrl"
+                      alt=""
+                      class="h-10 w-10 rounded-full object-cover"
+                    >
+                    <div
+                      v-else
+                      class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary"
+                    >
+                      <i class="pi pi-user" />
+                    </div>
+                    <div class="flex-1">
+                      <p class="font-medium">{{ entry.displayName }}</p>
+                    </div>
+                    <p class="text-lg font-bold text-primary">{{ entry.points.toLocaleString() }} pt</p>
+                  </SectionCard>
+                </div>
+              </TabPanel>
+            </TabPanels>
+          </Tabs>
+        </template>
+      </div>
     </template>
   </div>
 </template>

@@ -12,6 +12,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 const { t } = useI18n()
 const route = useRoute()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 
 const { isAdmin, can, loadPermissions } = useRoleAccess('team', teamSlug)
 
@@ -30,7 +31,7 @@ const feedListRef = ref<{
 } | null>(null)
 
 /** 権限チェック */
-onMounted(async () => {
+onGateOk(async () => {
   try {
     await loadPermissions()
     // ADMIN or MANAGE_FRIEND_TEAMS 保持者のみアクセス可
@@ -61,48 +62,57 @@ function onForwardSuccess(forwardId: number) {
 
 <template>
   <div>
-    <!--
-      pageTransition(out-in) は単一要素ルートを要求する。ルート直下のコメント＋
-      コンポーネント先頭の v-if はフラグメント根（非要素）となりアニメ不能 →
-      SPAバックで次ページが空白になる（#1863/#1866 と同型）。単一 <div> で包んで根治。
-    -->
-    <PageLoading v-if="loading" />
-
-    <!-- 権限不足 -->
-    <div v-else-if="permissionDenied" class="flex flex-col items-center justify-center py-16">
-      <i class="pi pi-lock mb-4 text-4xl text-surface-400" />
-      <p class="text-surface-500">{{ t('friend_feed.permission_denied') }}</p>
-      <BackButton class="mt-4" />
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+      <div>
+        <!--
+          pageTransition(out-in) は単一要素ルートを要求する。ルート直下のコメント＋
+          コンポーネント先頭の v-if はフラグメント根（非要素）となりアニメ不能 →
+          SPAバックで次ページが空白になる（#1863/#1866 と同型）。単一 <div> で包んで根治。
+        -->
+        <PageLoading v-if="loading" />
 
-    <!-- メインコンテンツ -->
-    <div v-else>
-      <div class="mb-4 flex items-center gap-3">
-        <PageHeader :title="t('friend_feed.title')">
-          <template #subtitle>
-            <span class="text-sm text-surface-400">{{ t('friend_feed.subtitle') }}</span>
-          </template>
-        </PageHeader>
+        <!-- 権限不足 -->
+        <div v-else-if="permissionDenied" class="flex flex-col items-center justify-center py-16">
+          <i class="pi pi-lock mb-4 text-4xl text-surface-400" />
+          <p class="text-surface-500">{{ t('friend_feed.permission_denied') }}</p>
+          <BackButton class="mt-4" />
+        </div>
+
+        <!-- メインコンテンツ -->
+        <div v-else>
+          <div class="mb-4 flex items-center gap-3">
+            <PageHeader :title="t('friend_feed.title')">
+              <template #subtitle>
+                <span class="text-sm text-surface-400">{{ t('friend_feed.subtitle') }}</span>
+              </template>
+            </PageHeader>
+          </div>
+
+          <div class="mx-auto max-w-2xl">
+            <!-- 投稿一覧 -->
+            <FriendFeedPostList
+              ref="feedListRef"
+              :team-id="teamSlug"
+              @forward="onForward"
+            />
+          </div>
+
+          <!-- 転送モーダル -->
+          <FriendForwardModal
+            v-model="forwardModalVisible"
+            :team-id="teamSlug"
+            :post-id="forwardPostId"
+            :source-team-name="forwardSourceTeamName"
+            @success="onForwardSuccess"
+            @already-forwarded="feedListRef?.refresh()"
+          />
+        </div>
       </div>
-
-      <div class="mx-auto max-w-2xl">
-        <!-- 投稿一覧 -->
-        <FriendFeedPostList
-          ref="feedListRef"
-          :team-id="teamSlug"
-          @forward="onForward"
-        />
-      </div>
-
-      <!-- 転送モーダル -->
-      <FriendForwardModal
-        v-model="forwardModalVisible"
-        :team-id="teamSlug"
-        :post-id="forwardPostId"
-        :source-team-name="forwardSourceTeamName"
-        @success="onForwardSuccess"
-        @already-forwarded="feedListRef?.refresh()"
-      />
-    </div>
+    </template>
   </div>
 </template>

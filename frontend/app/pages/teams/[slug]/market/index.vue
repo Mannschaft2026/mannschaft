@@ -3,8 +3,18 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 
 const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
+const { state: gateState, error: gateError, load: reloadGate } = useTeamAccessGate(teamSlug)
 </script>
 
 <template>
-  <ScopeMarketHub scope-type="team" :scope-id="teamSlug" />
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+      <ScopeMarketHub scope-type="team" :scope-id="teamSlug" />
+    </template>
+  </div>
 </template>

@@ -8,6 +8,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 const route = useRoute()
 const { t } = useI18n()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const advertiserApi = useAdvertiserApi()
 
 const invoices = ref<InvoiceSummaryResponse[]>([])
@@ -70,71 +71,80 @@ function statusSeverity(status: InvoiceStatus) {
 }
 
 watch(statusFilter, () => loadInvoices())
-onMounted(loadInvoices)
+onGateOk(loadInvoices)
 </script>
 
 <template>
   <div>
-    <div class="mb-4 flex items-center justify-between">
-      <PageHeader :title="t('advertising.teams_page.invoices.title')" :back-to="`/teams/${teamSlug}/advertiser`" />
-      <Select v-model="statusFilter" :options="statusOptions" option-label="label" option-value="value" :placeholder="t('advertising.teams_page.invoices.status_filter_placeholder')" class="w-40" />
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+        <div>
+          <div class="mb-4 flex items-center justify-between">
+            <PageHeader :title="t('advertising.teams_page.invoices.title')" :back-to="`/teams/${teamSlug}/advertiser`" />
+            <Select v-model="statusFilter" :options="statusOptions" option-label="label" option-value="value" :placeholder="t('advertising.teams_page.invoices.status_filter_placeholder')" class="w-40" />
+          </div>
 
-    <div v-if="loading" class="flex justify-center py-10"><LoadingBounce /></div>
+          <div v-if="loading" class="flex justify-center py-10"><LoadingBounce /></div>
 
-    <DashboardErrorState
-      v-else-if="loadFailed"
-      testid="advertiser-invoices-error-state"
-      @retry="loadInvoices"
-    />
+          <DashboardErrorState
+            v-else-if="loadFailed"
+            testid="advertiser-invoices-error-state"
+            @retry="loadInvoices"
+          />
 
-    <DataTable v-else :value="invoices" striped-rows @row-click="(e: { data: InvoiceSummaryResponse }) => viewDetail(e.data)">
-      <Column field="invoiceNumber" :header="t('advertising.teams_page.invoices.column_invoice_number')" />
-      <Column field="invoiceMonth" :header="t('advertising.teams_page.invoices.column_invoice_month')" />
-      <Column field="totalWithTax" :header="t('advertising.teams_page.invoices.column_total_with_tax')">
-        <template #body="{ data }">¥{{ data.totalWithTax.toLocaleString() }}</template>
-      </Column>
-      <Column field="status" :header="t('advertising.teams_page.invoices.column_status')">
-        <template #body="{ data }">
-          <Tag :value="data.status" :severity="statusSeverity(data.status)" />
-        </template>
-      </Column>
-      <Column field="dueDate" :header="t('advertising.teams_page.invoices.column_due_date')" />
-      <Column header="">
-        <template #body="{ data }">
-          <Button icon="pi pi-download" text size="small" @click.stop="downloadPdf(data.id)" />
-        </template>
-      </Column>
-    </DataTable>
+          <DataTable v-else :value="invoices" striped-rows @row-click="(e: { data: InvoiceSummaryResponse }) => viewDetail(e.data)">
+            <Column field="invoiceNumber" :header="t('advertising.teams_page.invoices.column_invoice_number')" />
+            <Column field="invoiceMonth" :header="t('advertising.teams_page.invoices.column_invoice_month')" />
+            <Column field="totalWithTax" :header="t('advertising.teams_page.invoices.column_total_with_tax')">
+              <template #body="{ data }">¥{{ data.totalWithTax.toLocaleString() }}</template>
+            </Column>
+            <Column field="status" :header="t('advertising.teams_page.invoices.column_status')">
+              <template #body="{ data }">
+                <Tag :value="data.status" :severity="statusSeverity(data.status)" />
+              </template>
+            </Column>
+            <Column field="dueDate" :header="t('advertising.teams_page.invoices.column_due_date')" />
+            <Column header="">
+              <template #body="{ data }">
+                <Button icon="pi pi-download" text size="small" @click.stop="downloadPdf(data.id)" />
+              </template>
+            </Column>
+          </DataTable>
 
-    <!-- 詳細ダイアログ -->
-    <Dialog v-model:visible="showDetail" :header="t('advertising.teams_page.invoices.detail_title')" :style="{ width: '700px' }" modal>
-      <div v-if="selectedInvoice">
-        <div class="mb-4 grid grid-cols-2 gap-2 text-sm">
-          <div><span class="text-surface-500">{{ t('advertising.teams_page.invoices.detail_invoice_number') }}</span> {{ selectedInvoice.invoiceNumber }}</div>
-          <div><span class="text-surface-500">{{ t('advertising.teams_page.invoices.detail_invoice_month') }}</span> {{ selectedInvoice.invoiceMonth }}</div>
-          <div><span class="text-surface-500">{{ t('advertising.teams_page.invoices.detail_status') }}</span> <Tag :value="selectedInvoice.status" :severity="statusSeverity(selectedInvoice.status)" /></div>
-          <div><span class="text-surface-500">{{ t('advertising.teams_page.invoices.detail_due_date') }}</span> {{ selectedInvoice.dueDate || '-' }}</div>
+          <!-- 詳細ダイアログ -->
+          <Dialog v-model:visible="showDetail" :header="t('advertising.teams_page.invoices.detail_title')" :style="{ width: '700px' }" modal>
+            <div v-if="selectedInvoice">
+              <div class="mb-4 grid grid-cols-2 gap-2 text-sm">
+                <div><span class="text-surface-500">{{ t('advertising.teams_page.invoices.detail_invoice_number') }}</span> {{ selectedInvoice.invoiceNumber }}</div>
+                <div><span class="text-surface-500">{{ t('advertising.teams_page.invoices.detail_invoice_month') }}</span> {{ selectedInvoice.invoiceMonth }}</div>
+                <div><span class="text-surface-500">{{ t('advertising.teams_page.invoices.detail_status') }}</span> <Tag :value="selectedInvoice.status" :severity="statusSeverity(selectedInvoice.status)" /></div>
+                <div><span class="text-surface-500">{{ t('advertising.teams_page.invoices.detail_due_date') }}</span> {{ selectedInvoice.dueDate || '-' }}</div>
+              </div>
+              <DataTable :value="selectedInvoice.items" striped-rows class="mb-4">
+                <Column field="campaignName" :header="t('advertising.teams_page.invoices.detail_column_campaign')" />
+                <Column field="pricingModel" :header="t('advertising.teams_page.invoices.detail_column_pricing_model')" />
+                <Column field="impressions" :header="t('advertising.teams_page.invoices.detail_column_impressions')">
+                  <template #body="{ data }">{{ data.impressions.toLocaleString() }}</template>
+                </Column>
+                <Column field="clicks" :header="t('advertising.teams_page.invoices.detail_column_clicks')">
+                  <template #body="{ data }">{{ data.clicks.toLocaleString() }}</template>
+                </Column>
+                <Column field="subtotal" :header="t('advertising.teams_page.invoices.detail_column_subtotal')">
+                  <template #body="{ data }">¥{{ data.subtotal.toLocaleString() }}</template>
+                </Column>
+              </DataTable>
+              <div class="text-right">
+                <p>{{ t('advertising.teams_page.invoices.subtotal_label') }} ¥{{ selectedInvoice.totalAmount.toLocaleString() }}</p>
+                <p>{{ t('advertising.teams_page.invoices.tax_label', { rate: selectedInvoice.taxRate }) }} ¥{{ selectedInvoice.taxAmount.toLocaleString() }}</p>
+                <p class="text-xl font-bold">{{ t('advertising.teams_page.invoices.total_label') }} ¥{{ selectedInvoice.totalWithTax.toLocaleString() }}</p>
+              </div>
+            </div>
+          </Dialog>
         </div>
-        <DataTable :value="selectedInvoice.items" striped-rows class="mb-4">
-          <Column field="campaignName" :header="t('advertising.teams_page.invoices.detail_column_campaign')" />
-          <Column field="pricingModel" :header="t('advertising.teams_page.invoices.detail_column_pricing_model')" />
-          <Column field="impressions" :header="t('advertising.teams_page.invoices.detail_column_impressions')">
-            <template #body="{ data }">{{ data.impressions.toLocaleString() }}</template>
-          </Column>
-          <Column field="clicks" :header="t('advertising.teams_page.invoices.detail_column_clicks')">
-            <template #body="{ data }">{{ data.clicks.toLocaleString() }}</template>
-          </Column>
-          <Column field="subtotal" :header="t('advertising.teams_page.invoices.detail_column_subtotal')">
-            <template #body="{ data }">¥{{ data.subtotal.toLocaleString() }}</template>
-          </Column>
-        </DataTable>
-        <div class="text-right">
-          <p>{{ t('advertising.teams_page.invoices.subtotal_label') }} ¥{{ selectedInvoice.totalAmount.toLocaleString() }}</p>
-          <p>{{ t('advertising.teams_page.invoices.tax_label', { rate: selectedInvoice.taxRate }) }} ¥{{ selectedInvoice.taxAmount.toLocaleString() }}</p>
-          <p class="text-xl font-bold">{{ t('advertising.teams_page.invoices.total_label') }} ¥{{ selectedInvoice.totalWithTax.toLocaleString() }}</p>
-        </div>
-      </div>
-    </Dialog>
+    </template>
   </div>
 </template>

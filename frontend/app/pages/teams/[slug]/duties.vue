@@ -6,6 +6,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 
 const route = useRoute()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const { isAdminOrDeputy, loadPermissions } = useRoleAccess('team', teamSlug)
 const { listDuties, createDuty, updateDuty, deleteDuty, getTodayDuties } = useDutyApi()
 const { showError } = useNotification()
@@ -95,7 +96,7 @@ async function remove(duty: DutyRotationResponse) {
   }
 }
 
-onMounted(async () => {
+onGateOk(async () => {
   await loadPermissions()
   await load()
 })
@@ -103,102 +104,111 @@ onMounted(async () => {
 
 <template>
   <div>
-    <div class="mb-4 flex items-center justify-between">
-      <PageHeader title="当番管理" />
-      <Button v-if="isAdminOrDeputy" label="当番を追加" icon="pi pi-plus" @click="openCreate" />
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
-
-    <PageLoading v-if="loading" size="40px" />
-
-    <!-- 今日の当番 -->
-    <div v-if="todayDuties.length > 0" class="mb-6">
-      <h2 class="mb-2 text-lg font-semibold">今日の当番</h2>
-      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <SectionCard
-          v-for="td in todayDuties"
-          :key="td.dutyId"
-          class="flex items-center gap-3"
-        >
-          <span class="text-2xl">{{ td.icon }}</span>
-          <div>
-            <p class="font-semibold">{{ td.dutyName }}</p>
-            <p class="text-sm text-surface-500">担当者ID: {{ td.assigneeUserId }}</p>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+        <div>
+          <div class="mb-4 flex items-center justify-between">
+            <PageHeader title="当番管理" />
+            <Button v-if="isAdminOrDeputy" label="当番を追加" icon="pi pi-plus" @click="openCreate" />
           </div>
-        </SectionCard>
-      </div>
-    </div>
 
-    <!-- 当番一覧 -->
-    <div v-if="!loading" class="flex flex-col gap-3">
-      <SectionCard
-        v-for="duty in duties"
-        :key="duty.id"
-      >
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <span class="text-2xl">{{ duty.icon }}</span>
-            <div>
-              <p class="font-semibold">{{ duty.dutyName }}</p>
-              <div class="flex items-center gap-2 text-sm text-surface-500">
-                <Tag :value="duty.rotationType" severity="info" />
-                <span>開始日: {{ duty.startDate }}</span>
-                <Tag v-if="!duty.enabled" value="無効" severity="warn" />
-              </div>
+          <PageLoading v-if="loading" size="40px" />
+
+          <!-- 今日の当番 -->
+          <div v-if="todayDuties.length > 0" class="mb-6">
+            <h2 class="mb-2 text-lg font-semibold">今日の当番</h2>
+            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <SectionCard
+                v-for="td in todayDuties"
+                :key="td.dutyId"
+                class="flex items-center gap-3"
+              >
+                <span class="text-2xl">{{ td.icon }}</span>
+                <div>
+                  <p class="font-semibold">{{ td.dutyName }}</p>
+                  <p class="text-sm text-surface-500">担当者ID: {{ td.assigneeUserId }}</p>
+                </div>
+              </SectionCard>
             </div>
           </div>
-          <div v-if="isAdminOrDeputy" class="flex gap-2">
-            <Button icon="pi pi-pencil" text rounded @click="openEdit(duty)" />
-            <Button icon="pi pi-trash" text rounded severity="danger" @click="remove(duty)" />
+
+          <!-- 当番一覧 -->
+          <div v-if="!loading" class="flex flex-col gap-3">
+            <SectionCard
+              v-for="duty in duties"
+              :key="duty.id"
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <span class="text-2xl">{{ duty.icon }}</span>
+                  <div>
+                    <p class="font-semibold">{{ duty.dutyName }}</p>
+                    <div class="flex items-center gap-2 text-sm text-surface-500">
+                      <Tag :value="duty.rotationType" severity="info" />
+                      <span>開始日: {{ duty.startDate }}</span>
+                      <Tag v-if="!duty.enabled" value="無効" severity="warn" />
+                    </div>
+                  </div>
+                </div>
+                <div v-if="isAdminOrDeputy" class="flex gap-2">
+                  <Button icon="pi pi-pencil" text rounded @click="openEdit(duty)" />
+                  <Button icon="pi pi-trash" text rounded severity="danger" @click="remove(duty)" />
+                </div>
+              </div>
+            </SectionCard>
+
+            <DashboardEmptyState
+              v-if="duties.length === 0 && !loading"
+              icon="pi pi-calendar-clock"
+              message="当番が登録されていません"
+            />
           </div>
-        </div>
-      </SectionCard>
 
-      <DashboardEmptyState
-        v-if="duties.length === 0 && !loading"
-        icon="pi pi-calendar-clock"
-        message="当番が登録されていません"
-      />
-    </div>
-
-    <!-- 作成/編集ダイアログ -->
-    <Dialog
-      v-model:visible="showDialog"
-      :header="editingDuty ? '当番を編集' : '当番を追加'"
-      modal
-      class="w-full max-w-lg"
-    >
-      <div class="flex flex-col gap-4">
-        <div>
-          <label class="mb-1 block text-sm font-medium">当番名</label>
-          <InputText v-model="form.dutyName" class="w-full" placeholder="例: ゴミ出し" />
+          <!-- 作成/編集ダイアログ -->
+          <Dialog
+            v-model:visible="showDialog"
+            :header="editingDuty ? '当番を編集' : '当番を追加'"
+            modal
+            class="w-full max-w-lg"
+          >
+            <div class="flex flex-col gap-4">
+              <div>
+                <label class="mb-1 block text-sm font-medium">当番名</label>
+                <InputText v-model="form.dutyName" class="w-full" placeholder="例: ゴミ出し" />
+              </div>
+              <div>
+                <label class="mb-1 block text-sm font-medium">ローテーション種別</label>
+                <Select
+                  v-model="form.rotationType"
+                  :options="rotationTypes"
+                  option-label="label"
+                  option-value="value"
+                  class="w-full"
+                />
+              </div>
+              <div>
+                <label class="mb-1 block text-sm font-medium">開始日</label>
+                <InputText v-model="form.startDate" type="date" class="w-full" />
+              </div>
+              <div>
+                <label class="mb-1 block text-sm font-medium">アイコン</label>
+                <InputText v-model="form.icon" class="w-20" />
+              </div>
+              <div class="flex items-center gap-2">
+                <Checkbox v-model="form.isEnabled" :binary="true" input-id="dutyEnabled" />
+                <label for="dutyEnabled" class="text-sm">有効</label>
+              </div>
+            </div>
+            <template #footer>
+              <Button label="キャンセル" text @click="showDialog = false" />
+              <Button :label="editingDuty ? '更新' : '作成'" @click="save" />
+            </template>
+          </Dialog>
         </div>
-        <div>
-          <label class="mb-1 block text-sm font-medium">ローテーション種別</label>
-          <Select
-            v-model="form.rotationType"
-            :options="rotationTypes"
-            option-label="label"
-            option-value="value"
-            class="w-full"
-          />
-        </div>
-        <div>
-          <label class="mb-1 block text-sm font-medium">開始日</label>
-          <InputText v-model="form.startDate" type="date" class="w-full" />
-        </div>
-        <div>
-          <label class="mb-1 block text-sm font-medium">アイコン</label>
-          <InputText v-model="form.icon" class="w-20" />
-        </div>
-        <div class="flex items-center gap-2">
-          <Checkbox v-model="form.isEnabled" :binary="true" input-id="dutyEnabled" />
-          <label for="dutyEnabled" class="text-sm">有効</label>
-        </div>
-      </div>
-      <template #footer>
-        <Button label="キャンセル" text @click="showDialog = false" />
-        <Button :label="editingDuty ? '更新' : '作成'" @click="save" />
-      </template>
-    </Dialog>
+    </template>
   </div>
 </template>

@@ -3399,6 +3399,8 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 
 - 各ページは最初にチーム詳細を取得し（または共通 composable `useTeamAccessGate(slug)` を新設して使い）、403＝「見つかりません」（`ScopeNotFound`。トーストなし）、404＝slug 移転の解決が不成立なら同じ「見つかりません」、その他＝既存のエラー表示に分ける。403/404 の間は本文の API を呼ばない。
 - 管理者専用画面（`settings`・`admin`・`audit-logs`・`billing`・`webhooks`・`advertiser` など）も 403 時は同じ「見つかりません」を出す（判定は既存の管理者判定のまま。理由は出さない）。
+- 本文の読み込み（`onMounted` で行っていた API 呼び出し・権限取得）は `useTeamAccessGate` が返す `onOk(fn)` に渡す。`state === 'ok'` になった時点（再判定で ok に戻ったときも）でだけ呼ばれ、403/404/判定中/通信失敗の間は呼ばれない。テンプレートは `ScopeNotFound`／読み込み中／`DashboardErrorState`／本文の順に出し分ける。
+- **適用状況（台帳 `teamAccessLedger.ts` の `handling` が正本）**: PR-F2a で `activity-templates`・`admin`・`advertiser`・`analytics`・`anniversaries`・`announcements`・`annual-plan`・`audit-logs`・`billing`・`budget`・`charts`・`coin-toss`・`direct-mail`・`duties`・`equipment`・`events` の 34 画面を適用済み（`gate`）。F2b〜F2d は未適用（`pending`）。表駆動の検証は `frontend/tests/unit/pages/teamAccessGateF2a.spec.ts`（403・404・判定中・通信失敗で本文 API 0 回、200 は従来どおり）。
 - AC-0159-88 は系統 1・2 の全項目から表駆動で生成する。
 
 #### 20.5.7 棚卸しの自動生成と突き合わせ（実装時の手順）

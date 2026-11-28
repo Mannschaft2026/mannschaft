@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { LoyaltyCatalog } from '~/types/team-loyalty'
 definePageMeta({ middleware: ['auth'], key: (route) => route.path })
+const teamSlug = String(useRoute().params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const context = useTeamLoyaltyContext()
 const { t } = useI18n()
 const api = useTeamLoyaltyApi()
@@ -22,22 +24,31 @@ async function load() {
   }
 }
 useHead({ title: () => t('loyalty.scan.title') })
-onMounted(load)
+onGateOk(load)
 </script>
 <template>
-  <main class="mx-auto max-w-3xl space-y-4 p-4">
-    <PageHeader :title="t('loyalty.scan.title')" />
-    <PageLoading v-if="loading && !catalog" />
-    <DashboardErrorState v-else-if="error" :error="error" @retry="load" />
-    <template v-else-if="catalog">
-      <NuxtLink
-        v-if="context.access.isScopeAdmin.value"
-        :to="`/teams/${context.slug.value}/settings/loyalty`"
-        class="inline-flex min-h-11 items-center"
-        >{{ t('loyalty.settings.title') }}</NuxtLink
-      >
-      <LoyaltyStaffScanner :catalog="catalog" @changed="load" />
-      <LoyaltyStaffRequests :team-id="catalog.teamId" @changed="load" />
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+      <main class="mx-auto max-w-3xl space-y-4 p-4">
+        <PageHeader :title="t('loyalty.scan.title')" />
+        <PageLoading v-if="loading && !catalog" />
+        <DashboardErrorState v-else-if="error" :error="error" @retry="load" />
+        <template v-else-if="catalog">
+          <NuxtLink
+            v-if="context.access.isScopeAdmin.value"
+            :to="`/teams/${context.slug.value}/settings/loyalty`"
+            class="inline-flex min-h-11 items-center"
+            >{{ t('loyalty.settings.title') }}</NuxtLink
+          >
+          <LoyaltyStaffScanner :catalog="catalog" @changed="load" />
+          <LoyaltyStaffRequests :team-id="catalog.teamId" @changed="load" />
+        </template>
+      </main>
     </template>
-  </main>
+  </div>
 </template>

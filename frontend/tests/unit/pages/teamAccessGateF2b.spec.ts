@@ -1,0 +1,156 @@
+// @vitest-environment happy-dom
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { mockNuxtImport } from '@nuxt/test-utils/runtime'
+import { defineComponent, h, type Component } from 'vue'
+import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import timezone from 'dayjs/plugin/timezone'
+import { TEAM_ACCESS_LEDGER } from './teamAccessLedger'
+
+// CMP-261124-0159 PR-F2b（試練）: 系統 2 のうち F2b 担当 22 セグメント・28 画面を表駆動で検証する。
+// 2026-11-27 マスター裁定（CMP-261125-1108 に統一）: チーム詳細が 403 でも 404 でも同じ中立な「見つかりません」（ScopeNotFound）。
+// 理由表示（AC-0159-86・87）は取り下げ。各画面は useTeamAccessGate を先に通し、403/404/判定中/通信失敗の間は本文 API を一切呼ばない。
+// 本文 API の観測: useApi()（全 API 合成関数の共通入口）と $fetch / fetch をスパイに差し替え、呼び出し 0 回を確かめる。
+dayjs.extend(utc)
+dayjs.extend(timezone)
+
+const F2B_SEGMENTS = new Set([
+  'extended-profile', 'facilities', 'forms', 'friend-feed', 'friend-folders', 'friend-forward-exports', 'friends', 'gamification',
+  'homerooms', 'incidents', 'index', 'jobs', 'kb', 'league-transfers', 'loyalty', 'market',
+  'matches', 'matching', 'member-cards', 'member-fields', 'onboarding', 'parking',
+])
+const segmentOf = (file: string) => (file.includes('/') ? file.split('/')[0]! : file.replace(/\.vue$/, ''))
+const F2B_FILES = TEAM_ACCESS_LEDGER.filter(e => e.system === 2 && F2B_SEGMENTS.has(segmentOf(e.file))).map(e => e.file)
+
+const mocks = vi.hoisted(() => ({
+  getTeam: vi.fn(),
+  resolve: vi.fn(),
+  navigate: vi.fn(),
+  handleApiError: vi.fn(),
+  api: vi.fn(),
+  rawFetch: vi.fn(),
+  route: {
+    path: '/teams/a/x',
+    query: {},
+    hash: '',
+    params: new Proxy({} as Record<string, string>, { get: (_t, k) => (k === 'slug' ? 'a' : '1') }),
+  },
+}))
+mockNuxtImport('useI18n', () => () => ({ t: (key: string) => key, tn: (key: string) => key, locale: { value: 'ja' } }))
+mockNuxtImport('useErrorReport', () => () => ({ capture: vi.fn() }))
+mockNuxtImport('useAnnouncementFeed', () => () => ({
+  feed: { value: [] }, meta: { value: null }, loading: { value: false }, error: { value: null },
+  fetchFeed: mocks.api, togglePin: mocks.api, deleteAnnouncement: mocks.api, markAsReadBeforeOpen: mocks.api,
+  markAllAsRead: mocks.api, setReadLocally: vi.fn(), removeFromFeedLocally: vi.fn(), runKeepingPinFocus: mocks.api,
+}))
+mockNuxtImport('useHead', () => () => undefined)
+mockNuxtImport('useScopeNotFound', () => () => ({
+  notFound: { value: false }, markIfDenied: () => false, markDenied: () => undefined, reset: () => undefined,
+}))
+mockNuxtImport('useRouter', () => () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }))
+mockNuxtImport('useRoute', () => () => mocks.route)
+mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getTeam }))
+mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: mocks.handleApiError, getFieldErrors: () => ({}) }))
+mockNuxtImport('useSlugRedirect', () => () => ({ resolveSlug: mocks.resolve }))
+mockNuxtImport('navigateTo', () => mocks.navigate)
+vi.mock('primevue/usetoast', () => ({ useToast: () => ({ add: vi.fn() }) }))
+vi.mock('primevue/useconfirm', () => ({ useConfirm: () => ({ require: vi.fn() }) }))
+mockNuxtImport('useNotification', () => () => ({
+  success: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), showSuccess: vi.fn(), showError: vi.fn(), showInfo: vi.fn(), showWarn: vi.fn(),
+}))
+// index.vue は親シェル（pages/teams/[slug].vue）の provide を inject する。単体では親が無いので空のコンテキストを返す。
+vi.mock('~/composables/useTeamShellContext', () => ({
+  useTeamShellContext: () => ({
+    team: { value: null }, displayName: { value: '' }, effectiveViewerRole: { value: null },
+    adminLens: { value: false }, isAdminOrDeputy: { value: false }, widgetVisibilitySettings: { value: null },
+  }),
+}))
+mockNuxtImport('useApi', () => () => Object.assign(mocks.api, { raw: mocks.api }))
+
+const pageModules = import.meta.glob<{ default: Component }>('../../../app/pages/teams/*/**/*.vue')
+const loaderOf = (file: string) => {
+  const key = Object.keys(pageModules).find(k => k.endsWith('/pages/teams/[slug]/' + file))
+  if (!key) throw new Error('page not found: ' + file)
+  return pageModules[key]!
+}
+
+const NotFound = defineComponent({ setup: () => () => h('div', { 'data-testid': 'scope-not-found' }) })
+
+const errors: unknown[] = []
+
+async function mountPage(file: string) {
+  const page = (await loaderOf(file)()).default
+  errors.length = 0
+  const wrapper = mount(page, {
+    shallow: true,
+    global: { plugins: [createPinia()], stubs: { ScopeNotFound: NotFound }, config: { errorHandler: (e: unknown) => { errors.push(e) } } },
+  })
+  return wrapper
+}
+
+function bodyCalls(): number {
+  return mocks.api.mock.calls.length + mocks.rawFetch.mock.calls.length
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  setActivePinia(createPinia())
+  mocks.api.mockRejectedValue(new Error('本文 API の応答は本試験の対象外'))
+  mocks.resolve.mockResolvedValue({ status: 'NOT_FOUND' })
+  vi.stubGlobal('$fetch', mocks.rawFetch)
+  vi.stubGlobal('fetch', mocks.rawFetch)
+})
+
+describe('F2b の対象画面が台帳どおり 28 件ある', () => {
+  it('台帳から 28 件を拾える', () => {
+    expect(F2B_FILES).toHaveLength(28)
+  })
+})
+
+describe.each(F2B_FILES)('%s（CMP-261124-0159 PR-F2b）', (file) => {
+  it('403: 「見つかりません」を出し、本文 API を呼ばない（404 と同一表示）', async () => {
+    mocks.getTeam.mockRejectedValue({ response: { status: 403 } })
+    const wrapper = await mountPage(file)
+    await flushPromises()
+    expect(errors).toEqual([])
+    expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(true)
+    expect(bodyCalls()).toBe(0)
+  })
+
+  it('404: 「見つかりません」を出し、本文 API を呼ばない', async () => {
+    mocks.getTeam.mockRejectedValue({ response: { status: 404 } })
+    const wrapper = await mountPage(file)
+    await flushPromises()
+    expect(errors).toEqual([])
+    expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(true)
+    expect(bodyCalls()).toBe(0)
+  })
+
+  it('判定中: チーム詳細の応答が返るまで本文 API を呼ばない', async () => {
+    mocks.getTeam.mockReturnValue(new Promise(() => {}))
+    await mountPage(file)
+    await flushPromises()
+    expect(mocks.getTeam).toHaveBeenCalledWith('a')
+    expect(bodyCalls()).toBe(0)
+  })
+
+  it('通信失敗（500）: 「見つかりません」にせず、本文 API も呼ばない', async () => {
+    mocks.getTeam.mockRejectedValue({ response: { status: 500 } })
+    const wrapper = await mountPage(file)
+    await flushPromises()
+    expect(errors).toEqual([])
+    expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(false)
+    expect(mocks.handleApiError).toHaveBeenCalledTimes(1)
+    expect(bodyCalls()).toBe(0)
+  })
+
+  it('200: 従来どおり本文を描き、「見つかりません」は出さない', async () => {
+    mocks.getTeam.mockResolvedValue({ data: { id: 'a', numericId: 42 } })
+    const wrapper = await mountPage(file)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(false)
+    expect(mocks.getTeam).toHaveBeenCalledWith('a')
+  })
+})
