@@ -155,4 +155,110 @@ public interface ShiftBudgetRateQueryRepository
         }
         return new BigDecimal(rows.get(0)[0].toString());
     }
+
+    // ───────────────────────── CMP-260909-2152 公開状態の正本・勤務枠の現在値（read-only ネイティブ） ─────────────────────────
+
+    /**
+     * シフトスケジュールの状態を {@code FOR SHARE} で current read する（CMP-260909-2152 確定設計 r12 §4.5）。
+     * FOR SHARE は TX コミットまで保持され、再公開・アーカイブの UPDATE はこれを待つ。
+     *
+     * <p>列は {@code status, deleted}（deleted は論理削除なら 1）。スケジュールが無ければ空。前例: {@link #lockTeamForUpdate}。</p>
+     */
+    @Query(value = "SELECT s.status AS status, (s.deleted_at IS NOT NULL) AS deleted FROM shift_schedules s "
+            + "WHERE s.id = :scheduleId FOR SHARE", nativeQuery = true)
+    List<Object[]> lockScheduleStatusForShare(@Param("scheduleId") Long scheduleId);
+
+    /**
+     * 勤務枠の現在日付（Prepare の勤務枠日付追従。列は {@code id, slot_date}）。
+     *
+     * <p>論理削除済み（{@code shift_slots.deleted_at IS NOT NULL}）の勤務枠は返さない。ネイティブ SQL には
+     * {@code @SQLRestriction} が効かないため明示する。削除済みの勤務枠は「枠なし」と同じに扱われ、Prepare の締め対象から
+     * 外れて整合バッチの取消に回り、記録のやり直しは計上先を解決せずに終わる。</p>
+     */
+    @Query(value = "SELECT sl.id, sl.slot_date FROM shift_slots sl WHERE sl.id IN (:slotIds) AND sl.deleted_at IS NULL",
+            nativeQuery = true)
+    List<Object[]> findSlotDates(@Param("slotIds") java.util.Collection<Long> slotIds);
+
+/**
+     * 勤務枠の現在の勤務日・開始・終了時刻（列は {@code slot_date, start_time, end_time}）。論理削除済みの枠は返さない。
+     *
+     * <p>CMP-260909-2152 Codex 検分 P2: 記録のやり直しでは勤務日だけでなく時刻も読み直し、勤務時間を再計算する
+     * （勤務日と時刻が同時に変わったとき、最初に読んだ枠の時間を新しい勤務日の時給に掛けない）。</p>
+     */
+    @Query(value = "SELECT sl.slot_date, sl.start_time, sl.end_time FROM shift_slots sl "
+            + "WHERE sl.id = :slotId AND sl.deleted_at IS NULL", nativeQuery = true)
+    List<Object[]> findSlotScheduleRows(@Param("slotId") Long slotId);
+
+    /** 勤務枠の現在の勤務日・時刻を1件読む（記録時の照合と計上先の解決のやり直し用）。枠が無い・論理削除済みなら空。 */
+    default Optional<SlotSchedule> findSlotSchedule(Long slotId) {
+        List<Object[]> rows = findSlotScheduleRows(slotId);
+        if (rows.isEmpty()) {
+            return Optional.empty();
+        }
+        Object[] r = rows.get(0);
+        return Optional.of(new SlotSchedule(toLocalDate(r[0]), toLocalTime(r[1]), toLocalTime(r[2])));
+    }
+
+    /** 勤務枠の現在の勤務日と開始・終了時刻。 */
+    record SlotSchedule(LocalDate slotDate, java.time.LocalTime startTime, java.time.LocalTime endTime) {
+    }
+
+    private static LocalDate toLocalDate(Object v) {
+        if (v instanceof LocalDate d) {
+            return d;
+        }
+        if (v instanceof java.sql.Date d) {
+            return d.toLocalDate();
+        }
+        return LocalDate.parse(String.valueOf(v));
+    }
+
+    private static java.time.LocalTime toLocalTime(Object v) {
+        if (v instanceof java.time.LocalTime t) {
+            return t;
+        }
+        if (v instanceof java.sql.Time t) {
+            return t.toLocalTime();
+        }
+        return java.time.LocalTime.parse(String.valueOf(v));
+    }
+
+    /**
+     * シフトの現在の勤務枠と担当（整合取消の「現在の有効な (slot, user) 集合」。列は {@code id, assigned_user_ids}）。
+     *
+     * <p>論理削除済みの勤務枠は除く。{@code ShiftSlotService.deleteSlot} は担当者 JSON を残したまま
+     * {@code deleted_at} を設定するため、除かないと削除済みの担当を有効と判定し PLANNED を取り消さない。</p>
+     */
+    @Query(value = "SELECT sl.id, sl.assigned_user_ids FROM shift_slots sl WHERE sl.schedule_id = :scheduleId "
+            + "AND sl.deleted_at IS NULL", nativeQuery = true)
+    List<Object[]> findSlotAssignments(@Param("scheduleId") Long scheduleId);
+
+    /** シフトの属するチームと公開状態（再実行がイベントを組み立てるため。列は {@code team_id, status, deleted}）。 */
+    @Query(value = "SELECT s.team_id, s.status, (s.deleted_at IS NOT NULL) FROM shift_schedules s WHERE s.id = :scheduleId",
+            nativeQuery = true)
+    List<Object[]> findScheduleBasics(@Param("scheduleId") Long scheduleId);
+
+    /**
+     * 未計上候補の元になる勤務枠（チーム個別の割当用。公開済み・未削除のスケジュールの、未削除の枠。列は
+     * {@code slot_id, slot_date, assigned_user_ids, schedule_id}）。
+     */
+    @Query(value = "SELECT sl.id, sl.slot_date, sl.assigned_user_ids, sl.schedule_id FROM shift_slots sl "
+            + "JOIN shift_schedules s ON s.id = sl.schedule_id "
+            + "WHERE s.status = 'PUBLISHED' AND s.deleted_at IS NULL AND sl.deleted_at IS NULL AND s.team_id = :teamId "
+            + "AND sl.slot_date BETWEEN :from AND :to ORDER BY sl.slot_date, sl.id", nativeQuery = true)
+    List<Object[]> findPublishedSlotsForTeam(@Param("teamId") Long teamId, @Param("from") LocalDate from,
+                                             @Param("to") LocalDate to);
+
+    /**
+     * 未計上候補の元になる勤務枠（組織全体の割当用。組織に ACTIVE 加盟するチームの公開済み・未削除のスケジュールの、未削除の枠）。
+     * 列は {@code slot_id, slot_date, assigned_user_ids, schedule_id}。
+     */
+    @Query(value = "SELECT sl.id, sl.slot_date, sl.assigned_user_ids, sl.schedule_id FROM shift_slots sl "
+            + "JOIN shift_schedules s ON s.id = sl.schedule_id "
+            + "WHERE s.status = 'PUBLISHED' AND s.deleted_at IS NULL AND sl.deleted_at IS NULL AND s.team_id IN ("
+            + "     SELECT tom.team_id FROM team_org_memberships tom WHERE tom.organization_id = :organizationId "
+            + "     AND tom.status = 'ACTIVE') "
+            + "AND sl.slot_date BETWEEN :from AND :to ORDER BY sl.slot_date, sl.id", nativeQuery = true)
+    List<Object[]> findPublishedSlotsForOrganization(@Param("organizationId") Long organizationId,
+                                                     @Param("from") LocalDate from, @Param("to") LocalDate to);
 }

@@ -53,7 +53,7 @@ const SCOPE_GUARDED_PAGES = [
 
 /**
  * スコープ ADMIN 系だが入口ガードが無いページ（要判断。最低ロール・個人スコープの扱いが未決のため未実装）。
- * shift-budget 4ページは useShiftBudgetAdminAccess で導線を出し分けるだけで、URL 直打ちの遷移は止めない。
+ * shift-budget 5ページは useShiftBudgetAdminAccess で導線を出し分けるだけで、URL 直打ちの遷移は止めない。
  * ガードを実装したら、このリストから SCOPE_GUARDED_PAGES へ移すこと（移し忘れは下の検査が赤で知らせる）。
  */
 const SCOPE_PENDING_DECISION_PAGES = [
@@ -69,6 +69,7 @@ const SCOPE_PENDING_DECISION_PAGES = [
   'shift-budget/allocations.vue',
   'shift-budget/dashboard.vue',
   'shift-budget/failed-events.vue',
+  'shift-budget/settings.vue',
 ]
 
 const SCOPE_ADMIN_PAGES = [...SCOPE_GUARDED_PAGES, ...SCOPE_PENDING_DECISION_PAGES]

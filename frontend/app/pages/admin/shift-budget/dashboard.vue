@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { useShiftBudgetAdminAccess } from '~/composables/shift/useShiftBudgetAdminAccess'
 import dayjs from 'dayjs'
-import { parseApiError } from '~/utils/apiError'
 import type {
   AllocationResponse,
+  ClosePeriodResponse,
   ConsumptionStatus,
   MonthlyCloseRequest,
 } from '~/types/shiftBudget'
@@ -17,6 +17,7 @@ import type {
 definePageMeta({ middleware: 'auth' })
 
 const { t } = useI18n()
+const { userTimezone } = useDatetime()
 const scopeStore = useScopeStore()
 const notification = useNotification()
 const api = useShiftBudgetApi()
@@ -40,66 +41,83 @@ const loadError = ref<unknown>(null)
 const loadFailed = ref(false)
 
 const monthlyCloseVisible = ref(false)
-const monthlyCloseForm = ref<{ yearMonth: string }>({ yearMonth: '' })
+const monthlyCloseForm = ref<{ periodKey: string | null }>({ periodKey: null })
 const monthlyCloseExecuting = ref(false)
+const closePeriods = ref<ClosePeriodResponse[]>([])
+/**
+ * ダイアログが表示している期間一覧の取得元組織。締め実行時に現在の組織と一致することを確かめる
+ * （CMP-260909-2152 α Codex 検分 P2）。組織ごとに締め日が違うので、旧組織の期間を確認した操作で新組織を締めない。
+ */
+const closePeriodsOrganizationId = ref<string | null>(null)
 
 /**
- * 月次締めの「当月」の基準タイムゾーン。BE の判定（JST 壁時計）と揃える。
- * テナント TZ 導入時（BE 側 wallClock の差し替え）にここも追随させる。
+ * 取得の世代。組織切替や再取得のたびに進め、応答の反映時に「取得時の組織が現在の組織で、かつ最新の取得」かを確かめる
+ * （settings.vue と同じ世代ガード。CMP-260909-2152 α Codex 検分 P2）。旧組織の応答が後着して新組織の画面を上書きしないようにする。
  */
-const MONTH_CLOSE_TZ = 'Asia/Tokyo'
+let loadGeneration = 0
+let closePeriodsGeneration = 0
+/** 組織の世代。組織を切り替えるたびに進め、締め実行の応答を送信時の組織の画面にだけ反映する。 */
+let scopeGeneration = 0
 
-function currentMonthJst(): string {
-  return dayjs().tz(MONTH_CLOSE_TZ).format('YYYY-MM')
+/** 期間一覧の取得範囲（期間キー。今日を含む期間の 12 か月前〜翌月。BE の上限 36 か月以内） */
+const CLOSE_PERIOD_LOOKBACK_MONTHS = 12
+
+/**
+ * 終了済み（終了日当日を含む）の期間だけが締められる。判定はサーバーの業務日（Asia/Tokyo）で BE が返す ended を正とし、
+ * 利用者端末のタイムゾーンの「今日」では判定しない（締め API の 409 判定とずらさない。CMP-260909-2152 再検分 P2-4）。
+ */
+function isEnded(period: ClosePeriodResponse): boolean {
+  return period.ended
 }
 
-function defaultPreviousMonth(): string {
-  return dayjs().tz(MONTH_CLOSE_TZ).subtract(1, 'month').format('YYYY-MM')
+function periodLabel(period: ClosePeriodResponse): string {
+  return t('shiftBudget.closePeriod.label', { start: period.period_start, end: period.period_end })
 }
 
-const YEAR_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/
-
-/** 前後空白を除いた対象月。判定・送信はこの値で行う。 */
-const trimmedYearMonth = computed(() => monthlyCloseForm.value.yearMonth.trim())
-/** 対象月が YYYY-MM 形式として正しいか。 */
-const yearMonthValid = computed(() => YEAR_MONTH_PATTERN.test(trimmedYearMonth.value))
-
-/** 対象月が終了していない（JST の当月以降）か。形式不正は false（形式エラー側で扱う）。 */
-const monthNotEnded = computed(() => {
-  const ym = trimmedYearMonth.value
-  // YYYY-MM は辞書順 = 時系列順
-  return YEAR_MONTH_PATTERN.test(ym) && ym >= currentMonthJst()
-})
-/** BE が 409 SHIFT_BUDGET_032 を返した対象月。ダイアログ内に理由を出す。 */
-const notEndedRejectedMonth = ref<string | null>(null)
-/** 未終了の警告を出すか（クライアント判定 or BE 409 で拒否された月）。 */
-const showNotEnded = computed(
-  () => monthNotEnded.value || (yearMonthValid.value && notEndedRejectedMonth.value === trimmedYearMonth.value),
+const closePeriodOptions = computed(() =>
+  closePeriods.value.map(p => ({
+    value: p.period_key,
+    label: isEnded(p) ? periodLabel(p) : `${periodLabel(p)}（${t('shiftBudget.closePeriod.notEnded')}）`,
+    disabled: !isEnded(p),
+  })),
 )
-/** 実行できるか。形式不正・未終了では無効。 */
-const canExecuteMonthlyClose = computed(() => yearMonthValid.value && !showNotEnded.value)
+
+const selectedClosePeriod = computed(() =>
+  closePeriods.value.find(p => p.period_key === monthlyCloseForm.value.periodKey) ?? null,
+)
+
+/** 選択中の期間が終了済みのときだけ実行できる（未終了は 409 を待たずに止める） */
+const canExecuteMonthlyClose = computed(() =>
+  selectedClosePeriod.value !== null && isEnded(selectedClosePeriod.value),
+)
 
 async function load() {
-  if (!organizationId.value) {
+  const generation = ++loadGeneration
+  const orgId = organizationId.value
+  if (!orgId) {
     allocations.value = []
+    loading.value = false
     return
   }
+  const isCurrent = () => generation === loadGeneration && orgId === organizationId.value
   loading.value = true
   loadFailed.value = false
   loadError.value = null
   try {
     // ページサイズ大きめで一括取得（ダッシュボード用途）
-    const res = await api.listAllocations(organizationId.value, 0, 100)
+    const res = await api.listAllocations(orgId, 0, 100)
+    if (!isCurrent()) return
     allocations.value = res.items
   }
   catch (error) {
+    if (!isCurrent()) return
     allocations.value = []
     loadError.value = error
     loadFailed.value = true
     notification.error(t('shiftBudget.dashboard.loadError'))
   }
   finally {
-    loading.value = false
+    if (isCurrent()) loading.value = false
   }
 }
 
@@ -131,55 +149,113 @@ const summary = computed(() => {
   return counts
 })
 
-function openMonthlyClose() {
-  monthlyCloseForm.value = { yearMonth: defaultPreviousMonth() }
-  notEndedRejectedMonth.value = null
+/** 締めダイアログと期間一覧・選択を破棄する（組織切替時）。進行中の期間取得の応答も反映させない。 */
+function resetMonthlyClose() {
+  closePeriodsGeneration++
+  monthlyCloseVisible.value = false
+  monthlyCloseForm.value = { periodKey: null }
+  closePeriods.value = []
+  closePeriodsOrganizationId.value = null
+  monthlyCloseExecuting.value = false
+}
+
+async function openMonthlyClose() {
+  const orgId = organizationId.value
+  if (!orgId) return
+  const generation = ++closePeriodsGeneration
+  const isCurrent = () => generation === closePeriodsGeneration && orgId === organizationId.value
+  monthlyCloseForm.value = { periodKey: null }
+  closePeriods.value = []
+  closePeriodsOrganizationId.value = null
   monthlyCloseVisible.value = true
+  const today = dayjs().tz(userTimezone.value)
+  try {
+    const res = await api.listClosePeriods(
+      orgId,
+      today.subtract(CLOSE_PERIOD_LOOKBACK_MONTHS, 'month').format('YYYY-MM'),
+      today.add(1, 'month').format('YYYY-MM'),
+    )
+    if (!isCurrent()) return
+    closePeriods.value = [...res.items].sort((a, b) => a.period_key.localeCompare(b.period_key))
+    closePeriodsOrganizationId.value = orgId
+    // 既定は終了済みの最新期間
+    const latestEnded = [...closePeriods.value].reverse().find(isEnded)
+    monthlyCloseForm.value = { periodKey: latestEnded?.period_key ?? null }
+  }
+  catch {
+    if (!isCurrent()) return
+    notification.error(t('shiftBudget.monthlyClose.periodLoadError'))
+  }
 }
 
 async function executeMonthlyClose() {
-  if (!organizationId.value) return
-  const yearMonth = trimmedYearMonth.value
-  // 形式不正・未終了月・BE 409 で拒否済みの月は送らない（ボタン無効化をすり抜けた場合の防御）
-  if (!canExecuteMonthlyClose.value) return
-  notEndedRejectedMonth.value = null
+  const orgId = organizationId.value
+  if (!orgId) return
+  const period = selectedClosePeriod.value
+  if (!period || !isEnded(period)) return
+  // ダイアログが表示している期間の取得元組織と現在の組織が違えば締めない（旧組織の期間で新組織を締める事故を防ぐ）
+  if (closePeriodsOrganizationId.value !== orgId) {
+    notification.error(t('shiftBudget.monthlyClose.organizationMismatch'))
+    resetMonthlyClose()
+    return
+  }
+  const yearMonth = period.period_key
+  const generation = scopeGeneration
+  const isCurrentScope = () => generation === scopeGeneration && orgId === organizationId.value
   monthlyCloseExecuting.value = true
   try {
     const request: MonthlyCloseRequest = {
-      organization_id: Number(organizationId.value),
+      organization_id: Number(orgId),
       year_month: yearMonth,
     }
     const res = await api.executeMonthlyClose(request)
-    if (res.already_closed_allocations > 0 && res.closed_allocations === 0) {
+    // 締めの結果は送信時の組織について知らせる（組織を切り替えていても結果は通知する）。
+    // ダイアログの開閉と再読込は送信時の組織の画面のときだけ行う。
+    // 段取り役は Post 失敗・ABORTED を HTTP 200 の failed_allocations に集計する（CMP-260909-2152 Codex 検分3 P2-1）。
+    // 失敗が1件でもあれば未締めの割当が残るので、成功・締め済みとは区別して通知する。
+    if (res.failed_allocations > 0 && res.closed_allocations === 0) {
+      // 全件失敗: 何も締まっていない。ダイアログを閉じずに再実行できるようにする
+      notification.error(t('shiftBudget.monthlyClose.allFailed', {
+        period: periodLabel(period),
+        failed: res.failed_allocations,
+      }))
+      return
+    }
+    if (res.failed_allocations > 0) {
+      notification.warn(t('shiftBudget.monthlyClose.partiallyFailed', {
+        period: periodLabel(period),
+        closed: res.closed_allocations,
+        failed: res.failed_allocations,
+      }))
+    }
+    else if (res.already_closed_allocations > 0 && res.closed_allocations === 0) {
       notification.info(t('shiftBudget.monthlyClose.alreadyClosed'))
     }
     else {
       notification.success(
         t('shiftBudget.monthlyClose.success', {
-          month: yearMonth,
+          period: periodLabel(period),
           count: res.closed_consumptions,
         }),
       )
     }
+    if (!isCurrentScope()) return
     monthlyCloseVisible.value = false
     await load()
   }
-  catch (e) {
-    if (parseApiError(e).code === 'SHIFT_BUDGET_032') {
-      // 未終了月の拒否。ダイアログを閉じず、理由をその場に出す
-      notEndedRejectedMonth.value = yearMonth
-      notification.error(t('shiftBudget.monthlyClose.notEnded', { month: yearMonth }))
-    }
-    else {
-      notification.error(t('shiftBudget.monthlyClose.error'))
-    }
+  catch {
+    notification.error(t('shiftBudget.monthlyClose.error'))
   }
   finally {
-    monthlyCloseExecuting.value = false
+    // 組織を切り替えた後は切替時に解除済み。新組織の実行中フラグを旧組織の応答で外さない
+    if (isCurrentScope()) monthlyCloseExecuting.value = false
   }
 }
 
 watch(organizationId, () => {
+  // 旧組織の締めダイアログ（期間一覧・選択・期間表示）を破棄してから新組織を取得する
+  scopeGeneration++
+  resetMonthlyClose()
   load()
   ensureBudgetAdminAccess()
 })
@@ -193,13 +269,23 @@ onMounted(() => {
   <div class="mx-auto max-w-7xl">
     <div class="mb-4 flex items-center justify-between">
       <PageHeader :title="t('shiftBudget.dashboard.title')" />
-      <Button
-        v-if="organizationId && canManageBudget"
-        :label="t('shiftBudget.monthlyClose.button')"
-        icon="pi pi-calendar-times"
-        severity="secondary"
-        @click="openMonthlyClose"
-      />
+      <div v-if="organizationId && canManageBudget" class="flex items-center gap-2">
+        <NuxtLink to="/admin/shift-budget/settings" data-testid="closing-settings-link">
+          <Button
+            :label="t('shiftBudget.dashboard.viewClosingSettings')"
+            icon="pi pi-cog"
+            severity="secondary"
+            text
+            as="span"
+          />
+        </NuxtLink>
+        <Button
+          :label="t('shiftBudget.monthlyClose.button')"
+          icon="pi pi-calendar-times"
+          severity="secondary"
+          @click="openMonthlyClose"
+        />
+      </div>
     </div>
     <p class="mb-6 text-sm text-surface-500">{{ t('shiftBudget.dashboard.subtitle') }}</p>
 
@@ -344,27 +430,24 @@ onMounted(() => {
     >
       <div class="flex flex-col gap-4">
         <div>
-          <label class="mb-1 block text-sm font-medium">{{ t('shiftBudget.monthlyClose.yearMonth') }}</label>
-          <InputText v-model="monthlyCloseForm.yearMonth" placeholder="YYYY-MM" class="w-full" />
-          <p
-            v-if="!yearMonthValid"
-            class="mt-1 text-xs text-red-500"
-            data-testid="monthly-close-invalid-format"
-          >
-            {{ t('shiftBudget.monthlyClose.invalidFormat') }}
-          </p>
-          <p v-else class="mt-1 text-xs text-surface-500">{{ t('shiftBudget.monthlyClose.yearMonthHint') }}</p>
+          <label class="mb-1 block text-sm font-medium">{{ t('shiftBudget.monthlyClose.period') }}</label>
+          <Select
+            v-model="monthlyCloseForm.periodKey"
+            data-testid="monthly-close-period-select"
+            :options="closePeriodOptions"
+            option-label="label"
+            option-value="value"
+            option-disabled="disabled"
+            :placeholder="t('shiftBudget.closePeriod.select')"
+            class="w-full"
+          />
+          <p class="mt-1 text-xs text-surface-500">{{ t('shiftBudget.monthlyClose.periodHint') }}</p>
         </div>
-        <Message
-          v-if="showNotEnded"
-          severity="warn"
-          :closable="false"
-          data-testid="monthly-close-not-ended"
-        >
-          {{ t('shiftBudget.monthlyClose.notEnded', { month: trimmedYearMonth }) }}
+        <Message v-if="selectedClosePeriod" severity="info" :closable="false" data-testid="monthly-close-confirm">
+          {{ t('shiftBudget.monthlyClose.confirm', { period: periodLabel(selectedClosePeriod) }) }}
         </Message>
-        <Message v-if="canExecuteMonthlyClose" severity="info" :closable="false">
-          {{ t('shiftBudget.monthlyClose.confirm', { month: trimmedYearMonth }) }}
+        <Message v-else severity="warn" :closable="false">
+          {{ t('shiftBudget.closePeriod.empty') }}
         </Message>
       </div>
       <template #footer>

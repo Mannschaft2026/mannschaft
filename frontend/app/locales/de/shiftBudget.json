@@ -106,30 +106,34 @@
       "viewFailedEvents": "Fehlgeschlagene Ereignisse ansehen",
       "viewAllocations": "Zuweisungen ansehen",
       "loadError": "Dashboard konnte nicht geladen werden",
-      "summaryError": "Verbrauchszusammenfassung konnte nicht geladen werden"
+      "summaryError": "Verbrauchszusammenfassung konnte nicht geladen werden",
+      "viewClosingSettings": "Zu den Abschlusstag-Einstellungen"
     },
     "feature": {
       "disabled": "Diese Funktion wurde vom Organisationsadministrator deaktiviert"
     },
     "monthlyClose": {
       "button": "Monatsabschluss ausführen",
-      "confirm": "Schichtbudget für {month} wird bestätigt. Möchten Sie fortfahren?",
-      "success": "Monatsabschluss abgeschlossen: {month} ({count} Verbrauchseinträge bestätigt)",
+      "confirm": "Das Budget für {period} wird festgeschrieben. Fortfahren?",
+      "success": "Monatsabschluss abgeschlossen: {period} ({count} Verbrauchsdatensätze festgeschrieben)",
       "alreadyClosed": "Dieser Monat wurde bereits abgeschlossen",
-      "notEnded": "{month} ist noch nicht beendet und kann daher nicht abgeschlossen werden. Nur bereits beendete Monate können abgeschlossen werden.",
+      "allFailed": "Abschluss von {period} fehlgeschlagen ({failed} fehlgeschlagen). Es bleiben nicht abgeschlossene Zuweisungen. Prüfen Sie die fehlgeschlagenen Ereignisse und führen Sie ihn erneut aus",
+      "partiallyFailed": "Abschluss von {period} teilweise fehlgeschlagen ({closed} abgeschlossen, {failed} fehlgeschlagen). Es bleiben nicht abgeschlossene Zuweisungen. Prüfen Sie die fehlgeschlagenen Ereignisse und führen Sie ihn erneut aus",
       "title": "Monatsabschluss",
-      "yearMonth": "Zielmonat",
-      "yearMonthHint": "Format YYYY-MM (z.B. 2026-04)",
-      "invalidFormat": "Bitte im Format YYYY-MM eingeben (z. B. 2026-10)",
       "execute": "Ausführen",
-      "error": "Monatsabschluss fehlgeschlagen"
+      "error": "Monatsabschluss fehlgeschlagen",
+      "period": "Zielperiode",
+      "periodHint": "Nur beendete Perioden können ausgewählt werden",
+      "periodLoadError": "Die Abschlussperioden konnten nicht geladen werden",
+      "organizationMismatch": "Die Organisation wurde gewechselt, daher wurde der Abschluss nicht ausgeführt. Bitte prüfen Sie den Zeitraum der aktuellen Organisation erneut"
     },
     "nav": {
       "menuLabel": "Schichtbudget",
       "allocations": "Budgetzuweisungen",
       "dashboard": "Budget-Dashboard",
       "alerts": "Warnungsverlauf",
-      "failedEvents": "Fehlgeschlagene Ereignisse"
+      "failedEvents": "Fehlgeschlagene Ereignisse",
+      "closingSettings": "Abschlusstag"
     },
     "scope": {
       "selectOrganization": "Die Schichtbudgetverwaltung ist nur auf Organisationsebene verfügbar. Bitte wählen Sie eine Organisation im Bereichsselektor."
@@ -187,6 +191,40 @@
         "NOTIFICATION_SEND": "Der Versand der Benachrichtigung ist fehlgeschlagen. Sie können es erneut ausführen; bei anhaltendem Problem kontaktieren Sie uns mit der ID.",
         "UNKNOWN": "Die Verarbeitung ist fehlgeschlagen. Nennen Sie bei Rückfragen die ID."
       }
+    },
+    "closingDay": {
+      "title": "Abschlusstag-Einstellungen",
+      "description": "Legt den Abschlusstag der monatlichen Abschlussperioden der Organisation fest. Eine Änderung gilt ab der angegebenen Periode und wirkt sich nicht auf vergangene Perioden aus.",
+      "current": "Aktueller Abschlusstag",
+      "endOfMonth": "Monatsende",
+      "dayOption": "Tag {day}",
+      "dayLabel": "Neuer Abschlusstag",
+      "effectivePeriod": "Gültig ab Periode",
+      "reason": "Grund der Änderung",
+      "reasonRequired": "Ein Grund ist erforderlich",
+      "previewTitle": "Periodenvorschau",
+      "previewBefore": "Vorher",
+      "previewAfter": "Nachher",
+      "submit": "Abschlusstag ändern",
+      "success": "Abschlusstag geändert",
+      "historyTitle": "Änderungsverlauf",
+      "historyEmpty": "Keine Änderungen vorhanden",
+      "readOnly": "Nur Budgetverwalter können den Abschlusstag ändern. Sie haben nur Lesezugriff.",
+      "loadError": "Die Abschlusstag-Einstellungen konnten nicht geladen werden",
+      "conflict": "Die Änderung kollidierte mit einer anderen Änderung. Die aktuellen Einstellungen wurden geladen. Ihre Eingaben bleiben erhalten; prüfen Sie den aktuellen Abschlusstag und den Verlauf und senden Sie erneut.",
+      "revision": "Version",
+      "appliedFrom": "Gültig ab",
+      "previousDay": "Bisheriger Abschlusstag",
+      "actor": "Geändert von",
+      "changedAt": "Geändert am",
+      "selectOrganization": "Die Abschlusstag-Einstellungen sind im Organisationsbereich verfügbar. Bitte wählen Sie einen Organisationsbereich.",
+      "error": "Der Abschlusstag konnte nicht geändert werden"
+    },
+    "closePeriod": {
+      "label": "{start} bis {end}",
+      "select": "Abzuschließende Periode",
+      "empty": "Es gibt keine abschließbaren Perioden",
+      "notEnded": "Nicht beendet"
     }
   }
 }

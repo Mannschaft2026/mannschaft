@@ -18,12 +18,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * F08.7 シフトアーカイブ→消化記録 CANCELLED 遷移 hook（Phase 9-β）。
@@ -86,18 +83,14 @@ public class ShiftBudgetConsumptionCancelListener {
         Map<Long, Long> cancelledPlannedByOrg = new LinkedHashMap<>();
         try {
             List<ShiftBudgetConsumptionRepository.PlannedAllocationRow> rows =
-                    consumptionRepository.findPlannedAllocationRowsByShiftId(scheduleId);
+                    consumptionRepository.findLiveAllocationRowsByShiftId(scheduleId);
             if (rows.isEmpty()) {
-                log.debug("F08.7 cancel hook: 取消対象の PLANNED 消化が無いためスキップ: scheduleId={}",
+                log.debug("F08.7 cancel hook: 取消対象の消化（PLANNED／CONFIRMED）が無いためスキップ: scheduleId={}",
                         scheduleId);
                 return;
             }
-            Set<Long> affectedAllocationIds = new LinkedHashSet<>();
-            Map<Long, Long> allocationOrg = new HashMap<>();
             for (ShiftBudgetConsumptionRepository.PlannedAllocationRow row : rows) {
                 cancelledPlannedByOrg.merge(row.getOrganizationId(), row.getPlannedCount(), Long::sum);
-                affectedAllocationIds.add(row.getAllocationId());
-                allocationOrg.put(row.getAllocationId(), row.getOrganizationId());
             }
 
             // フィーチャーフラグは計上時の組織で判定する。計上先の組織がすべて OFF なら何もしない。
@@ -114,10 +107,13 @@ public class ShiftBudgetConsumptionCancelListener {
                 return;
             }
 
-            int cancelledCount = consumptionService.cancelAllForShift(scheduleId);
+            // 監査ログ・閾値の再判定は、取消前の集計ではなく実際に取り消した行（組織・割当・件数）で行う。
+            // 公開中なら整合取消で有効な担当の行は残り、PREPARED の印付き行は遅延、CONFIRMED は取り消さないため。
+            ShiftBudgetConsumptionService.CancelOutcome outcome = consumptionService.cancelForShift(scheduleId);
+            int cancelledCount = outcome.cancelled();
 
             if (cancelledCount > 0) {
-                for (Map.Entry<Long, Long> entry : cancelledPlannedByOrg.entrySet()) {
+                for (Map.Entry<Long, Long> entry : outcome.cancelledByOrganization().entrySet()) {
                     auditLogService.record(
                             "SHIFT_BUDGET_CONSUMPTION_CANCELLED",
                             actorUserId, null,
@@ -129,14 +125,14 @@ public class ShiftBudgetConsumptionCancelListener {
 
                 // Phase 9-δ 追加: CANCEL 後に影響 allocation の閾値判定を再評価する。
                 // 例外は飲み込む（既存パターン踏襲: hook 失敗が main トランザクションを巻き戻さないため）
-                for (Long allocationId : affectedAllocationIds) {
+                for (Long allocationId : outcome.cancelledAllocationOrganizations().keySet()) {
                     try {
                         thresholdAlertEvaluationService.evaluateAndTrigger(allocationId);
                     } catch (Exception thresholdEx) {
                         log.error("F08.7 cancel hook: 閾値判定失敗（処理継続）: allocId={}, scheduleId={}",
                                 allocationId, scheduleId, thresholdEx);
                         // Phase 10-β: 失敗イベントとして永続化（その割当の組織で）
-                        recordFailureSafe(allocationOrg.get(allocationId),
+                        recordFailureSafe(outcome.cancelledAllocationOrganizations().get(allocationId),
                                 ShiftBudgetFailedEventType.THRESHOLD_ALERT,
                                 allocationId,
                                 Map.of(

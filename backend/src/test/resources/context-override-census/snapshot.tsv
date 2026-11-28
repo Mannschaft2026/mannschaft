@@ -1,6 +1,6 @@
 # CMP-261111-0508 追撃①: テストコンテキストの BeanOverride 棚卸し（凍結スナップショット）。手で編集しない。
 # 再生成: docs/conventions/backend/31-ci-shard-weighting.md の「構成キーの棚卸しと認可 override の番人」節。
-# summary classes=8757 nonSpring=5996 zero=25 overrides=2736 failed=0 distinctKeys=337 authzOverrides=1124
+# summary classes=8772 nonSpring=6004 zero=25 overrides=2743 failed=0 distinctKeys=337 authzOverrides=1124
 !distinctKeysBaseline=337
 !authzOverrideBaseline=1124
 com.mannschaft.app.MannschaftApplicationTests	SPRING
@@ -2116,7 +2116,6 @@ com.mannschaft.app.shift.ShiftUnpublishedScheduleVisibilityContractIT$Ac7Ac17Pub
 com.mannschaft.app.shift.ShiftUnpublishedScheduleVisibilityContractIT$Ac8Ac9NoFunctionalRegression	SPRING
 com.mannschaft.app.shift.controller.ShiftMyControllerTest	SPRING	mock:com.mannschaft.app.auth.service.AuthTokenService	mock:com.mannschaft.app.common.i18n.UserLocaleCache	mock:com.mannschaft.app.common.security.AccessGuard
 com.mannschaft.app.shift.controller.ShiftSchedulePhase11ControllerTest	SPRING	mock:com.mannschaft.app.auth.service.AuthTokenService	mock:com.mannschaft.app.common.i18n.UserLocaleCache	mock:com.mannschaft.app.common.security.AccessGuard
-com.mannschaft.app.shiftbudget.MonthlyShiftBudgetCloseTransactionIT	SPRING
 com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionCancelRaceIT	SPRING
 com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionReconcileBatchIT	SPRING
 com.mannschaft.app.shiftbudget.ShiftBudgetFailedEventRetryContractIT	SPRING
@@ -2124,6 +2123,15 @@ com.mannschaft.app.shiftbudget.ShiftBudgetMultiParentIT	SPRING
 com.mannschaft.app.shiftbudget.ShiftBudgetPositiveRateContractIT	SPRING
 com.mannschaft.app.shiftbudget.ShiftBudgetThresholdAlertNotificationBoundaryIT	SPRING
 com.mannschaft.app.shiftbudget.ShiftManualArchiveConsumptionCancelIT	SPRING
+com.mannschaft.app.shiftbudget.closeperiod.ClosePeriodAuthorizationIT	SPRING
+com.mannschaft.app.shiftbudget.closeperiod.ClosePeriodBatchIT	SPRING
+com.mannschaft.app.shiftbudget.closeperiod.ClosePeriodCloseIT	SPRING
+com.mannschaft.app.shiftbudget.closeperiod.ClosePeriodConcurrencyIT	SPRING
+com.mannschaft.app.shiftbudget.closeperiod.ClosePeriodDecisionAdditionsIT	SPRING
+com.mannschaft.app.shiftbudget.closeperiod.ClosePeriodDeletedSlotIT	SPRING
+com.mannschaft.app.shiftbudget.closeperiod.ClosePeriodRepublishHistoryIT	SPRING
+com.mannschaft.app.shiftbudget.closeperiod.ClosePeriodStageIT	SPRING
+com.mannschaft.app.shiftbudget.closeperiod.ClosingSettingApiIT	SPRING
 com.mannschaft.app.shiftbudget.controller.BudgetThresholdAlertControllerTest	SPRING	mock:com.mannschaft.app.auth.service.AuthTokenService	mock:com.mannschaft.app.common.i18n.UserLocaleCache	mock:com.mannschaft.app.common.security.AccessGuard
 com.mannschaft.app.shiftbudget.controller.MonthlyShiftBudgetCloseControllerTest	SPRING	mock:com.mannschaft.app.auth.service.AuthTokenService	mock:com.mannschaft.app.common.i18n.UserLocaleCache	mock:com.mannschaft.app.common.security.AccessGuard
 com.mannschaft.app.shiftbudget.controller.ShiftBudgetAllocationControllerTest	SPRING	mock:com.mannschaft.app.auth.service.AuthTokenService	mock:com.mannschaft.app.common.i18n.UserLocaleCache	mock:com.mannschaft.app.common.security.AccessGuard

@@ -15433,7 +15433,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 月次締めバッチを手動起動 (PLANNED→CONFIRMED 遷移 + F08.6 仕訳生成) */
+        /** 期間締めを手動起動 (PLANNED→CONFIRMED 遷移 + F08.6 仕訳生成) */
         post: operations["close_1"];
         delete?: never;
         options?: never;
@@ -15469,6 +15469,23 @@ export interface paths {
         put?: never;
         /** 失敗イベントを手動補正済としてマーク (BUDGET_ADMIN 必須、終端ステータス遷移) */
         post: operations["resolve_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shift-budget/closing-settings/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 締め日を変更（適用開始は今日を含む期間・最後の締めより後。移行期間を許す） */
+        post: operations["change"];
         delete?: never;
         options?: never;
         head?: never;
@@ -22018,7 +22035,7 @@ export interface paths {
          * PLAN 変更（upgrade）の実行
          * @description 事前見積りを一回だけ消費して upgrade を予約する。Idempotency-Key 必須。 clientSecret は返さない。
          */
-        post: operations["change"];
+        post: operations["change_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -39710,6 +39727,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/shift-budget/closing-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 締め日設定を取得（設定なしは末日・revision 0） */
+        get: operations["get_39"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shift-budget/close-periods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 組織の締め期間一覧（期間キー from〜to。from>to または36か月超は 400） */
+        get: operations["listByOrganization_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shift-budget/allocations/{id}/monthly-closes/{period}/uncounted-shifts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 締め済み期間の未計上勤務（未締めの期間キーは 409） */
+        get: operations["uncountedShifts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/shift-budget/allocations/{id}/consumption-summary": {
         parameters: {
             query?: never;
@@ -39719,6 +39787,23 @@ export interface paths {
         };
         /** シフト予算消化サマリを取得 (BUDGET_ADMIN なら by_user 込み) */
         get: operations["getConsumptionSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shift-budget/allocations/{id}/close-periods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 割当と重なる締め期間の一覧 */
+        get: operations["listByAllocation"];
         put?: never;
         post?: never;
         delete?: never;
@@ -44247,7 +44332,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_39"];
+        get: operations["get_40"];
         put?: never;
         post?: never;
         delete?: never;
@@ -44539,7 +44624,7 @@ export interface paths {
          * 自分の参加待ち招待を取得
          * @description 招待付きで新規登録した参加待ちの招待を返す。無ければ data は null
          */
-        get: operations["get_40"];
+        get: operations["get_41"];
         put?: never;
         post?: never;
         delete?: never;
@@ -46141,7 +46226,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_41"];
+        get: operations["get_42"];
         put?: never;
         post?: never;
         delete?: never;
@@ -55561,6 +55646,10 @@ export interface components {
         AllocationUpdateRequest: {
             allocated_amount: number;
             note?: string;
+            /** Format: date */
+            period_end?: string;
+            /** Format: date */
+            period_start?: string;
             /** Format: int64 */
             version: number;
         };
@@ -66704,9 +66793,17 @@ export interface components {
             closed_allocations?: number;
             /** Format: int32 */
             closed_consumptions?: number;
+            /** Format: int32 */
+            closing_day?: number;
+            /** Format: int32 */
+            failed_allocations?: number;
             failed_organization_ids?: number[];
             /** Format: int64 */
             organization_id?: number;
+            /** Format: date */
+            period_end?: string;
+            /** Format: date */
+            period_start?: string;
             processed_organization_ids?: number[];
             year_month?: string;
         };
@@ -66731,6 +66828,38 @@ export interface components {
             status?: string;
             /** Format: date-time */
             updated_at?: string;
+        };
+        ClosingDayChangeRequest: {
+            closing_day?: components["schemas"]["JsonNode"];
+            effective_period_key: string;
+            /** Format: int64 */
+            expected_revision: number;
+            reason?: string;
+        };
+        ApiResponseClosingSettingResponse: {
+            data?: components["schemas"]["ClosingSettingResponse"];
+        };
+        Change: {
+            /** Format: int64 */
+            actor_user_id?: number;
+            /** Format: int32 */
+            closing_day?: number;
+            /** Format: date-time */
+            created_at?: string;
+            effective_period_key?: string;
+            /** Format: int32 */
+            previous_closing_day?: number;
+            reason?: string;
+            /** Format: int32 */
+            revision?: number;
+        };
+        ClosingSettingResponse: {
+            changes?: components["schemas"]["Change"][];
+            /** Format: int32 */
+            closing_day?: number;
+            min_effective_period_key?: string;
+            /** Format: int32 */
+            revision?: number;
         };
         PositionRequiredCount: {
             /** Format: int64 */
@@ -81322,6 +81451,22 @@ export interface components {
         ApiResponseListFailedEventResponse: {
             data?: components["schemas"]["FailedEventResponse"][];
         };
+        ApiResponseClosePeriodListResponse: {
+            data?: components["schemas"]["ClosePeriodListResponse"];
+        };
+        ClosePeriodItem: {
+            /** Format: int32 */
+            closing_day?: number;
+            ended?: boolean;
+            /** Format: date */
+            period_end?: string;
+            period_key?: string;
+            /** Format: date */
+            period_start?: string;
+        };
+        ClosePeriodListResponse: {
+            items?: components["schemas"]["ClosePeriodItem"][];
+        };
         AllocationListResponse: {
             items?: components["schemas"]["AllocationResponse"][];
             /** Format: int32 */
@@ -81333,6 +81478,22 @@ export interface components {
         };
         ApiResponseAllocationListResponse: {
             data?: components["schemas"]["AllocationListResponse"];
+        };
+        ApiResponseUncountedShiftListResponse: {
+            data?: components["schemas"]["UncountedShiftListResponse"];
+        };
+        UncountedShiftItem: {
+            /** Format: int64 */
+            shift_schedule_id?: number;
+            /** Format: int64 */
+            slot_id?: number;
+            /** Format: int64 */
+            user_id?: number;
+            /** Format: date */
+            work_date?: string;
+        };
+        UncountedShiftListResponse: {
+            items?: components["schemas"]["UncountedShiftItem"][];
         };
         FilterProvider: Record<string, never>;
         MappingJacksonValue: {
@@ -123014,6 +123175,32 @@ export interface operations {
             };
         };
     };
+    change: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Organization-Id": number;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClosingDayChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseClosingSettingResponse"];
+                };
+            };
+        };
+    };
     calculateRequiredSlots: {
         parameters: {
             query?: never;
@@ -135399,7 +135586,7 @@ export interface operations {
             };
         };
     };
-    change: {
+    change_1: {
         parameters: {
             query?: never;
             header: {
@@ -165925,6 +166112,78 @@ export interface operations {
             };
         };
     };
+    get_39: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Organization-Id": number;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseClosingSettingResponse"];
+                };
+            };
+        };
+    };
+    listByOrganization_1: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header: {
+                "X-Organization-Id": number;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseClosePeriodListResponse"];
+                };
+            };
+        };
+    };
+    uncountedShifts: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Organization-Id": number;
+            };
+            path: {
+                id: number;
+                period: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseUncountedShiftListResponse"];
+                };
+            };
+        };
+    };
     getConsumptionSummary: {
         parameters: {
             query?: never;
@@ -165945,6 +166204,30 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["MappingJacksonValue"];
+                };
+            };
+        };
+    };
+    listByAllocation: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Organization-Id": number;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseClosePeriodListResponse"];
                 };
             };
         };
@@ -172245,7 +172528,7 @@ export interface operations {
             };
         };
     };
-    get_39: {
+    get_40: {
         parameters: {
             query?: never;
             header?: never;
@@ -172645,7 +172928,7 @@ export interface operations {
             };
         };
     };
-    get_40: {
+    get_41: {
         parameters: {
             query?: never;
             header?: never;
@@ -174954,7 +175237,7 @@ export interface operations {
             };
         };
     };
-    get_41: {
+    get_42: {
         parameters: {
             query: {
                 organizationId: number;

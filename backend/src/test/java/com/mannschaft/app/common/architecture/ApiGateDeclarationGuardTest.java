@@ -42,17 +42,19 @@ class ApiGateDeclarationGuardTest {
         assertThat(scan.entries()).isNotEmpty();
         assertThat(scan.entries().stream().filter(entry -> entry.type() == Type.HTTP).count())
                 .as("HTTP mapped method の走査総数。parser 退行を台帳比較とは独立に検知する")
-                .isEqualTo(3756);   // 3756 = 3757 - CMP-260826-1457 W2 連絡先招待QR（GET /contact-invite-tokens/{token}/qr）廃止 1本。3757 = 3751 + CMP-261107-1833 PR3 再招待依頼の受け手側 InviteReissueRequestController 6本
+                .isEqualTo(3761);   // 3761 = 3756 + α 5本（下記 (α) 参照）。3756 = 3757 - CMP-260826-1457 W2 連絡先招待QR（GET /contact-invite-tokens/{token}/qr）廃止 1本。3757 = 3751 + CMP-261107-1833 PR3 再招待依頼の受け手側 InviteReissueRequestController 6本
                                     //   （TEAM/ORG 別メソッド × GET 一覧・POST reissue・POST decline。main 側の増減は実測で上書き）
                                     // 3751 = 3746 + CMP-261107-1833 招待付き新規登録の保留承認 MePendingInviteController 5本
                                     //   （GET /api/v1/me/pending-invite・POST accept|decline|reissue-request|dismiss。feature gate 未宣言の流儀で 新規 5|5。
                                     //   認可は @PreAuthorize("isAuthenticated()")＋本人の保留行のみ）。
                                     // 3746 = 3745 + CMP-261118-0900 参加者向け連絡スペース一覧 ParticipantContactSpaceController GET 1本（feature gate 未宣言 1|1）。
                                     // 3745 = 3741 + F06.4.1 PR-2 の3本 + CMP-261116-0722 PR-1 の1本。
+                                    //   (α) CMP-260909-2152 α 締め期間GET3本（ShiftBudgetClosePeriodController）・締め日設定GET1本＋POST1本（ShiftBudgetClosingSettingController）。
+                                    //   α はクラス単位 @RequireFeature("FEATURE_SHIFT_ENABLED") 宣言済みで未宣言増加0（0|3・0|2）。
                                     //   (F06.4.1 PR-2) CMP-261115-2145 F06.4.1 PR-2 の3本（EffortRecordMeController の definition-snapshots 1本・
                                     //   EffortTeamTemplateSettingsController の指標設定 GET/PUT 2本）。3本とも @AlwaysReachable(CORE) を
                                     //   宣言済みで未宣言増加0（7|7 → 7|8、新規 0|2）。
-                                    //   (検索) 3741 + CMP-261116-0722 PR-1 保存済み検索の個別削除 SearchHistoryController DELETE /saved/{savedQueryId} 1本
+                                    //   (検索) CMP-261116-0722 PR-1 保存済み検索の個別削除 SearchHistoryController DELETE /saved/{savedQueryId} 1本
                                     //   （既存5本と同じく feature gate 未宣言の流儀で 5|5 → 6|6。認可は @AuthorizedInService＋findByIdAndUserId の所有者照合）。
                                     // 3741 = 3734 + CMP-261115-2145 F06.4.1 個人の頑張り記録 EffortRecordMeController 7本（feature gate 未宣言の流儀で 7|7）。
                                     // 3734 = 3732 + L1-M モジュールイベント管理GET/POST各1本。未宣言増加0。
