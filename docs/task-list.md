@@ -67,4 +67,3 @@ Mannschaft の「タスクの地図」は二層で構成する。
 - 台帳列（各行の最終列）はローカル限定（`.gitignore` 済み）のファイル名を指すため、clone 直後の環境や worktree には存在しない。`—` は「まだ台帳を作っていない」の意。戦役の再開時に台帳ファイルを作成したら、この列にファイル名を書き足すこと。
 
 ---
-| CMP-261126-1645 | CI 基盤: merge queue が実行枠不足と6時間時間切れで詰まる悪循環の根治 | P1 未着手 | なし | 次を満たす。(1) merge queue のグループが組み直されたとき、もう queue に無いグループの merge_group run（gh-readonly-queue/main/pr-N-sha）が自動で取り消される（現状 backend-ci.yml の concurrency.group が github.ref 単位のため取り消されず、2026-11-26 に孤児 run 7本が実行枠を占有していた）。(2) queue の同時ビルド数・グループまとめ数・check_response_timeout_minutes(360) を、Team プランの同時 job 60 枠と BE CI 1回約12 job・75〜105分の実測から決め直し、根拠を docs/ に記録する（2026-11-26 に殿が max_entries_to_build を 5→2 へ暫定変更済み）。(3) 6時間時間切れでグループが全再構築される事象（#4882 が 13:31Z/19:19Z/01:21Z と3回再実行）が再発しないことを実測で確認する。 | 未 | 該当なし（戦役台帳未作成） |
