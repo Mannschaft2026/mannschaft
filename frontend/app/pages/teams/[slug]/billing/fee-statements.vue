@@ -87,6 +87,9 @@ onMounted(async () => {
       return
     }
     await load()
+  } catch {
+    // スコープ ID の解決失敗（取得失敗）を未所属と区別して利用者に知らせる
+    notification.error(t('payment.feeStatements.loadError'))
   } finally {
     loading.value = false
   }

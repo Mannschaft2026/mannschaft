@@ -332,8 +332,12 @@ abstract class EffortRecordItSupport extends AbstractMySqlIntegrationTest {
 
     /** 既存 activity Service でテンプレートを全置換更新する（改名・field 削除/追加・label/必須/選択肢/順序変更）。 */
     protected void updateTeamTemplate(Long adminId, Long templateId, String name, List<FieldSpec> fields) {
+        // 新しい契約: 既存 key は fields か removedFieldKeys のどちらかに必須。fields から外す key は削除として明示する
+        java.util.Set<String> kept = fields.stream().map(FieldSpec::key).collect(java.util.stream.Collectors.toSet());
+        List<String> removed = activityTemplates.getTemplate(templateId, adminId).getFields().stream()
+                .map(f -> f.getFieldKey()).filter(k -> !kept.contains(k)).toList();
         activityTemplates.updateTemplate(templateId, adminId,
-                new UpdateTemplateRequest(name, null, null, null, null, null, inputs(fields)));
+                new UpdateTemplateRequest(name, null, null, null, null, null, inputs(fields), removed));
     }
 
     /** 既存 activity Service でテンプレートを廃止（論理削除）する。 */

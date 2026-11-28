@@ -2372,7 +2372,8 @@
       "action": "削除する",
       "confirm": "活動記録を削除します。元の予定は削除されません。",
       "success": "活動記録を削除しました"
-    }
+    },
+    "templateLink": "活動テンプレート"
   },
   "dashboard": {
     "team_reservation_link": "予約管理"

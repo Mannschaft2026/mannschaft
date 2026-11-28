@@ -116,14 +116,21 @@ export function useActivityApi() {
   }
 
   // === Activity Templates ===
-  async function getTemplates(scopeType: string, scopeId: string) {
+  /** scopeId は数値 DB id（slug は useActivityScopeId で解決してから渡す） */
+  async function getTemplates(scopeType: string, scopeId: number | string) {
     return api<{ data: ActivityTemplate[] }>(
       `/api/v1/activity-templates?scope_type=${scopeType}&scope_id=${scopeId}`,
     )
   }
 
-  async function createTemplate(body: Record<string, unknown>) {
-    return api<{ data: ActivityTemplate }>('/api/v1/activity-templates', { method: 'POST', body })
+  /** scope_type / scope_id はクエリで送る（BE の @RequestParam）。scopeId は数値 DB id。 */
+  async function createTemplate(
+    scopeType: 'TEAM' | 'ORGANIZATION',
+    scopeId: number,
+    body: Record<string, unknown>,
+  ) {
+    const qs = buildQuery({ scope_type: scopeType, scope_id: scopeId })
+    return api<{ data: ActivityTemplate }>(`/api/v1/activity-templates?${qs}`, { method: 'POST', body })
   }
 
   async function getTemplate(id: number) {
@@ -141,9 +148,14 @@ export function useActivityApi() {
     return api(`/api/v1/activity-templates/${id}`, { method: 'DELETE' })
   }
 
-  async function duplicateTemplate(id: number) {
+  /** 複製先のスコープを本文で送る（BE の DuplicateTemplateRequest）。 */
+  async function duplicateTemplate(
+    id: number,
+    body: { targetScopeType: 'TEAM' | 'ORGANIZATION'; targetScopeId: number },
+  ) {
     return api<{ data: ActivityTemplate }>(`/api/v1/activity-templates/${id}/duplicate`, {
       method: 'POST',
+      body,
     })
   }
 

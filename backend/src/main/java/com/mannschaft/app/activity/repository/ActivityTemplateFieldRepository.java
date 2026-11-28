@@ -16,6 +16,9 @@ public interface ActivityTemplateFieldRepository extends JpaRepository<ActivityT
 
     List<ActivityTemplateFieldEntity> findByTemplateIdOrderBySortOrderAsc(Long templateId);
 
+    /** 複数テンプレートの項目を一括取得する（一覧の N+1 回避）。 */
+    List<ActivityTemplateFieldEntity> findByTemplateIdInOrderBySortOrderAsc(java.util.Collection<Long> templateIds);
+
     Optional<ActivityTemplateFieldEntity> findByTemplateIdAndFieldKey(Long templateId, String fieldKey);
 
     void deleteByTemplateId(Long templateId);

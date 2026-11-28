@@ -2372,7 +2372,8 @@
       "action": "Eliminar",
       "confirm": "Se eliminará este registro de actividad. El evento original se conservará.",
       "success": "Registro de actividad eliminado"
-    }
+    },
+    "templateLink": "Plantillas de actividad"
   },
   "dashboard": {
     "team_reservation_link": "Gestión de reservas"

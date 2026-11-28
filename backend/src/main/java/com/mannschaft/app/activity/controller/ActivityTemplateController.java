@@ -8,6 +8,7 @@ import com.mannschaft.app.activity.dto.ImportTemplateRequest;
 import com.mannschaft.app.activity.dto.UpdateTemplateRequest;
 import com.mannschaft.app.activity.service.ActivityTemplateService;
 import com.mannschaft.app.common.ApiResponse;
+import com.mannschaft.app.common.EnumInputParser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -50,7 +51,7 @@ public class ActivityTemplateController {
             @RequestParam("scope_id") Long scopeId) {
         return ResponseEntity.ok(ApiResponse.of(
                 templateService.listTemplates(SecurityUtils.getCurrentUserId(),
-                        ActivityScopeType.valueOf(scopeType), scopeId)));
+                        EnumInputParser.parse(ActivityScopeType.class, scopeType, "scope_type"), scopeId)));
     }
 
     /**
@@ -75,7 +76,7 @@ public class ActivityTemplateController {
             @RequestParam("scope_id") Long scopeId,
             @Valid @RequestBody CreateTemplateRequest request) {
         ActivityTemplateResponse response = templateService.createTemplate(
-                SecurityUtils.getCurrentUserId(), ActivityScopeType.valueOf(scopeType), scopeId, request);
+                SecurityUtils.getCurrentUserId(), EnumInputParser.parse(ActivityScopeType.class, scopeType, "scope_type"), scopeId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
     }
 
