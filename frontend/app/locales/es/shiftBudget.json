@@ -74,6 +74,10 @@
       "acknowledgeConfirm": "Reconocer esta alerta (ID: {id}). ¿Está seguro?",
       "acknowledgeSuccess": "Alerta reconocida",
       "acknowledgeError": "Error al reconocer la alerta",
+      "alreadyAcknowledgedHeader": "Alerta ya reconocida",
+      "alreadyAcknowledgedConfirm": "{name} ya reconoció esta alerta el {time}. ¿Desea sobrescribirlo?",
+      "unknownAcknowledger": "Otro administrador",
+      "overwrite": "Sobrescribir",
       "loadError": "Error al cargar la lista de alertas",
       "empty": "Sin alertas"
     },

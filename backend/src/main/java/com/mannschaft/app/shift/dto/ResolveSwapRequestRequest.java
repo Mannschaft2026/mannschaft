@@ -10,7 +10,7 @@ import lombok.RequiredArgsConstructor;
  */
 @Getter
 @RequiredArgsConstructor
-public class ResolveSwapRequestRequest {
+public class ResolveSwapRequestRequest implements StrictShiftRequest {
 
     @NotNull
     private final String action;

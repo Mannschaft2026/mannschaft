@@ -21,7 +21,7 @@ import java.math.BigDecimal;
  */
 @Getter
 @RequiredArgsConstructor
-public class MemberWorkConstraintRequest {
+public class MemberWorkConstraintRequest implements StrictShiftRequest {
 
     /** 月次労働時間上限（h）。NULL = 制約なし。 */
     @DecimalMin(value = "0.00", message = "月次労働時間上限は 0 以上である必要があります")

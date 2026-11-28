@@ -87,14 +87,20 @@ public class BudgetThresholdAlertEntity extends BaseEntity {
     private Long acknowledgedBy;
 
     /**
-     * 承認応答を記録する。
-     * <p>設計書 §6.2.5: BUDGET_ADMIN 保有者のみ呼出可。多重 acknowledge は冪等扱い（最後の応答で上書き）。</p>
+     * 確認者と確認時刻を記録する。
+     * <p>設計書 §6.2.5: BUDGET_ADMIN 保有者のみ呼出可。確認済みかどうかの判定（409・上書き指定）は
+     * 行ロックを取った Service が行い、本メソッドは無条件に値を設定する。</p>
      *
      * @param userId 応答ユーザー ID
      */
     public void acknowledge(Long userId) {
         this.acknowledgedAt = LocalDateTime.now();
         this.acknowledgedBy = userId;
+    }
+
+    /** 確認済みか（{@code acknowledged_at} が非 NULL）。 */
+    public boolean isAcknowledged() {
+        return acknowledgedAt != null;
     }
 
     /**

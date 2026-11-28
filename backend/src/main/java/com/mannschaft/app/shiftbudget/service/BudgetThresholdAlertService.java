@@ -4,6 +4,8 @@ import com.mannschaft.app.auth.service.AuditLogService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.SecurityUtils;
+import com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser;
+import com.mannschaft.app.shiftbudget.BudgetAlertAlreadyAcknowledgedException;
 import com.mannschaft.app.shiftbudget.ShiftBudgetErrorCode;
 import com.mannschaft.app.shiftbudget.ShiftBudgetFeatureService;
 import com.mannschaft.app.shiftbudget.dto.AlertResponse;
@@ -72,28 +74,40 @@ public class BudgetThresholdAlertService {
      * <p>処理順:</p>
      * <ol>
      *   <li>BUDGET_ADMIN 権限チェック</li>
-     *   <li>alert を取得し、所属 allocation の {@code organization_id} と一致しなければ 404
-     *       (IDOR 対策、多テナント分離)</li>
+     *   <li>所属 allocation の {@code organization_id} が一致する alert だけを行ロック（PESSIMISTIC_WRITE）付きで
+     *       取得し、一致しなければ（他組織の行はロックせず）404 (IDOR 対策、多テナント分離)</li>
+     *   <li>確認済みかつ {@code overwrite} 未指定なら 409 {@code ALERT_ALREADY_ACKNOWLEDGED}
+     *       （既存の確認者・時刻を応答に含め、DB・監査ログは変えない）</li>
      *   <li>{@code acknowledge()} で {@code acknowledged_at}/{@code acknowledged_by} をセット</li>
-     *   <li>監査ログ {@code BUDGET_THRESHOLD_ALERT_ACKNOWLEDGED}</li>
+     *   <li>監査ログ {@code BUDGET_THRESHOLD_ALERT_ACKNOWLEDGED}（上書き時も毎回 1 件）</li>
      * </ol>
      *
-     * <p>多重 acknowledge は冪等扱い（最後の応答で上書き、エラーは返さない）。</p>
+     * <p>並行して同じ警告を確認（上書き指定なし）した場合は、行ロックで直列化され、先着が 200・
+     * 後着が 409 となり、記録は先着の値のまま残る。</p>
      *
      * <p>権限: {@code BUDGET_ADMIN}</p>
      */
     @Transactional
-    public AlertResponse acknowledge(Long organizationId, Long alertId, String comment) {
+    public AlertResponse acknowledge(Long organizationId, Long alertId, String comment, boolean overwrite) {
         featureService.requireEnabled(organizationId);
         requireBudgetAdmin(organizationId);
 
-        BudgetThresholdAlertEntity alert = alertRepository.findById(alertId)
+        // 多テナント分離: 所属 allocation の organization_id 一致を同じ SELECT で絞り込んだうえで行ロックする
+        // （他組織の警告の行はロックしない。不一致・不在はどちらも 404）
+        BudgetThresholdAlertEntity alert = alertRepository.findByIdAndOrganizationIdForUpdate(alertId, organizationId)
                 .orElseThrow(() -> new BusinessException(ShiftBudgetErrorCode.ALERT_NOT_FOUND));
 
-        // 多テナント分離: 所属 allocation を経由して organization_id 一致を検証
         ShiftBudgetAllocationEntity allocation = allocationRepository
                 .findByIdAndOrganizationIdAndDeletedAtIsNull(alert.getAllocationId(), organizationId)
                 .orElseThrow(() -> new BusinessException(ShiftBudgetErrorCode.ALERT_NOT_FOUND));
+
+        // ロック取得後の最新値で判定する（先着が確認済みなら、上書き指定がない限り 409）
+        if (alert.isAcknowledged() && !overwrite) {
+            throw new BudgetAlertAlreadyAcknowledgedException(
+                    alert.getAcknowledgedBy(), null,
+                    // 起きた瞬間として返す（エンティティの壁時計はサーバーゾーンのもの）
+                    alert.getAcknowledgedAt().atZone(UserZoneLocalDateTimeParser.SERVER_ZONE).toOffsetDateTime());
+        }
 
         Long currentUserId = SecurityUtils.getCurrentUserId();
         alert.acknowledge(currentUserId);

@@ -2,7 +2,9 @@ package com.mannschaft.app.shiftbudget.repository;
 
 import com.mannschaft.app.shiftbudget.entity.BudgetThresholdAlertEntity;
 import org.springframework.data.domain.Pageable;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -24,6 +26,20 @@ import java.util.Optional;
 @Repository
 public interface BudgetThresholdAlertRepository
         extends JpaRepository<BudgetThresholdAlertEntity, Long> {
+
+    /**
+     * 組織に属する警告だけを排他ロック付きで読む（並行 acknowledge を直列化し、先着の確認を読み直して判定する。
+     * CMP-260910-1607 ③）。
+     *
+     * <p>所属 allocation の {@code organization_id} 一致を同じ SELECT 内で絞り込むため、他組織の警告の行は
+     * ロックされない（組織境界を越えた待ち合わせ・ロック競合を起こさない）。</p>
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT a FROM BudgetThresholdAlertEntity a WHERE a.id = :id AND EXISTS ("
+            + "SELECT 1 FROM ShiftBudgetAllocationEntity s WHERE s.id = a.allocationId "
+            + "AND s.organizationId = :organizationId AND s.deletedAt IS NULL)")
+    Optional<BudgetThresholdAlertEntity> findByIdAndOrganizationIdForUpdate(
+            @Param("id") Long id, @Param("organizationId") Long organizationId);
 
     /**
      * 同一 (allocation, threshold) ペアでの既存警告を検索する。

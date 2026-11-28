@@ -307,7 +307,7 @@ public class ShiftScheduleService {
     @Transactional
     public ShiftScheduleResponse transitionStatus(Long id, String status, Long userId,
                                                   ShiftPublicationBudgetContext budgetContext) {
-        ShiftScheduleStatus targetStatus = ShiftScheduleStatus.valueOf(status);
+        ShiftScheduleStatus targetStatus = EnumInputParser.parse(ShiftScheduleStatus.class, status, "status");
         if (targetStatus == ShiftScheduleStatus.PUBLISHED && budgetContext == null) {
             throw new IllegalStateException("公開には予算連動判定の context が必要です: scheduleId=" + id);
         }

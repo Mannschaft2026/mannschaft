@@ -12,7 +12,7 @@ import java.util.List;
  */
 @Getter
 @RequiredArgsConstructor
-public class BulkAvailabilityDefaultRequest {
+public class BulkAvailabilityDefaultRequest implements StrictShiftRequest {
 
     @NotEmpty
     @Valid

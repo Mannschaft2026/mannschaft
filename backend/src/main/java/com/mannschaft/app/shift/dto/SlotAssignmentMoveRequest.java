@@ -17,4 +17,4 @@ public record SlotAssignmentMoveRequest(
         @NotNull Long userId,
         @NotNull Long sourceSlotVersion,
         @NotNull Long targetSlotVersion
-) {}
+) implements StrictShiftRequest {}

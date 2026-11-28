@@ -197,7 +197,19 @@ public enum ShiftBudgetErrorCode implements ErrorCode {
      * 当月・未来月を締めると、その後に記録される消化が締めから漏れ、確定額と仕訳が実態とずれる (HTTP 409)。</p>
      */
     MONTH_NOT_ENDED("SHIFT_BUDGET_032",
-            "対象月が終了していないため締められません（月末を過ぎた月のみ締められます）", Severity.WARN);
+            "対象月が終了していないため締められません（月末を過ぎた月のみ締められます）", Severity.WARN),
+
+    // ====================================================================
+    // 予算警告の確認（033〜）
+    // ====================================================================
+
+    /**
+     * 既に確認済みの予算警告を、上書き指定なしで再確認しようとした (HTTP 409)。
+     * <p>応答の {@code error.details} に既存の確認者・確認時刻を載せる。上書きするには
+     * リクエストの {@code overwrite=true} を指定して再送する（CMP-260910-1607 ③）。</p>
+     */
+    ALERT_ALREADY_ACKNOWLEDGED("SHIFT_BUDGET_033",
+            "この予算警告は既に確認済みです", Severity.WARN);
 
     private final String code;
     private final String message;

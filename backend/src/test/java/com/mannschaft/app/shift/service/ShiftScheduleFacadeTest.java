@@ -356,7 +356,7 @@ class ShiftScheduleFacadeTest {
     class AdminOperations {
 
         private final UpdateShiftScheduleRequest updateReq = new UpdateShiftScheduleRequest(
-                "タイトル", null, null, null, null, null, null);
+                "タイトル", null, null, null, null, null);
 
         @BeforeEach
         void scope() {

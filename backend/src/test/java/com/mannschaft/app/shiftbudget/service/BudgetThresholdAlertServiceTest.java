@@ -151,15 +151,56 @@ class BudgetThresholdAlertServiceTest {
         given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
         given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true);
         BudgetThresholdAlertEntity alert = sampleAlert();
-        given(alertRepository.findById(ALERT_ID)).willReturn(Optional.of(alert));
+        given(alertRepository.findByIdAndOrganizationIdForUpdate(ALERT_ID, ORG_ID)).willReturn(Optional.of(alert));
         given(allocationRepository.findByIdAndOrganizationIdAndDeletedAtIsNull(ALLOCATION_ID, ORG_ID))
                 .willReturn(Optional.of(sampleAllocation(ORG_ID)));
         given(alertRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
 
-        AlertResponse result = service.acknowledge(ORG_ID, ALERT_ID, "了解、来月予算追加");
+        AlertResponse result = service.acknowledge(ORG_ID, ALERT_ID, "了解、来月予算追加", false);
 
         assertThat(result.acknowledgedBy()).isEqualTo(USER_ID);
         assertThat(result.acknowledgedAt()).isNotNull();
+        verify(auditLogService).record(eq("BUDGET_THRESHOLD_ALERT_ACKNOWLEDGED"),
+                eq(USER_ID), any(), any(), eq(ORG_ID), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("acknowledge: 確認済み + 上書き指定なし → 409 ALERT_ALREADY_ACKNOWLEDGED。保存・監査ログなし")
+    void acknowledge_確認済みは409() {
+        given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
+        given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true);
+        BudgetThresholdAlertEntity alert = sampleAlert();
+        alert.acknowledge(99L);
+        given(alertRepository.findByIdAndOrganizationIdForUpdate(ALERT_ID, ORG_ID)).willReturn(Optional.of(alert));
+        given(allocationRepository.findByIdAndOrganizationIdAndDeletedAtIsNull(ALLOCATION_ID, ORG_ID))
+                .willReturn(Optional.of(sampleAllocation(ORG_ID)));
+
+        assertThatThrownBy(() -> service.acknowledge(ORG_ID, ALERT_ID, null, false))
+                .isInstanceOf(com.mannschaft.app.shiftbudget.BudgetAlertAlreadyAcknowledgedException.class)
+                .satisfies(e -> {
+                    var ex = (com.mannschaft.app.shiftbudget.BudgetAlertAlreadyAcknowledgedException) e;
+                    assertThat(ex.getAcknowledgedBy()).isEqualTo(99L);
+                });
+
+        verify(alertRepository, never()).save(any());
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("acknowledge: 確認済み + overwrite=true → 確認者を上書きして成功し監査ログ記録")
+    void acknowledge_上書き指定は成功() {
+        given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
+        given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true);
+        BudgetThresholdAlertEntity alert = sampleAlert();
+        alert.acknowledge(99L);
+        given(alertRepository.findByIdAndOrganizationIdForUpdate(ALERT_ID, ORG_ID)).willReturn(Optional.of(alert));
+        given(allocationRepository.findByIdAndOrganizationIdAndDeletedAtIsNull(ALLOCATION_ID, ORG_ID))
+                .willReturn(Optional.of(sampleAllocation(ORG_ID)));
+        given(alertRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
+
+        AlertResponse result = service.acknowledge(ORG_ID, ALERT_ID, null, true);
+
+        assertThat(result.acknowledgedBy()).isEqualTo(USER_ID);
         verify(auditLogService).record(eq("BUDGET_THRESHOLD_ALERT_ACKNOWLEDGED"),
                 eq(USER_ID), any(), any(), eq(ORG_ID), any(), any(), any(), any());
     }
@@ -169,12 +210,12 @@ class BudgetThresholdAlertServiceTest {
     void acknowledge_別組織は404() {
         given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
         given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true);
-        given(alertRepository.findById(ALERT_ID)).willReturn(Optional.of(sampleAlert()));
+        given(alertRepository.findByIdAndOrganizationIdForUpdate(ALERT_ID, ORG_ID)).willReturn(Optional.of(sampleAlert()));
         // allocation は ORG_ID では見つからない（実は OTHER_ORG_ID 所属だが、ORG_ID 検索では Optional.empty）
         given(allocationRepository.findByIdAndOrganizationIdAndDeletedAtIsNull(ALLOCATION_ID, ORG_ID))
                 .willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.acknowledge(ORG_ID, ALERT_ID, null))
+        assertThatThrownBy(() -> service.acknowledge(ORG_ID, ALERT_ID, null, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode().getCode())
                         .isEqualTo(ShiftBudgetErrorCode.ALERT_NOT_FOUND.getCode()));
@@ -191,12 +232,12 @@ class BudgetThresholdAlertServiceTest {
                 .given(accessControlService)
                 .checkPermission(USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_ADMIN");
 
-        assertThatThrownBy(() -> service.acknowledge(ORG_ID, ALERT_ID, null))
+        assertThatThrownBy(() -> service.acknowledge(ORG_ID, ALERT_ID, null, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode().getCode())
                         .isEqualTo(ShiftBudgetErrorCode.BUDGET_ADMIN_REQUIRED.getCode()));
 
-        verify(alertRepository, never()).findById(anyLong());
+        verify(alertRepository, never()).findByIdAndOrganizationIdForUpdate(anyLong(), anyLong());
     }
 
     @Test
@@ -204,9 +245,9 @@ class BudgetThresholdAlertServiceTest {
     void acknowledge_alert不在() {
         given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
         given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true);
-        given(alertRepository.findById(ALERT_ID)).willReturn(Optional.empty());
+        given(alertRepository.findByIdAndOrganizationIdForUpdate(ALERT_ID, ORG_ID)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.acknowledge(ORG_ID, ALERT_ID, null))
+        assertThatThrownBy(() -> service.acknowledge(ORG_ID, ALERT_ID, null, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode().getCode())
                         .isEqualTo(ShiftBudgetErrorCode.ALERT_NOT_FOUND.getCode()));

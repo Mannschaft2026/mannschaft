@@ -18,6 +18,7 @@ vi.mock('~/composables/shift/useShiftBudgetAdminAccess', () => ({
 mockNuxtImport('useScopeStore', () => () => ({ current: { type: 'organization', id: '10' } }))
 mockNuxtImport('useNotification', () => () => notify)
 mockNuxtImport('useShiftBudgetApi', () => () => api)
+mockNuxtImport('useDatetime', () => () => ({ formatDateTime: (v: string) => v }))
 
 const ListStub = defineComponent({
   name: 'ThresholdAlertList',

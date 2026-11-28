@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
  */
 @Getter
 @RequiredArgsConstructor
-public class UpdateShiftScheduleRequest {
+public class UpdateShiftScheduleRequest implements StrictShiftRequest {
 
     @Size(max = 200)
     private final String title;
@@ -23,7 +23,6 @@ public class UpdateShiftScheduleRequest {
 
     private final LocalDate endDate;
 
-    private final String status;
 
     private final LocalDateTime requestDeadline;
 

@@ -186,9 +186,9 @@ class ShiftSwapApprovalAssignmentContractIT extends ShiftSwapApprovalTestSupport
     @ParameterizedTest(name = "AC04_無効action [{index}] {arguments}")
     @NullSource
     @ValueSource(strings = {"INVALID", "", "approve"})
-    void AC04_無効actionは既存の400または409で全列不変(String action) throws Exception {
+    void AC04_無効actionは400_COMMON_001で全列不変(String action) throws Exception {
         Long swap = accepted(slot(List.of(a), ShiftScheduleStatus.PUBLISHED), a, b);
-        denied(admin, swap, action, action == null ? 400 : 409, action == null ? "COMMON_001" : "SHIFT_013");
+        denied(admin, swap, action, 400, "COMMON_001"); // CMP-260910-1607: 不正値・小文字も入力エラー（旧: 409 SHIFT_013）
     }
 
     @ParameterizedTest(name = "AC05_未割当と非配列 [{index}] {arguments}")

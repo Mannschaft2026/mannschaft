@@ -2,8 +2,10 @@ package com.mannschaft.app.shiftbudget.controller;
 
 import com.mannschaft.app.common.featuregate.RequireFeature;
 import com.mannschaft.app.common.ApiResponse;
+import com.mannschaft.app.shiftbudget.BudgetAlertAlreadyAcknowledgedException;
 import com.mannschaft.app.shiftbudget.dto.AlertAcknowledgeRequest;
 import com.mannschaft.app.shiftbudget.dto.AlertResponse;
+import com.mannschaft.app.shiftbudget.service.BudgetAlertAcknowledgerNameResolver;
 import com.mannschaft.app.shiftbudget.service.BudgetThresholdAlertService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -42,6 +44,7 @@ import java.util.List;
 public class BudgetThresholdAlertController {
 
     private final BudgetThresholdAlertService alertService;
+    private final BudgetAlertAcknowledgerNameResolver acknowledgerNameResolver;
 
     @GetMapping
     @Operation(summary = "未承認の閾値超過警告一覧を取得 (新しい警告ほど上)")
@@ -54,11 +57,24 @@ public class BudgetThresholdAlertController {
 
     @PostMapping("/{id}/acknowledge")
     @Operation(summary = "閾値超過警告に対して承認応答する (BUDGET_ADMIN 必須)")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+            description = "確認成功（未確認の警告、または overwrite=true での上書き）")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+            description = "確認済みの警告を overwrite 指定なしで再確認した（SHIFT_BUDGET_033）。既存の確認者・時刻を details で返す",
+            content = @io.swagger.v3.oas.annotations.media.Content(schema = @io.swagger.v3.oas.annotations.media.Schema(
+                    implementation = com.mannschaft.app.shiftbudget.BudgetAlertAlreadyAcknowledgedErrorResponse.class)))
     public ApiResponse<AlertResponse> acknowledgeAlert(
             @RequestHeader("X-Organization-Id") Long organizationId,
             @PathVariable("id") Long id,
             @Valid @RequestBody(required = false) AlertAcknowledgeRequest request) {
         String comment = request != null ? request.comment() : null;
-        return ApiResponse.of(alertService.acknowledge(organizationId, id, comment));
+        boolean overwrite = request != null && Boolean.TRUE.equals(request.overwrite());
+        try {
+            return ApiResponse.of(alertService.acknowledge(organizationId, id, comment, overwrite));
+        } catch (BudgetAlertAlreadyAcknowledgedException e) {
+            // 409 応答に既存の確認者の氏名を載せる（組織外の確認者は null。判定は resolver に集約）
+            String name = acknowledgerNameResolver.resolve(e.getAcknowledgedBy(), organizationId);
+            throw e.withAcknowledgedByName(name);
+        }
     }
 }

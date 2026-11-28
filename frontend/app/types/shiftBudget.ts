@@ -190,6 +190,8 @@ export interface TodoBudgetLinkResponse {
 
 export interface AlertAcknowledgeRequest {
   comment?: string | null
+  /** true なら確認済みの警告でも確認者・時刻を上書きする（未指定・false は確認済みで 409）。 */
+  overwrite?: boolean
 }
 
 // ===== 月次締め（§6.1 #11 / Phase 9-δ 第2段 + 10-β 拡張） =====
