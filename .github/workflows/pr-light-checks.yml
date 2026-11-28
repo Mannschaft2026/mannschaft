@@ -101,6 +101,7 @@ jobs:
           scripts/task-list-ledger-cli.test.mjs
           scripts/task-list-ledger-consumers.test.mjs
           scripts/task-list-ledger-changes.test.mjs
+          scripts/task-list-fold.test.mjs
           scripts/completion-evidence-ledger.test.mjs
 
       - name: "[Harness] worktree sparse paths の一覧検査"
