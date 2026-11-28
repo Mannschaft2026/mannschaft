@@ -380,13 +380,19 @@ jobs:
   # 通常スイートは既存契約を守るため Asia/Tokyo 固定のままにする。一方、このジョブは
   # America/Los_Angeles で起動し、明示ゾーン化済みの共通基盤だけを green 必須で検証する。
   # continue-on-error は使わず、CMP-023 の返済ロットごとに --tests の対象を広げる。
+  #
+  # 【CMP-261124-1609】`test` タスクは archUnitTest + archUnitFreezeStoreIntegrityTest に dependsOn する
+  # （build-logic の mannschaft.backend-conventions）ため、--tests で絞っても ArchUnit 全量（約 3 分）が
+  # 2 つの Gradle 起動のたびに走っていた（計約 6 分 = ジョブの約半分）。ArchUnit は時刻契約と無関係で、
+  # arch-test ジョブと各 shard が必須ゲートとして走らせているので、ここでは `-x` で外す（検査の網羅は落ちない）。
   # ---------------------------------------------------------------------------
   non-jst-timezone:
     name: Non-JST timezone contract
     needs: detect
     if: needs.detect.outputs.backend_changed == 'true'
     runs-on: ubuntu-latest
-    # 2026-11-27 実測 9〜15 分で上限 15 分に張り付き、merge queue の entry が繰り返し cancelled → failed_checks で除外されたため 25 分へ（遅延の原因調査は CMP-261126-1645）
+    # 2026-11-27 実測 9〜15 分で上限 15 分に張り付き、merge queue で繰り返し cancelled となったため #4962 で 25 分へ引き上げ。
+    # 根本原因は ArchUnit 全量の二重実行（CMP-261124-1609、下記 -x で除外）。除外後は約 5〜6 分の見込みで、25 分は余裕として維持する。
     timeout-minutes: 25
     defaults:
       run:
@@ -425,6 +431,7 @@ jobs:
           ./gradlew test --no-daemon --build-cache
           -Ptest.timezone=America/Los_Angeles
           -x jacocoTestReport
+          -x archUnitTest -x archUnitFreezeStoreIntegrityTest
           --tests "com.mannschaft.app.config.NonJstTimezoneContractTest"
           --tests "com.mannschaft.app.reservation.service.ReservationPendingExpireServiceClockZoneTest"
           --tests "com.mannschaft.app.config.JacksonTimeTypeSymmetryGuardTest"
@@ -455,6 +462,7 @@ jobs:
           ./gradlew test --no-daemon --build-cache
           -Ptest.timezone=UTC
           -x jacocoTestReport
+          -x archUnitTest -x archUnitFreezeStoreIntegrityTest
           --tests "com.mannschaft.app.config.DateColumnTimeZoneShiftDriverContractTest"
           --tests "com.mannschaft.app.config.DateColumnTimeZoneShiftIT"
           --tests "com.mannschaft.app.config.TimeZoneStorageBasisGuardTest"
