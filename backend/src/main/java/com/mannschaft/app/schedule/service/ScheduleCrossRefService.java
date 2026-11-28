@@ -1,6 +1,7 @@
 package com.mannschaft.app.schedule.service;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.EnumInputParser;
@@ -45,6 +46,8 @@ public class ScheduleCrossRefService {
      * per-scope 認可に使用する。
      */
     private final AccessControlService accessControlService;
+    /** チーム公開範囲の閲覧上限（CMP-261124-0159・F00 §20.3）。読み取りは門、書き込みは書き込み用の別名で書き分ける。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
 
     /**
      * クロスチーム・組織招待を送信する。同じソース→ターゲットの招待が既にある場合はエラーとする。
@@ -130,7 +133,7 @@ public class ScheduleCrossRefService {
         CrossRefTargetType type = CrossRefTargetType.valueOf(targetType);
         if (!accessControlService.isSystemAdmin(userId)) {
             // CrossRefTargetType（TEAM/ORGANIZATION）は AccessControlService の scopeType と同名。
-            accessControlService.checkMembership(userId, targetId, type.name());
+            scopeContentAccessGate.checkScopeContentAccess(userId, targetId, type.name());
         }
         return crossRefRepository
                 .findByTargetTypeAndTargetIdAndStatus(type, targetId, CrossRefStatus.PENDING)

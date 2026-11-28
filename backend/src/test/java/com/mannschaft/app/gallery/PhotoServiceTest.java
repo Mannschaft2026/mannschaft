@@ -1,6 +1,7 @@
 package com.mannschaft.app.gallery;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.DomainEventPublisher;
 import com.mannschaft.app.common.storage.R2StorageService;
@@ -56,6 +57,8 @@ class PhotoServiceTest {
     @Mock private ContentVisibilityChecker contentVisibilityChecker;
     /** 認可根治戦役 Wave3-B5: 書込CRUD/DL の scope 認可用モック。 */
     @Mock private AccessControlService accessControlService;
+    /** CMP-261124-0159: チーム公開範囲の閲覧上限（共通の門）。 */
+    @Mock private ScopeContentAccessGate scopeContentAccessGate;
     /** CMP-028 Phase B: PhotoAlbumService の可視レベル解決に必要なモック。 */
     @Mock private com.mannschaft.app.common.visibility.MembershipBatchQueryService membershipBatchQueryService;
 
@@ -67,7 +70,8 @@ class PhotoServiceTest {
         albumService = new PhotoAlbumService(albumRepository, galleryMapper, contentVisibilityChecker,
                 accessControlService, membershipBatchQueryService);
         service = new PhotoService(photoRepository, albumRepository, albumService,
-                galleryMapper, r2StorageService, eventPublisher, storageQuotaService, accessControlService);
+                galleryMapper, r2StorageService, eventPublisher, storageQuotaService, accessControlService,
+                scopeContentAccessGate);
     }
 
     private static final Long ALBUM_ID = 1L;
@@ -280,4 +284,80 @@ class PhotoServiceTest {
                     eq(StorageFeatureType.GALLERY), anyString(), eq(PHOTO_ID), eq(USER_ID));
         }
     }
+    @Nested
+    @DisplayName("親チーム上限（CMP-261124-0159 AC-0159-18: 写真一覧・画像URL発行）")
+    class MembersOnlyCap {
+
+        private void givenTeamAlbum() {
+            PhotoAlbumEntity album = PhotoAlbumEntity.builder().teamId(1L).title("a")
+                    .allowDownload(true).allowMemberUpload(true).build();
+            given(albumRepository.findById(ALBUM_ID)).willReturn(Optional.of(album));
+        }
+
+        private void givenReadDenied() {
+            org.mockito.BDDMockito.willThrow(new BusinessException(
+                            com.mannschaft.app.common.CommonErrorCode.COMMON_002))
+                    .given(scopeContentAccessGate).checkScopeContentAccess(USER_ID, 1L, "TEAM");
+        }
+
+        @Test
+        @DisplayName("AC-0159-18: 写真一覧は上限を越える在籍者（門が拒否）に403(COMMON_002)で、写真を読まない")
+        void 写真一覧_上限超過は門が拒否() {
+            givenTeamAlbum();
+            givenReadDenied();
+
+            assertThatThrownBy(() -> service.listPhotos(ALBUM_ID, "sort_order",
+                    org.springframework.data.domain.PageRequest.of(0, 30), USER_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("COMMON_002"));
+            verify(photoRepository, org.mockito.Mockito.never()).findByAlbumIdOrderBySortOrder(
+                    any(), any(org.springframework.data.domain.Pageable.class));
+            verify(accessControlService, org.mockito.Mockito.never()).checkMembership(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("AC-0159-18: 個別写真のダウンロードURLは上限を越える在籍者（門が拒否）に発行しない")
+        void 個別ダウンロードURL_上限超過は門が拒否() {
+            givenTeamAlbum();
+            givenReadDenied();
+            given(photoRepository.findById(PHOTO_ID)).willReturn(Optional.of(PhotoEntity.builder()
+                    .albumId(ALBUM_ID).r2Key("gallery/TEAM/1/album-1/photo-uuid.jpg").originalFilename("a.jpg").build()));
+
+            assertThatThrownBy(() -> service.getPhotoDownloadUrl(PHOTO_ID, USER_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("COMMON_002"));
+            verify(r2StorageService, org.mockito.Mockito.never()).generateDownloadUrl(any(), any());
+        }
+
+        @Test
+        @DisplayName("AC-0159-18: アルバム一括ダウンロードURLは上限を越える在籍者（門が拒否）に発行しない")
+        void 一括ダウンロードURL_上限超過は門が拒否() {
+            givenTeamAlbum();
+            givenReadDenied();
+
+            assertThatThrownBy(() -> service.getAlbumDownloadUrl(ALBUM_ID, USER_ID, null, 100))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("COMMON_002"));
+            verify(photoRepository, org.mockito.Mockito.never()).findByAlbumIdOrderBySortOrder(any());
+        }
+
+        @Test
+        @DisplayName("AC-0159-18: 書き込み（メディア登録）は書き込み用の別名で在籍を確認する")
+        void アップロード_書き込み用の別名で在籍確認() {
+            givenTeamAlbum();
+            org.mockito.BDDMockito.willThrow(new BusinessException(
+                            com.mannschaft.app.common.CommonErrorCode.COMMON_002))
+                    .given(scopeContentAccessGate).checkMembershipForWrite(USER_ID, 1L, "TEAM");
+            UploadPhotosRequest request = new UploadPhotosRequest(List.of(new UploadPhotosRequest.PhotoItem(
+                    "k", "a.jpg", 1024L, "image/jpeg", null, "PHOTO", null)));
+
+            assertThatThrownBy(() -> service.uploadPhotos(ALBUM_ID, USER_ID, request))
+                    .isInstanceOf(BusinessException.class);
+            verify(photoRepository, org.mockito.Mockito.never()).save(any(PhotoEntity.class));
+        }
+    }
+
 }

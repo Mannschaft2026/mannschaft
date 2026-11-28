@@ -1,6 +1,6 @@
 package com.mannschaft.app.schedule.service;
 
-import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.storage.StorageErrorCode;
@@ -30,7 +30,8 @@ public class ScheduleMediaAclService implements MultipartContentTargetResolver {
     private final ScheduleMediaUploadRepository mediaRepository;
     private final ScheduleRepository scheduleRepository;
     private final ContentVisibilityChecker visibilityChecker;
-    private final AccessControlService accessControlService;
+    /** チーム公開範囲の閲覧上限（CMP-261124-0159・F00 §20.3）。アップロードは書き込み用の別名で在籍を確認する。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
 
     ScheduleEntity requireReadable(Long scheduleId, Long userId) {
         visibilityChecker.assertCanView(ReferenceType.SCHEDULE, scheduleId, userId);
@@ -41,9 +42,9 @@ public class ScheduleMediaAclService implements MultipartContentTargetResolver {
     ScheduleEntity requireUploadable(Long scheduleId, Long userId) {
         ScheduleEntity schedule = requireReadable(scheduleId, userId);
         if (schedule.getTeamId() != null) {
-            accessControlService.checkMembership(userId, schedule.getTeamId(), "TEAM");
+            scopeContentAccessGate.checkMembershipForWrite(userId, schedule.getTeamId(), "TEAM");
         } else if (schedule.getOrganizationId() != null) {
-            accessControlService.checkMembership(userId, schedule.getOrganizationId(), "ORGANIZATION");
+            scopeContentAccessGate.checkMembershipForWrite(userId, schedule.getOrganizationId(), "ORGANIZATION");
         } else if (!Objects.equals(userId, schedule.getUserId())) {
             throw new BusinessException(CommonErrorCode.COMMON_002);
         }

@@ -3262,7 +3262,7 @@ Resolver を通らない読み取り経路（スコープ単位の一覧・集�
 | `chart` | 9 | ChartFormulaService(1)、ChartIntakeFormService(1)、ChartRecordService(3)、ChartSettingsService(4) | 門 | カルテ・記録の読み取り |
 | `chat` | 4 | ChatChannelAccessGuard(4) | 門 | チャンネル・メッセージ（F04.2）。**成功経路にも上限を AND する**: `ChatChannelAccessGuard#requireMembershipRowOrConceal`（チャンネルメンバー行があれば即許可）で、チャンネルがチーム系（`TEAM_PUBLIC` / `TEAM_PRIVATE`）なら許可の前に門を通す（存在認知判定の `isMember` の置換だけでは止まらない）。自分のチャンネル一覧 `ChatChannelService#listMyChannels`（メンバー行から直接取得）は、チーム系チャンネルのチーム ID を集めて `filterAccessibleTeamIds` で一括フィルタする。WebSocket は §20.5.5 |
 | `circulation` | 2 | CirculationService(2) | 門 | 回覧（受信者 ACL と AND） |
-| `cms` | 11 | BlogMediaAclService(1)、BlogPostService(2)、BlogSeriesService(4)、BlogTagService(4) | 門 | ブログのタグ・連載・メディア ACL。記事本体は Resolver（既存 assertCanView(TEAM)） |
+| `cms` | 11 | BlogMediaAclService(1)、BlogPostService(2)、BlogSeriesService(4)、BlogTagService(4) | 門 | ブログのタグ・連載・メディア ACL。記事本体は Resolver（既存 assertCanView(TEAM)）。**PR-D2 移行済み**: 一覧（タグ・連載）は `checkScopeContentAccess`、作成・メディア登録は `checkMembershipForWrite`（`CmsScopeContentAccessMatrixIT`・各 ServiceTest） |
 | `committee` | 4 | CommitteeInvitationService(1)、CommitteeService(3) | 対象外 | COMMITTEE スコープ（チームではない） |
 | `common` | 8 | AccessControlService(2)、ScopeConcealingAccessGate(2)、AutomaticActivityActualPolicy(1)、AccessGuard(1)、MembershipQueryCache(2) | 基盤 | AccessControlService の定義・ScopeConcealingAccessGate・MembershipQueryCache・門本体 `ScopeContentAccessGate`（対象外リストに理由付きで登録）。AccessGuard#isScopeMember・AutomaticActivityActualPolicy#filterEligible は担当 PR 未割当のため未移行リストに残し、PR-Z で棚卸しする。秘匿ゲート内部の所属判定を門へ差し替える |
 | `corkboard` | 8 | CorkboardPermissionService(3)、CorkboardScopedBoardVisibilityGuard(1)、CorkboardService(4) | 門（回帰） | REST は既に CorkboardScopedBoardVisibilityGuard で防げている。ボード読み取りを門へ統一。WebSocket `/topic/corkboard/{boardId}` は購読認可が無いため §20.5.5 で新設 |
@@ -3277,7 +3277,7 @@ Resolver を通らない読み取り経路（スコープ単位の一覧・集�
 | `family` | 30 | AnniversaryService(5)、CoinTossService(3)、DutyRotationService(2)、PresenceIconService(1)、PresenceService(4)、RoleAliasService(1)、ShoppingListService(13)、WallpaperService(1) | 門 | 家族チーム（記念日・当番・買い物リスト等）。TEAM スコープのため同じ規則 |
 | `filesharing` | 10 | SharedFolderAccessGuard(2)、SharedFolderQueryService(2)、SharedFolderService(6) | 門 | ファイル共有（F05.5）。公開リンクは §20.5.2 |
 | `forms` | 6 | FormPresetCatalogController(1)、FormSubmissionService(3)、FormTemplateService(2) | 門 | フォーム（F05.7） |
-| `gallery` | 5 | GalleryMediaUploadService(1)、PhotoService(4) | 門 | ギャラリー（F06.2）。画像 URL 発行を含む |
+| `gallery` | 5 | GalleryMediaUploadService(1)、PhotoService(4) | 門 | ギャラリー（F06.2）。画像 URL 発行を含む。**PR-D2 移行済み**: 写真一覧・個別/一括ダウンロード URL は `checkScopeContentAccess`、メディア登録・アップロード URL 発行は `checkMembershipForWrite`（`GalleryScopeContentAccessMatrixIT`・`PhotoServiceTest`） |
 | `gamification` | 7 | GamificationBadgeController(2)、GamificationPointController(2)、GamificationRankingController(1)、GamificationSettingController(2) | 門 | バッジ・ポイント・ランキング・設定の読み取り |
 | `incident` | 7 | IncidentAccessGuard(2)、IncidentCategoryService(2)、IncidentService(2)、MaintenanceScheduleService(1) | 門 | インシデント・保守予定の読み取り |
 | `jobmatching` | 2 | JobPolicy(2) | 門 | チーム内の求人方針の読み取り |
@@ -3305,7 +3305,7 @@ Resolver を通らない読み取り経路（スコープ単位の一覧・集�
 | `resident` | 12 | DwellingUnitService(4)、PropertyListingService(6)、ResidentDocumentService(1)、ResidentRegistryService(1) | 門 | 住民台帳・住戸・物件掲載・書類 |
 | `role` | 12 | DefaultAccessControlService(7)、MembershipInviteService(2)、OwnershipTransferOfferService(1)、PermissionGroupService(2) | 対象外（権限管理） | DefaultAccessControlService 本体・招待・オーナー委譲・権限グループ（管理操作。入口は入口表） |
 | `safetycheck` | 7 | SafetyCheckService(2)、SafetyFollowupService(1)、SafetyResponseService(1)、SafetyTemplateService(3) | 門 | 安否確認 |
-| `schedule` | 11 | OrgAnnualScheduleController(2)、TeamAnnualScheduleController(2)、TeamEventCategoryController(1)、ScheduleCrossRefService(1)、ScheduleMediaAclService(2)、ScheduleMediaQueryService(1)、ScheduleService(2) | 門 | 予定・年間計画・イベントカテゴリ・予定メディア |
+| `schedule` | 11 | OrgAnnualScheduleController(2)、TeamAnnualScheduleController(2)、TeamEventCategoryController(1)、ScheduleCrossRefService(1)、ScheduleMediaAclService(2)、ScheduleMediaQueryService(1)、ScheduleService(2) | 門 | 予定・年間計画・イベントカテゴリ・予定メディア。**PR-D2 移行済み**: 年間計画・プレビュー・カテゴリ（Controller）・出欠一覧/CSV（`ScheduleService#checkScopeViewAccess`）・受信招待は `checkScopeContentAccess`、予定メディアのアップロードは `checkMembershipForWrite`、メディア所有者判定は `canAccessScopeContent`（SYSTEM_ADMIN は従来どおり門を通さない）。予定の詳細・一覧・キープは既存の Resolver／MEMBER 閾値（`ScheduleKeepAccessGuard`）、出席率統計・コピーログは既存の ADMIN 限定で上限以上のため回帰のみ（`ScheduleScopeContentAccessMatrixIT`、経路台帳 R-schedule-1〜15 を移行済みに更新） |
 | `school` | 3 | AttendanceRequirementService(2)、SchoolAttendanceAccessPolicy(1) | 門 | 出欠要件・出欠アクセス方針 |
 | `service` | 14 | ServiceRecordExportService(2)、ServiceRecordFieldService(2)、ServiceRecordService(6)、ServiceRecordTemplateService(4) | 門 | サービス記録 |
 | `shift` | 17 | MemberWorkConstraintService(2)、ShiftAvailabilityService(1)、ShiftChangeRequestFacade(3)、ShiftHourlyRateAuthorizer(3)、ShiftPdfFacade(2)、ShiftPositionFacade(1)、ShiftScheduleFacade(2)、ShiftSlotFacade(1)、ShiftSwapFacade(2) | 門 | シフト・希望・交代・時給（時給は既存の追加判定と AND）。シフト管理ゲート `ShiftManageAccessGate`（CMP-261125-2114）は対象外リストに載せない: 在籍判定を `canAccessScopeContent` で行い、所有者の成功経路に `isBeyondTeamContentCap` を AND し、拒否経路で上限を越える在籍者を不在と同一の 404 にする（`ScopeConcealingAccessGate` と同じ扱い。AC-0159-94）。書き込みの在籍確認（設定変更・本人の時給削除）は `checkMembershipForWrite` |
@@ -3316,7 +3316,7 @@ Resolver を通らない読み取り経路（スコープ単位の一覧・集�
 | `team` | 5 | OrganizationTeamSearchController(1)、TeamShiftSettingsController(1)、TeamExtendedProfileService(2)、TeamSearchService(1) | 門／対象外 | TeamExtendedProfileService・TeamShiftSettingsController は門。TeamSearchService・OrganizationTeamSearchController はチーム自身の可視性述語（既存）で対象外 |
 | `template` | 4 | OrganizationModuleController(2)、TeamModuleController(2) | 門 | チームのモジュール設定の読み取り。Organization* は対象外 |
 | `ticket` | 1 | TicketAccessGuard(1) | 門 | 回数券 |
-| `timeline` | 7 | TimelineAttachmentAccessGuard(2)、TimelinePostService(2)、TimelinePostVisibilityAccessGuard(3) | 門＋Resolver | タイムライン（F04.1） |
+| `timeline` | 7 | TimelineAttachmentAccessGuard(2)、TimelinePostService(2)、TimelinePostVisibilityAccessGuard(3) | 門＋Resolver | タイムライン（F04.1）。**PR-D2 移行済み**: 投稿の可視性判定（`TimelinePostVisibilityAccessGuard#isVisible`）は `canAccessScopeContent`（詳細・返信・投票・みたよ・ブックマークの共通入口）、フィード・ピン留めは `checkScopeContentAccess`、投稿作成・添付アップロード先は `checkMembershipForWrite`。**再 grep で表に無かった母集団経路を追加**: `TimelinePostService#getMyFeed`・`#getUserPosts`・`#searchPosts` は在籍チーム ID を `filterAccessibleTeamIds` で 1 回絞り込む（`readableTeamIds`。在籍していても上限を越えるチームの投稿を母集団に入れない）。全体検索側（`TimelinePostSearchContributor`）は PR-S（`TimelineScopeContentAccessMatrixIT`・`TimelinePostServiceTest`） |
 | `timetable` | 13 | TimetableChangeService(1)、TimetablePeriodTemplateService(1)、TimetableService(4)、TimetableSlotService(5)、TimetableTermService(2) | 門 | 時間割 |
 | `todo` | 13 | MilestoneGateController(1)、ProjectAccessGuard(4)、TodoAccessGuard(2)、TodoCommentService(1)、TodoHandoffService(3)、TodoStatusLabelService(2) | 門 | TODO・プロジェクト・マイルストーン |
 | `tournament` | 7 | OrganizationTournamentSummaryController(1)、TournamentEntryMemberService(1)、TournamentEntryTemplateService(1)、FixtureRosterService(2)、TournamentTemplateService(2) | 門 | 大会の自チーム側（エントリーメンバー等）。Organization* は対象外 |
@@ -3475,13 +3475,13 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 
 - **AC-0159-10** 掲示板（スレッド一覧・詳細・返信・既読状況）
 - **AC-0159-11** ファイル共有（フォルダ一覧・ファイル詳細・ダウンロード URL 発行。発行 URL が返らないこと）
-- **AC-0159-12** タイムライン（チームフィード・投稿詳細・添付取得）
+- **AC-0159-12** タイムライン（チームフィード・投稿詳細・添付取得）【PR-D2 実装: `TimelineScopeContentAccessMatrixIT`（表駆動＋マイフィード・ユーザー投稿一覧の母集団）・`TimelinePostServiceTest#MembersOnlyCap`】
 - **AC-0159-13** 活動記録（一覧・詳細・コメント。PUBLIC 記録も権限なしには返らない）
-- **AC-0159-14** スケジュール（予定一覧・詳細・年間計画・イベントカテゴリ）
-- **AC-0159-15** ブログのタグ・連載一覧
+- **AC-0159-14** スケジュール（予定一覧・詳細・年間計画・イベントカテゴリ）【PR-D2 実装: `ScheduleScopeContentAccessMatrixIT`・`ScheduleServiceTest`・`ScheduleCrossRefServiceTest`】
+- **AC-0159-15** ブログのタグ・連載一覧【PR-D2 実装: `CmsScopeContentAccessMatrixIT`・`BlogTagServiceTest`・`BlogSeriesServiceTest`】
 - **AC-0159-16** アンケート（一覧・詳細・集計）
 - **AC-0159-17** 回覧（一覧・詳細。受信者に指定されていても権限なしは不可）
-- **AC-0159-18** ギャラリー（アルバム一覧・写真一覧・画像 URL 発行）
+- **AC-0159-18** ギャラリー（アルバム一覧・写真一覧・画像 URL 発行）【PR-D2 実装: `GalleryScopeContentAccessMatrixIT`・`PhotoServiceTest#MembersOnlyCap`・`GalleryMediaUploadServiceTest#MembersOnlyCap`】
 - **AC-0159-19** ナレッジベース（ページ一覧・詳細）
 - **AC-0159-20** TODO・プロジェクト（一覧・詳細）
 - **AC-0159-21** チャット: チャンネルメンバー行を残したまま外されたサポーター（フィクスチャ）について、(a) 自分のチャンネル一覧にそのチームのチャンネルが出ない、(b) チャンネル詳細が部外者と同一応答、(c) メッセージ本文の取得が部外者と同一応答、を**別々に**検証する。権限ありは従来どおり。

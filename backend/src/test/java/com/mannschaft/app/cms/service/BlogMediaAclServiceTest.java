@@ -7,6 +7,7 @@ import com.mannschaft.app.cms.media.BlogBodyMediaResolver;
 import com.mannschaft.app.cms.repository.BlogMediaUploadRepository;
 import com.mannschaft.app.cms.repository.BlogPostRepository;
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.storage.acl.StorageAclScope;
 import org.junit.jupiter.api.Test;
@@ -30,6 +31,7 @@ class BlogMediaAclServiceTest {
     @Mock private BlogMediaUploadRepository mediaRepository;
     @Mock private BlogPostRepository postRepository;
     @Mock private AccessControlService access;
+    @Mock private ScopeContentAccessGate gate;
     @Mock private BlogBodyMediaResolver body;
     @InjectMocks private BlogMediaAclService service;
 
@@ -45,7 +47,16 @@ class BlogMediaAclServiceTest {
     void 未保存記事でも投稿先への所属を確認する() {
         service.resolveUploadScope(1L,
                 new BlogMediaUploadUrlRequest("VIDEO", "video/mp4", 100L, "TEAM", 12L, null));
-        verify(access).checkMembership(1L, 12L, "TEAM");
+        verify(gate).checkMembershipForWrite(1L, 12L, "TEAM");
+    }
+
+    @Test
+    void 非公開チームの上限を越える在籍者は門の拒否でアップロード先を解決できない() {
+        org.mockito.Mockito.doThrow(new BusinessException(com.mannschaft.app.common.CommonErrorCode.COMMON_002))
+                .when(gate).checkMembershipForWrite(1L, 12L, "TEAM");
+        assertThatThrownBy(() -> service.resolveUploadScope(1L,
+                new BlogMediaUploadUrlRequest("VIDEO", "video/mp4", 100L, "TEAM", 12L, null)))
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test

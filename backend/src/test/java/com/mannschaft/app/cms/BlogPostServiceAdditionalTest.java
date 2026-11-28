@@ -15,6 +15,7 @@ import com.mannschaft.app.cms.service.BlogPostRevisionService;
 import com.mannschaft.app.cms.service.BlogPostService;
 import com.mannschaft.app.cms.service.BlogPostShareService;
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.visibility.ContentVisibilityChecker;
 import com.mannschaft.app.common.visibility.ReferenceType;
@@ -94,7 +95,9 @@ class BlogPostServiceAdditionalTest {
     private OrganizationService organizationService;
     @Mock
     private AccessControlService accessControlService;
+
     @Mock
+    private ScopeContentAccessGate scopeContentAccessGate;    @Mock
     private PaymentGateService paymentGateService;
 
     @InjectMocks

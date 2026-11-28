@@ -1,6 +1,6 @@
 package com.mannschaft.app.timeline.service;
 
-import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.timeline.TimelineErrorCode;
 import com.mannschaft.app.timeline.entity.TimelinePostEntity;
@@ -41,7 +41,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class TimelinePostVisibilityAccessGuard {
 
     private final TimelinePostRepository postRepository;
-    private final AccessControlService accessControlService;
+    /** チーム公開範囲の閲覧上限（CMP-261124-0159・F00 §20.3）。読み取りは門、書き込みは書き込み用の別名で書き分ける。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
     private final PostingIdentityService postingIdentityService;
     /**
      * 配下配信（delivery_scope）の到達判定。フィード・ユーザー投稿一覧・検索と同じ展開規則を
@@ -63,16 +64,16 @@ public class TimelinePostVisibilityAccessGuard {
         }
         return switch (post.getScopeType()) {
             case PUBLIC -> true;
-            case TEAM -> accessControlService.isMember(userId, post.getScopeId(), "TEAM");
+            case TEAM -> scopeContentAccessGate.canAccessScopeContent(userId, post.getScopeId(), "TEAM");
             // 配下配信は「可視性の拡大」なので、直接所属でなくても配信で届く投稿には到達できる。
             // これを入れないと「フィードには出るのに直リンクでは 404」という非対称になる。
             // ミュートはここに混ぜない（ミュートは表示設定であり、混ぜると閲覧権限まで失う）。
-            case ORGANIZATION -> accessControlService.isMember(userId, post.getScopeId(), "ORGANIZATION")
+            case ORGANIZATION -> scopeContentAccessGate.canAccessScopeContent(userId, post.getScopeId(), "ORGANIZATION")
                     || deliveryScopeResolver.isDeliveredTo(post, userId);
             case VILLAGE -> post.getScopeVillageId() != null
                     && postingIdentityService.isUserVillageMember(post.getScopeVillageId(), userId);
             case PERSONAL -> userId != null && userId.equals(post.getUserId());
-            case FRIEND_FORWARD -> accessControlService.isMember(userId, post.getScopeId(), "TEAM");
+            case FRIEND_FORWARD -> scopeContentAccessGate.canAccessScopeContent(userId, post.getScopeId(), "TEAM");
             case FRIEND_TEAM, FRIEND_ARCHIVE -> false;
         };
     }

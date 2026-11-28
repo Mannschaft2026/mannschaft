@@ -1,0 +1,47 @@
+# CMP-261124-0159 PR-D2（AC-0159-18）ギャラリーの写真一覧・画像 URL 発行。先頭が _ のため経路台帳との突き合わせ対象外。
+package: _gallery
+routes:
+  - id: R-gallery-photos
+    method: GET
+    path: /api/v1/gallery/albums/{albumId}/photos
+    params: { albumId: "@album" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-gallery-photo-download
+    method: GET
+    path: /api/v1/gallery/photos/{photoId}/download
+    params: { photoId: "@photo" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-gallery-album-download
+    method: GET
+    path: /api/v1/gallery/albums/{albumId}/download
+    params: { albumId: "@album" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-gallery-album
+    method: GET
+    path: /api/v1/gallery/albums/{albumId}
+    params: { albumId: "@album" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-gallery-albums
+    method: GET
+    path: /api/v1/gallery/albums?teamId={teamId}
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+      SUPPORTER: STATUS:200
+      GUEST: STATUS:200
+      OUTSIDER: STATUS:200
+      OTHER_TEAM_MEMBER: STATUS:200
+      OTHER_ORG_MEMBER: STATUS:200

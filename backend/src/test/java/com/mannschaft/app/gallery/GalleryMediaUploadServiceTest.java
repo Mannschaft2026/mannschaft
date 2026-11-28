@@ -1,6 +1,7 @@
 package com.mannschaft.app.gallery;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.storage.PresignedUploadResult;
 import com.mannschaft.app.common.storage.R2StorageService;
@@ -52,6 +53,8 @@ class GalleryMediaUploadServiceTest {
     @Mock private ContentVisibilityChecker contentVisibilityChecker;
     /** 認可根治戦役 Wave3-B5: アップロード可否の scope 認可用モック。 */
     @Mock private AccessControlService accessControlService;
+    /** CMP-261124-0159: チーム公開範囲の閲覧上限（共通の門）。 */
+    @Mock private ScopeContentAccessGate scopeContentAccessGate;
     /** CMP-028 Phase B: PhotoAlbumService の可視レベル解決に必要なモック。 */
     @Mock private com.mannschaft.app.common.visibility.MembershipBatchQueryService membershipBatchQueryService;
 
@@ -66,7 +69,7 @@ class GalleryMediaUploadServiceTest {
         albumService = new PhotoAlbumService(albumRepository, galleryMapper, contentVisibilityChecker,
                 accessControlService, membershipBatchQueryService);
         service = new GalleryMediaUploadService(r2StorageService, albumService, storageQuotaService,
-                accessControlService);
+                accessControlService, scopeContentAccessGate);
         // 認可根治戦役 Wave3-B5: 本テストは「アップロード可否」以外（R2Key形式/MIME検証/クォータ）に
         // 主眼があるため、ADMIN 相当として扱い認可チェックを通過させる（lenient: 非対応MIME系テストは
         // validateContentType が先に例外を投げるため本スタブへ到達しない）。
@@ -318,4 +321,25 @@ class GalleryMediaUploadServiceTest {
                             .isEqualTo("GALLERY_014"));
         }
     }
+    @Nested
+    @DisplayName("親チーム上限（CMP-261124-0159 AC-0159-18）")
+    class MembersOnlyCap {
+
+        @Test
+        @DisplayName("AC-0159-18: アップロードURLは上限を越える在籍者（門が拒否）に発行しない")
+        void アップロードURL_上限超過は門が拒否() {
+            PhotoAlbumEntity album = PhotoAlbumEntity.builder().teamId(10L).title("test").build();
+            given(albumRepository.findById(ALBUM_ID)).willReturn(Optional.of(album));
+            org.mockito.BDDMockito.willThrow(new com.mannschaft.app.common.BusinessException(
+                            com.mannschaft.app.common.CommonErrorCode.COMMON_002))
+                    .given(scopeContentAccessGate).checkMembershipForWrite(USER_ID, 10L, "TEAM");
+
+            assertThatThrownBy(() -> service.generateUploadUrl(ALBUM_ID,
+                    new MediaUploadUrlRequest("PHOTO", "image/jpeg", null), USER_ID))
+                    .isInstanceOf(com.mannschaft.app.common.BusinessException.class);
+            org.mockito.Mockito.verify(r2StorageService, org.mockito.Mockito.never())
+                    .generateUploadUrl(anyString(), anyString(), any());
+        }
+    }
+
 }

@@ -7,6 +7,7 @@ import com.mannschaft.app.cms.entity.BlogTagEntity;
 import com.mannschaft.app.cms.repository.BlogTagRepository;
 import com.mannschaft.app.cms.service.BlogTagService;
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import org.junit.jupiter.api.DisplayName;
@@ -36,6 +37,8 @@ class BlogTagServiceTest {
     @Mock
     private AccessControlService accessControlService;
 
+    @Mock
+    private ScopeContentAccessGate scopeContentAccessGate;
     @InjectMocks
     private BlogTagService service;
 
@@ -63,7 +66,7 @@ class BlogTagServiceTest {
             // Then
             assertThat(result).isNotNull();
             verify(tagRepository).save(any(BlogTagEntity.class));
-            verify(accessControlService).checkMembership(USER_ID, TEAM_ID, "TEAM");
+            verify(scopeContentAccessGate).checkMembershipForWrite(USER_ID, TEAM_ID, "TEAM");
         }
 
         @Test
@@ -86,7 +89,7 @@ class BlogTagServiceTest {
         void 作成_非メンバー_例外() {
             CreateTagRequest request = new CreateTagRequest(TEAM_ID, null, "新タグ", null);
             org.mockito.BDDMockito.willThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .given(accessControlService).checkMembership(USER_ID, TEAM_ID, "TEAM");
+                    .given(scopeContentAccessGate).checkMembershipForWrite(USER_ID, TEAM_ID, "TEAM");
 
             assertThatThrownBy(() -> service.createTag(USER_ID, request))
                     .isInstanceOf(BusinessException.class)
@@ -175,4 +178,34 @@ class BlogTagServiceTest {
             verify(tagRepository, org.mockito.Mockito.never()).delete(any());
         }
     }
+    @Nested
+    @DisplayName("listTags（CMP-261124-0159 AC-0159-15: チーム公開範囲の上限）")
+    class ListTagsUnderMembersOnlyCap {
+
+        @Test
+        @DisplayName("AC-0159-15: 非公開チームで上限を越える在籍者（門が拒否）は403(COMMON_002)で、タグを読まない")
+        void 一覧_上限超過は門が拒否してタグを読まない() {
+            org.mockito.BDDMockito.willThrow(new BusinessException(CommonErrorCode.COMMON_002))
+                    .given(scopeContentAccessGate).checkScopeContentAccess(USER_ID, TEAM_ID, "TEAM");
+
+            assertThatThrownBy(() -> service.listTags(USER_ID, TEAM_ID, null))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("COMMON_002"));
+            verify(tagRepository, org.mockito.Mockito.never()).findByTeamIdOrderBySortOrderAsc(any());
+        }
+
+        @Test
+        @DisplayName("AC-0159-15: 門を通った利用者にはタグを返す（読み取りは checkMembership を直接呼ばず門で判定）")
+        void 一覧_門を通ればタグを返す() {
+            given(tagRepository.findByTeamIdOrderBySortOrderAsc(TEAM_ID)).willReturn(java.util.List.of());
+            given(cmsMapper.toBlogTagResponseList(java.util.List.of())).willReturn(java.util.List.of());
+
+            assertThat(service.listTags(USER_ID, TEAM_ID, null)).isEmpty();
+
+            verify(scopeContentAccessGate).checkScopeContentAccess(USER_ID, TEAM_ID, "TEAM");
+            verify(accessControlService, org.mockito.Mockito.never()).checkMembership(any(), any(), any());
+        }
+    }
+
 }

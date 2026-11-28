@@ -1,0 +1,33 @@
+# CMP-261124-0159 PR-D2（AC-0159-12）タイムラインのチームフィード・ピン留め・投稿詳細・返信。先頭が _ のため経路台帳との突き合わせ対象外。
+package: _timeline
+routes:
+  - id: R-timeline-feed
+    method: GET
+    path: /api/v1/timeline/feed?scopeType=TEAM&scopeId={slug}
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-timeline-pinned
+    method: GET
+    path: /api/v1/timeline/pinned?scopeType=TEAM&scopeId={slug}
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-timeline-post
+    method: GET
+    path: /api/v1/timeline/posts/{postId}
+    params: { postId: "@post" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-timeline-replies
+    method: GET
+    path: /api/v1/timeline/posts/{postId}/replies
+    params: { postId: "@post" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW

@@ -2,6 +2,7 @@ package com.mannschaft.app.schedule.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.EnumInputParser;
@@ -34,7 +35,7 @@ import com.mannschaft.app.schedule.event.ScheduleCancelledEvent;
 import com.mannschaft.app.schedule.event.ScheduleCreatedEvent;
 import com.mannschaft.app.schedule.event.ScheduleUpdatedEvent;
 import com.mannschaft.app.schedule.repository.ScheduleRepository;
-import com.mannschaft.app.team.repository.TeamOrgMembershipRepository;
+import com.mannschaft.app.team.service.TeamOrgMembershipQueryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -92,12 +93,14 @@ public class ScheduleService {
     private final ScheduleQueryService queryService;
     private final ScheduleRecurrenceService recurrenceService;
     private final ScheduleScheduledTaskService scheduledTaskService;
-    private final TeamOrgMembershipRepository teamOrgMembershipRepository;
+    private final TeamOrgMembershipQueryService teamOrgMembershipQueryService;
     private final ScheduleTargetService scheduleTargetService;
     /**
      * 認可根治 Wave3-B6: schedule 書込（update/delete/cancel/create）・出欠閲覧の per-scope 認可に使用する。
      */
     private final AccessControlService accessControlService;
+    /** チーム公開範囲の閲覧上限（CMP-261124-0159・F00 §20.3）。読み取りは門、書き込みは書き込み用の別名で書き分ける。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
     /**
      * F03.18: activity_feed 発行用の {@code detail} JSON をシリアライズするために使う。
      * シリアライズ失敗時は予定本体の処理を巻き込まない（{@link #publishScheduleActivity}）。
@@ -796,9 +799,9 @@ public class ScheduleService {
             return;
         }
         if (schedule.isTeamScope()) {
-            accessControlService.checkMembership(userId, schedule.getTeamId(), SCOPE_TYPE_TEAM);
+            scopeContentAccessGate.checkScopeContentAccess(userId, schedule.getTeamId(), SCOPE_TYPE_TEAM);
         } else if (schedule.isOrganizationScope()) {
-            accessControlService.checkMembership(userId, schedule.getOrganizationId(), SCOPE_TYPE_ORGANIZATION);
+            scopeContentAccessGate.checkScopeContentAccess(userId, schedule.getOrganizationId(), SCOPE_TYPE_ORGANIZATION);
         } else if (!Objects.equals(schedule.getUserId(), userId)) {
             throw new BusinessException(CommonErrorCode.COMMON_002);
         }
@@ -1092,15 +1095,15 @@ public class ScheduleService {
      * （最初に成立した ACTIVE 加盟。同時刻なら organization_id 最小）を決定的に採る。
      * 規則は {@code TeamOrgMembershipQueryService#findPrimaryParentOrganizationId} と同一
      * （{@code COALESCE(responded_at, created_at)} 昇順 → organization_id 昇順）。本クラスは
-     * {@code @Transactional} のため、他ドメインの Service を呼ばず Repository の順序付き取得で解決する
-     * （CrossDomainTransactionalArchTest の凍結ストアに新たな違反を足さない）。</p>
+     * {@code @Transactional} のため、team ドメインの {@code TeamOrgMembershipQueryService}（Repository を直接注入しない。番人 D-5・D-3）の順序付き取得で解決する
+     * （呼び出し経路が Repository 直でも Service 経由でも番人 D-3T の凍結キー（入口＋到達 Repository 型）は変わらない）。</p>
      *
      * @param teamId チーム ID
      * @return 代表親組織 ID（ACTIVE な加盟が無い場合 null）
      */
     private Long resolveOrganizationIdForTeam(Long teamId) {
-        List<Long> orgIds = teamOrgMembershipRepository
-                .findOrganizationIdsInPrimaryOrderByTeamIdIn(java.util.Set.of(teamId))
+        List<Long> orgIds = teamOrgMembershipQueryService
+                .findOrganizationIdsInPrimaryOrderByTeamIds(java.util.Set.of(teamId))
                 .get(teamId);
         return orgIds == null || orgIds.isEmpty() ? null : orgIds.get(0);
     }

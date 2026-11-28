@@ -346,21 +346,21 @@ R-returnstayplan-1	HTTP	GET /api/v1/teams/{slug}/members/{memberId}/return-stay-
 R-returnstayplan-2	HTTP	GET /api/v1/teams/{slug}/members/return-stay-plans	com.mannschaft.app.returnstayplan.controller.ReturnStayPlanTeamController#listForMembers	未分類	PR-Z		未移行
 R-role-1	HTTP	GET /api/v1/teams/{slug}/transfer-ownership-offers/pending	com.mannschaft.app.role.controller.OwnershipTransferOfferController#listPendingTeamOffers	対象外	PR-Z		未移行
 R-role-2	HTTP	GET /api/v1/teams/{slug}/invite-reissue-requests	com.mannschaft.app.role.controller.InviteReissueRequestController#listForTeam	対象外	PR-Z		未移行
-R-schedule-1	HTTP	GET /api/v1/teams/{teamId}/attendance-stats/export	com.mannschaft.app.schedule.controller.ScheduleCommonController#exportTeamAttendanceStats	門	PR-D2		未移行
-R-schedule-2	HTTP	GET /api/v1/teams/{teamId}/attendance-stats	com.mannschaft.app.schedule.controller.ScheduleCommonController#getTeamAttendanceStats	門	PR-D2		未移行
-R-schedule-3	HTTP	GET /api/v1/teams/{teamId}/schedule-invitations	com.mannschaft.app.schedule.controller.ScheduleInvitationController#listTeamInvitations	門	PR-D2		未移行
-R-schedule-4	HTTP	GET /api/v1/teams/{teamId}/schedules/annual	com.mannschaft.app.schedule.controller.TeamAnnualScheduleController#getAnnualView	門	PR-D2		未移行
-R-schedule-5	HTTP	GET /api/v1/teams/{teamId}/schedules/annual/copy-logs	com.mannschaft.app.schedule.controller.TeamAnnualScheduleController#getCopyLogs	門	PR-D2		未移行
-R-schedule-6	HTTP	GET /api/v1/teams/{teamId}/schedules/annual/preview-copy	com.mannschaft.app.schedule.controller.TeamAnnualScheduleController#previewCopy	門	PR-D2		未移行
-R-schedule-7	HTTP	GET /api/v1/teams/{teamId}/event-categories	com.mannschaft.app.schedule.controller.TeamEventCategoryController#listCategories	門	PR-D2		未移行
-R-schedule-8	HTTP	GET /api/v1/teams/{teamPublicId}/schedules/{scheduleId}/attendances/export	com.mannschaft.app.schedule.controller.TeamScheduleController#exportAttendancesCsv	門	PR-D2		未移行
-R-schedule-9	HTTP	GET /api/v1/teams/{teamPublicId}/schedules/{scheduleId}/attendances	com.mannschaft.app.schedule.controller.TeamScheduleController#getAttendances	門	PR-D2		未移行
-R-schedule-10	HTTP	GET /api/v1/teams/{teamPublicId}/schedules/{scheduleId}	com.mannschaft.app.schedule.controller.TeamScheduleController#getSchedule	門	PR-D2		未移行
-R-schedule-11	HTTP	GET /api/v1/teams/{teamPublicId}/schedules/{scheduleId}/activities	com.mannschaft.app.schedule.controller.TeamScheduleController#linkedActivities	門	PR-D2		未移行
-R-schedule-12	HTTP	GET /api/v1/teams/{teamPublicId}/schedules	com.mannschaft.app.schedule.controller.TeamScheduleController#listSchedules	門	PR-D2		未移行
-R-schedule-13	HTTP	GET /api/v1/teams/{teamPublicId}/schedule-keeps/{keepId}	com.mannschaft.app.schedule.controller.TeamScheduleKeepController#get	門	PR-D2		未移行
-R-schedule-14	HTTP	GET /api/v1/teams/{teamPublicId}/schedule-keeps/by-schedule/{scheduleId}	com.mannschaft.app.schedule.controller.TeamScheduleKeepController#getByConvertedSchedule	門	PR-D2		未移行
-R-schedule-15	HTTP	GET /api/v1/teams/{teamPublicId}/schedule-keeps	com.mannschaft.app.schedule.controller.TeamScheduleKeepController#list	門	PR-D2		未移行
+R-schedule-1	HTTP	GET /api/v1/teams/{teamId}/attendance-stats/export	com.mannschaft.app.schedule.controller.ScheduleCommonController#exportTeamAttendanceStats	門	PR-D2	ScheduleScopeContentAccessMatrixIT	移行済み
+R-schedule-2	HTTP	GET /api/v1/teams/{teamId}/attendance-stats	com.mannschaft.app.schedule.controller.ScheduleCommonController#getTeamAttendanceStats	門	PR-D2	ScheduleScopeContentAccessMatrixIT	移行済み
+R-schedule-3	HTTP	GET /api/v1/teams/{teamId}/schedule-invitations	com.mannschaft.app.schedule.controller.ScheduleInvitationController#listTeamInvitations	門	PR-D2	ScheduleScopeContentAccessMatrixIT#受信招待一覧は上限を越える在籍者に返さない	移行済み
+R-schedule-4	HTTP	GET /api/v1/teams/{teamId}/schedules/annual	com.mannschaft.app.schedule.controller.TeamAnnualScheduleController#getAnnualView	門	PR-D2	ScheduleScopeContentAccessMatrixIT	移行済み
+R-schedule-5	HTTP	GET /api/v1/teams/{teamId}/schedules/annual/copy-logs	com.mannschaft.app.schedule.controller.TeamAnnualScheduleController#getCopyLogs	門	PR-D2	ScheduleScopeContentAccessMatrixIT	移行済み
+R-schedule-6	HTTP	GET /api/v1/teams/{teamId}/schedules/annual/preview-copy	com.mannschaft.app.schedule.controller.TeamAnnualScheduleController#previewCopy	門	PR-D2	ScheduleScopeContentAccessMatrixIT	移行済み
+R-schedule-7	HTTP	GET /api/v1/teams/{teamId}/event-categories	com.mannschaft.app.schedule.controller.TeamEventCategoryController#listCategories	門	PR-D2	ScheduleScopeContentAccessMatrixIT	移行済み
+R-schedule-8	HTTP	GET /api/v1/teams/{teamPublicId}/schedules/{scheduleId}/attendances/export	com.mannschaft.app.schedule.controller.TeamScheduleController#exportAttendancesCsv	門	PR-D2	ScheduleScopeContentAccessMatrixIT	移行済み
+R-schedule-9	HTTP	GET /api/v1/teams/{teamPublicId}/schedules/{scheduleId}/attendances	com.mannschaft.app.schedule.controller.TeamScheduleController#getAttendances	門	PR-D2	ScheduleScopeContentAccessMatrixIT	移行済み
+R-schedule-10	HTTP	GET /api/v1/teams/{teamPublicId}/schedules/{scheduleId}	com.mannschaft.app.schedule.controller.TeamScheduleController#getSchedule	Resolver	PR-D2	ScheduleScopeContentAccessMatrixIT	移行済み
+R-schedule-11	HTTP	GET /api/v1/teams/{teamPublicId}/schedules/{scheduleId}/activities	com.mannschaft.app.schedule.controller.TeamScheduleController#linkedActivities	門	PR-D2	ScheduleScopeContentAccessMatrixIT	移行済み
+R-schedule-12	HTTP	GET /api/v1/teams/{teamPublicId}/schedules	com.mannschaft.app.schedule.controller.TeamScheduleController#listSchedules	Resolver	PR-D2	ScheduleScopeContentAccessMatrixIT#予定一覧は上限を越える閲覧者に1件も返さない	移行済み
+R-schedule-13	HTTP	GET /api/v1/teams/{teamPublicId}/schedule-keeps/{keepId}	com.mannschaft.app.schedule.controller.TeamScheduleKeepController#get	Resolver	PR-D2	ScheduleScopeContentAccessMatrixIT	移行済み
+R-schedule-14	HTTP	GET /api/v1/teams/{teamPublicId}/schedule-keeps/by-schedule/{scheduleId}	com.mannschaft.app.schedule.controller.TeamScheduleKeepController#getByConvertedSchedule	Resolver	PR-D2	ScheduleScopeContentAccessMatrixIT	移行済み
+R-schedule-15	HTTP	GET /api/v1/teams/{teamPublicId}/schedule-keeps	com.mannschaft.app.schedule.controller.TeamScheduleKeepController#list	Resolver	PR-D2	ScheduleScopeContentAccessMatrixIT	移行済み
 R-school-1	HTTP	GET /api/v1/teams/{teamId}/attendance/requirements/evaluations/{evaluationId}/disclosure-history	com.mannschaft.app.school.controller.AttendanceDisclosureController#getDisclosureHistory	門	PR-W3		未移行
 R-school-2	HTTP	GET /api/v1/teams/{teamId}/attendance/locations	com.mannschaft.app.school.controller.AttendanceLocationController#getTeamLocations	門	PR-W3		未移行
 R-school-3	HTTP	GET /api/v1/teams/{teamId}/attendance/permissions	com.mannschaft.app.school.controller.AttendancePermissionController#getPermissions	門	PR-W3		未移行

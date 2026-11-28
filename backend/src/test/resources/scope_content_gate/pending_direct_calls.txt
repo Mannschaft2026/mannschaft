@@ -94,12 +94,6 @@ com.mannschaft.app.circulation.service.CirculationService#createDocument
 com.mannschaft.app.circulation.service.CirculationService#getUnconfirmedForUserInScope
 
 ## cms
-com.mannschaft.app.cms.service.BlogMediaAclService#checkScopeMembership
-com.mannschaft.app.cms.service.BlogPostService#createPost
-com.mannschaft.app.cms.service.BlogSeriesService#createSeries
-com.mannschaft.app.cms.service.BlogSeriesService#listSeries
-com.mannschaft.app.cms.service.BlogTagService#createTag
-com.mannschaft.app.cms.service.BlogTagService#listTags
 
 ## common
 # 理由: 共通基盤の AccessGuard（@PreAuthorize 用）と AutomaticActivityActualPolicy は担当 PR 未割当。PR-Z の棚卸し対象として残す（CMP-261124-0159 殿裁定 2026-11-25）。
@@ -216,11 +210,6 @@ com.mannschaft.app.forms.service.FormTemplateService#getTemplate
 com.mannschaft.app.forms.service.FormTemplateService#listTemplates
 
 ## gallery
-com.mannschaft.app.gallery.service.GalleryMediaUploadService#generateUploadUrl
-com.mannschaft.app.gallery.service.PhotoService#getAlbumDownloadUrl
-com.mannschaft.app.gallery.service.PhotoService#getPhotoDownloadUrl
-com.mannschaft.app.gallery.service.PhotoService#listPhotos
-com.mannschaft.app.gallery.service.PhotoService#uploadPhotos
 
 ## gamification
 com.mannschaft.app.gamification.controller.GamificationBadgeController#getMyBadges
@@ -435,15 +424,6 @@ com.mannschaft.app.safetycheck.service.SafetyTemplateService#requireScopeMember
 com.mannschaft.app.safetycheck.service.SafetyTemplateService#updateScopedTemplate
 
 ## schedule
-com.mannschaft.app.schedule.controller.OrgAnnualScheduleController#getAnnualView
-com.mannschaft.app.schedule.controller.OrgAnnualScheduleController#previewCopy
-com.mannschaft.app.schedule.controller.TeamAnnualScheduleController#getAnnualView
-com.mannschaft.app.schedule.controller.TeamAnnualScheduleController#previewCopy
-com.mannschaft.app.schedule.controller.TeamEventCategoryController#listCategories
-com.mannschaft.app.schedule.service.ScheduleCrossRefService#listReceivedInvitations
-com.mannschaft.app.schedule.service.ScheduleMediaAclService#requireUploadable
-com.mannschaft.app.schedule.service.ScheduleMediaQueryService#isScheduleMediaOwner
-com.mannschaft.app.schedule.service.ScheduleService#checkScopeViewAccess
 
 ## school
 com.mannschaft.app.school.service.AttendanceRequirementService#listOrganizationRules
@@ -517,9 +497,6 @@ com.mannschaft.app.template.controller.TeamModuleController#getTeamModules
 com.mannschaft.app.ticket.service.TicketAccessGuard#requireTeamMember
 
 ## timeline
-com.mannschaft.app.timeline.service.TimelineAttachmentAccessGuard#checkCanUpload
-com.mannschaft.app.timeline.service.TimelinePostService#checkScopeMembership
-com.mannschaft.app.timeline.service.TimelinePostVisibilityAccessGuard#isVisible
 
 ## timetable
 com.mannschaft.app.timetable.service.TimetableChangeService#getChanges

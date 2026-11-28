@@ -1,6 +1,6 @@
 package com.mannschaft.app.timeline.service;
 
-import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.timeline.PostScopeType;
@@ -20,7 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class TimelineAttachmentAccessGuard {
 
-    private final AccessControlService accessControlService;
+    /** チーム公開範囲の閲覧上限（CMP-261124-0159・F00 §20.3）。アップロード先の在籍確認は書き込み用の別名。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
 
     /**
      * 添付ファイルのアップロード先スコープへの書き込み権限を検証する。
@@ -35,7 +36,7 @@ public class TimelineAttachmentAccessGuard {
      *       他人のデータへの読取/書込アクセスにはつながらない</li>
      *   <li>TEAM / ORGANIZATION: {@code scopeId} がそのままクォータ計上・R2 キーの両方に使われるため、
      *       呼び出し元がそのスコープのメンバーであることを検証する
-     *       （{@link AccessControlService#checkMembership}）</li>
+     *       （{@link ScopeContentAccessGate#checkMembershipForWrite}）</li>
      *   <li>その他（VILLAGE / FRIEND_*）: 本 API の正路ではないため fail-closed</li>
      * </ul>
      *
@@ -56,8 +57,8 @@ public class TimelineAttachmentAccessGuard {
             case PUBLIC, PERSONAL -> {
                 // 実スコープ解決側が scopeId を無視して呼び出し元本人へ固定するため検証不要。
             }
-            case TEAM -> accessControlService.checkMembership(userId, scopeId, "TEAM");
-            case ORGANIZATION -> accessControlService.checkMembership(userId, scopeId, "ORGANIZATION");
+            case TEAM -> scopeContentAccessGate.checkMembershipForWrite(userId, scopeId, "TEAM");
+            case ORGANIZATION -> scopeContentAccessGate.checkMembershipForWrite(userId, scopeId, "ORGANIZATION");
             case VILLAGE, FRIEND_TEAM, FRIEND_FORWARD, FRIEND_ARCHIVE ->
                     throw new BusinessException(CommonErrorCode.COMMON_002);
         }

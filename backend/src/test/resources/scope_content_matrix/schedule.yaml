@@ -1,0 +1,120 @@
+# CMP-261124-0159 PR-D2（AC-0159-14）スケジュール。権限あり=既存の認可どおり。権限なし=部外者と同一応答（一覧のみ 200 で空）。
+# 管理者限定の経路（出席率統計・コピーログ）の MEMBER は既存の追加認可どおり 403 のまま。
+package: schedule
+routes:
+  - id: R-schedule-1
+    method: GET
+    path: /api/v1/teams/{teamId}/attendance-stats/export?from=2026-01-01T00:00:00&to=2026-12-31T23:59:59
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: STATUS:403
+  - id: R-schedule-2
+    method: GET
+    path: /api/v1/teams/{teamId}/attendance-stats?from=2026-01-01T00:00:00&to=2026-12-31T23:59:59
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: STATUS:403
+  - id: R-schedule-3
+    method: GET
+    path: /api/v1/teams/{teamId}/schedule-invitations
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-schedule-4
+    method: GET
+    path: /api/v1/teams/{teamId}/schedules/annual?academic_year=2026
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-schedule-5
+    method: GET
+    path: /api/v1/teams/{teamId}/schedules/annual/copy-logs
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: STATUS:403
+  - id: R-schedule-6
+    method: GET
+    path: /api/v1/teams/{teamId}/schedules/annual/preview-copy?source_year=2025&target_year=2026
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-schedule-7
+    method: GET
+    path: /api/v1/teams/{teamId}/event-categories
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-schedule-8
+    method: GET
+    path: /api/v1/teams/{slug}/schedules/{scheduleId}/attendances/export
+    params: { scheduleId: "@schedule" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-schedule-9
+    method: GET
+    path: /api/v1/teams/{slug}/schedules/{scheduleId}/attendances
+    params: { scheduleId: "@schedule" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-schedule-10
+    method: GET
+    path: /api/v1/teams/{slug}/schedules/{scheduleId}
+    params: { scheduleId: "@schedule" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-schedule-11
+    method: GET
+    path: /api/v1/teams/{slug}/schedules/{scheduleId}/activities
+    params: { scheduleId: "@schedule" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-schedule-12
+    method: GET
+    path: /api/v1/teams/{slug}/schedules?from=2026-01-01T00:00:00&to=2026-12-31T23:59:59
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+      SUPPORTER: STATUS:200
+      GUEST: STATUS:200
+      OUTSIDER: STATUS:200
+      OTHER_TEAM_MEMBER: STATUS:200
+      OTHER_ORG_MEMBER: STATUS:200
+  - id: R-schedule-13
+    method: GET
+    path: /api/v1/teams/{slug}/schedule-keeps/{keepId}
+    params: { keepId: "@keep" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-schedule-14
+    method: GET
+    path: /api/v1/teams/{slug}/schedule-keeps/by-schedule/{scheduleId}
+    params: { scheduleId: "@schedule" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-schedule-15
+    method: GET
+    path: /api/v1/teams/{slug}/schedule-keeps
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW

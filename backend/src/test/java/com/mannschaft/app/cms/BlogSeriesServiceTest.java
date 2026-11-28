@@ -8,6 +8,7 @@ import com.mannschaft.app.cms.repository.BlogPostRepository;
 import com.mannschaft.app.cms.repository.BlogPostSeriesRepository;
 import com.mannschaft.app.cms.service.BlogSeriesService;
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +38,8 @@ class BlogSeriesServiceTest {
     @Mock
     private AccessControlService accessControlService;
 
+    @Mock
+    private ScopeContentAccessGate scopeContentAccessGate;
     @InjectMocks
     private BlogSeriesService service;
 
@@ -57,7 +60,7 @@ class BlogSeriesServiceTest {
 
             BlogSeriesResponse result = service.createSeries(USER_ID, request);
             assertThat(result).isNotNull();
-            verify(accessControlService).checkMembership(USER_ID, TEAM_ID, "TEAM");
+            verify(scopeContentAccessGate).checkMembershipForWrite(USER_ID, TEAM_ID, "TEAM");
         }
 
         @Test
@@ -65,7 +68,7 @@ class BlogSeriesServiceTest {
         void 作成_非メンバー_例外() {
             CreateSeriesRequest request = new CreateSeriesRequest(TEAM_ID, null, "連載シリーズ", null);
             org.mockito.BDDMockito.willThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .given(accessControlService).checkMembership(USER_ID, TEAM_ID, "TEAM");
+                    .given(scopeContentAccessGate).checkMembershipForWrite(USER_ID, TEAM_ID, "TEAM");
 
             assertThatThrownBy(() -> service.createSeries(USER_ID, request))
                     .isInstanceOf(BusinessException.class)
@@ -141,4 +144,33 @@ class BlogSeriesServiceTest {
             verify(seriesRepository, org.mockito.Mockito.never()).delete(any());
         }
     }
+    @Nested
+    @DisplayName("listSeries（CMP-261124-0159 AC-0159-15: チーム公開範囲の上限）")
+    class ListSeriesUnderMembersOnlyCap {
+
+        @Test
+        @DisplayName("AC-0159-15: 非公開チームで上限を越える在籍者（門が拒否）は403(COMMON_002)で、連載を読まない")
+        void 一覧_上限超過は門が拒否して連載を読まない() {
+            org.mockito.BDDMockito.willThrow(new BusinessException(CommonErrorCode.COMMON_002))
+                    .given(scopeContentAccessGate).checkScopeContentAccess(USER_ID, TEAM_ID, "TEAM");
+
+            assertThatThrownBy(() -> service.listSeries(USER_ID, TEAM_ID, null))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("COMMON_002"));
+            verify(seriesRepository, org.mockito.Mockito.never()).findByTeamIdOrderByCreatedAtDesc(any());
+        }
+
+        @Test
+        @DisplayName("AC-0159-15: 門を通った利用者には連載を返す（読み取りは checkMembership を直接呼ばず門で判定）")
+        void 一覧_門を通れば連載を返す() {
+            given(seriesRepository.findByTeamIdOrderByCreatedAtDesc(TEAM_ID)).willReturn(java.util.List.of());
+
+            assertThat(service.listSeries(USER_ID, TEAM_ID, null)).isEmpty();
+
+            verify(scopeContentAccessGate).checkScopeContentAccess(USER_ID, TEAM_ID, "TEAM");
+            verify(accessControlService, org.mockito.Mockito.never()).checkMembership(any(), any(), any());
+        }
+    }
+
 }

@@ -1,6 +1,7 @@
 package com.mannschaft.app.schedule.service;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.storage.acl.StorageAclScope;
@@ -36,7 +37,7 @@ class ScheduleMediaAclServiceTest {
     @Mock private ScheduleMediaUploadRepository mediaRepository;
     @Mock private ScheduleRepository scheduleRepository;
     @Mock private ContentVisibilityChecker visibility;
-    @Mock private AccessControlService access;
+    @Mock private ScopeContentAccessGate gate;
     @InjectMocks private ScheduleMediaAclService service;
 
     @Test
@@ -79,7 +80,7 @@ class ScheduleMediaAclServiceTest {
         assertThat(target.parent().key()).isEqualTo("100");
         assertThat(target.binding().key()).isEqualTo(MEDIA_ID.toString());
         verify(visibility).assertCanView(ReferenceType.SCHEDULE, 100L, 1L);
-        verify(access).checkMembership(1L, 12L, "TEAM");
+        verify(gate).checkMembershipForWrite(1L, 12L, "TEAM");
     }
 
     private ScheduleMediaUploadEntity media() {
