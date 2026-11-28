@@ -16,6 +16,7 @@ const feed = ref([
   toAnnouncementItem(raw(3, '著者なし')),
 ])
 
+mockNuxtImport('useTeamApi', () => () => ({ getTeam: vi.fn().mockResolvedValue({ data: { id: 'x', numericId: 1 } }) }))
 mockNuxtImport('useRoute', () => () => ({ params: { slug: 't' } }))
 mockNuxtImport('useI18n', () => () => ({ t: (key: string) => key }))
 mockNuxtImport('useRoleAccess', () => () => ({ isAdmin: computed(() => state.admin), loadPermissions: vi.fn() }))

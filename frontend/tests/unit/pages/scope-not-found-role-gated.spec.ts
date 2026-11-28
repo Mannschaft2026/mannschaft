@@ -29,6 +29,7 @@ const listOrganizationPaymentRequests = vi.fn()
 const isAdmin = () => state.role === 'ADMIN'
 const isAdminOrDeputy = () => state.role === 'ADMIN' || state.role === 'DEPUTY_ADMIN'
 
+mockNuxtImport('useTeamApi', () => () => ({ getTeam: vi.fn().mockResolvedValue({ data: { id: 'x', numericId: 1 } }) }))
 mockNuxtImport('useRoute', () => () => ({ params: { slug: 'scope-a' } }))
 mockNuxtImport('useI18n', () => () => ({ t: (key: string) => key, locale: ref('ja') }))
 mockNuxtImport('useRoleAccess', () => () => ({

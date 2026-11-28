@@ -5,6 +5,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 
 const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const chartApi = useChartApi()
 const notification = useNotification()
 const { markIfDenied } = useScopeNotFound()
@@ -88,77 +89,86 @@ async function handlePhotoUpload(file: File, type: string) {
   }
 }
 
-onMounted(loadData)
+onGateOk(loadData)
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl">
-    <PageHeader title="カルテ管理" class="mb-6" />
-
-    <PageLoading v-if="loading" />
-
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
     <template v-else>
-      <ChartList
-        :charts="charts"
-        :loading="loading"
-        :total-records="totalRecords"
-        @create="openCreate"
-        @select="handleSelect"
-        @pin="handlePin"
-        @page="(e) => loadData(e.page)"
-      />
-    </template>
+        <div class="mx-auto max-w-6xl">
+          <PageHeader title="カルテ管理" class="mb-6" />
 
-    <Dialog
-      v-model:visible="showFormDialog"
-      :header="editingChart ? 'カルテ編集' : '新規カルテ'"
-      :modal="true"
-      class="w-full max-w-2xl"
-    >
-      <ChartForm :chart="editingChart" @save="handleSave" @cancel="showFormDialog = false" />
-    </Dialog>
+          <PageLoading v-if="loading" />
 
-    <Dialog
-      v-model:visible="showDetailDialog"
-      header="カルテ詳細"
-      :modal="true"
-      class="w-full max-w-3xl"
-    >
-      <template v-if="selectedChart">
-        <div class="space-y-4">
-          <div class="grid gap-4 md:grid-cols-2">
-            <div>
-              <span class="text-sm text-surface-500">顧客:</span>
-              <strong>{{ selectedChart.clientName }}</strong>
-            </div>
-            <div>
-              <span class="text-sm text-surface-500">来店日:</span>
-              {{ formatDate(selectedChart.visitDate) }}
-            </div>
-            <div>
-              <span class="text-sm text-surface-500">担当:</span> {{ selectedChart.staffName }}
-            </div>
-            <div>
-              <span class="text-sm text-surface-500">次回推奨:</span>
-              {{ selectedChart.nextVisitRecommendation ?? '-' }}
-            </div>
-          </div>
-          <div v-if="selectedChart.chiefComplaint">
-            <p class="text-sm text-surface-500">主訴・要望</p>
-            <p>{{ selectedChart.chiefComplaint }}</p>
-          </div>
-          <div v-if="selectedChart.notes">
-            <p class="text-sm text-surface-500">施術メモ</p>
-            <p>{{ selectedChart.notes }}</p>
-          </div>
-          <BeforeAfterPhoto
-            v-if="selectedChart.sections.beforeAfter"
-            :chart-id="selectedChart.id"
-            :photos="selectedChart.photos"
-            @upload="handlePhotoUpload"
-          />
+          <template v-else>
+            <ChartList
+              :charts="charts"
+              :loading="loading"
+              :total-records="totalRecords"
+              @create="openCreate"
+              @select="handleSelect"
+              @pin="handlePin"
+              @page="(e) => loadData(e.page)"
+            />
+          </template>
+
+          <Dialog
+            v-model:visible="showFormDialog"
+            :header="editingChart ? 'カルテ編集' : '新規カルテ'"
+            :modal="true"
+            class="w-full max-w-2xl"
+          >
+            <ChartForm :chart="editingChart" @save="handleSave" @cancel="showFormDialog = false" />
+          </Dialog>
+
+          <Dialog
+            v-model:visible="showDetailDialog"
+            header="カルテ詳細"
+            :modal="true"
+            class="w-full max-w-3xl"
+          >
+            <template v-if="selectedChart">
+              <div class="space-y-4">
+                <div class="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <span class="text-sm text-surface-500">顧客:</span>
+                    <strong>{{ selectedChart.clientName }}</strong>
+                  </div>
+                  <div>
+                    <span class="text-sm text-surface-500">来店日:</span>
+                    {{ formatDate(selectedChart.visitDate) }}
+                  </div>
+                  <div>
+                    <span class="text-sm text-surface-500">担当:</span> {{ selectedChart.staffName }}
+                  </div>
+                  <div>
+                    <span class="text-sm text-surface-500">次回推奨:</span>
+                    {{ selectedChart.nextVisitRecommendation ?? '-' }}
+                  </div>
+                </div>
+                <div v-if="selectedChart.chiefComplaint">
+                  <p class="text-sm text-surface-500">主訴・要望</p>
+                  <p>{{ selectedChart.chiefComplaint }}</p>
+                </div>
+                <div v-if="selectedChart.notes">
+                  <p class="text-sm text-surface-500">施術メモ</p>
+                  <p>{{ selectedChart.notes }}</p>
+                </div>
+                <BeforeAfterPhoto
+                  v-if="selectedChart.sections.beforeAfter"
+                  :chart-id="selectedChart.id"
+                  :photos="selectedChart.photos"
+                  @upload="handlePhotoUpload"
+                />
+              </div>
+            </template>
+          </Dialog>
         </div>
-      </template>
-    </Dialog>
+    </template>
   </div>
 </template>

@@ -94,3 +94,32 @@ describe('useTeamAccessGate（CMP-261124-0159 PR-F1 / AC-0159-88。403 の理由
     expect(gate.state.value).toBe('ok')
   })
 })
+
+describe('useTeamAccessGate の onOk（CMP-261124-0159 PR-F2a）', () => {
+  function mountWithOnOk(fn: () => void) {
+    return mount(defineComponent({
+      setup() {
+        const gate = useTeamAccessGate(ref('a'))
+        gate.onOk(fn)
+        return () => h('div')
+      },
+    }))
+  }
+
+  it('200 になってから 1 回だけ呼ぶ（判定中は呼ばない）', async () => {
+    mocks.getTeam.mockResolvedValue({ data: { id: 'a', numericId: 7 } })
+    const fn = vi.fn()
+    mountWithOnOk(fn)
+    expect(fn).not.toHaveBeenCalled()
+    await flushPromises()
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([403, 404, 500])('%i では呼ばない', async (status) => {
+    mocks.getTeam.mockRejectedValue({ response: { status } })
+    const fn = vi.fn()
+    mountWithOnOk(fn)
+    await flushPromises()
+    expect(fn).not.toHaveBeenCalled()
+  })
+})

@@ -16,6 +16,7 @@ const advertiserApi = useAdvertiserApi()
 const { formatDate } = useDatetime()
 
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 // クエリパラメータからキャンペーンIDを取得
 const campaignId = Number(route.query.campaignId)
 
@@ -134,149 +135,158 @@ async function handleDelete(creative: AdCreativeResponse) {
   }
 }
 
-onMounted(load)
+onGateOk(load)
 </script>
 
 <template>
   <div>
-    <!-- ヘッダー -->
-    <div class="mb-6 flex items-center justify-between">
-      <div>
-        <PageHeader :title="t('advertising.creative.title')" :back-to="`/teams/${teamSlug}/advertiser`" />
-        <p class="text-sm text-surface-500">
-          {{ t('advertising.creative.description') }}
-        </p>
-      </div>
-      <Button
-        icon="pi pi-plus"
-        :label="t('advertising.creative.create_button')"
-        @click="openCreateDialog"
-      />
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
-
-    <!-- ローディング -->
-    <div v-if="loading" class="flex justify-center py-20"><LoadingBounce /></div>
-
-    <!-- 空状態 -->
-    <div v-else-if="creatives.length === 0" class="py-20 text-center">
-      <i class="pi pi-image mb-4 text-6xl text-surface-300" />
-      <p class="text-surface-500">
-        {{ t('advertising.creative.empty') }}
-      </p>
-      <Button
-        class="mt-4"
-        icon="pi pi-plus"
-        :label="t('advertising.creative.create_button')"
-        @click="openCreateDialog"
-      />
-    </div>
-
-    <!-- クリエイティブ一覧テーブル -->
-    <DataTable v-else :value="creatives" :row-hover="true" class="w-full">
-      <Column field="title" :header="t('advertising.creative.column_title')" />
-      <Column :header="t('advertising.creative.column_status')">
-        <template #body="{ data }">
-          <Tag
-            :value="t(`advertising.creative.status.${data.status}`)"
-            :severity="statusSeverityMap[data.status] ?? 'secondary'"
-          />
-        </template>
-      </Column>
-      <Column :header="t('advertising.creative.column_destination')">
-        <template #body="{ data }">
-          <a
-            :href="data.destinationUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-primary underline"
-          >
-            {{ data.destinationUrl.length > 40 ? data.destinationUrl.slice(0, 40) + '…' : data.destinationUrl }}
-          </a>
-        </template>
-      </Column>
-      <Column :header="t('advertising.creative.column_created_at')">
-        <template #body="{ data }">
-          {{ formatDate(data.createdAt) }}
-        </template>
-      </Column>
-      <Column :header="t('advertising.creative.column_actions')">
-        <template #body="{ data }">
-          <div class="flex gap-2">
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+        <div>
+          <!-- ヘッダー -->
+          <div class="mb-6 flex items-center justify-between">
+            <div>
+              <PageHeader :title="t('advertising.creative.title')" :back-to="`/teams/${teamSlug}/advertiser`" />
+              <p class="text-sm text-surface-500">
+                {{ t('advertising.creative.description') }}
+              </p>
+            </div>
             <Button
-              v-if="data.status !== 'ENDED'"
-              icon="pi pi-pencil"
-              size="small"
-              severity="secondary"
-              text
-              @click="openEditDialog(data)"
-            />
-            <Button
-              v-if="data.status !== 'ENDED'"
-              icon="pi pi-trash"
-              size="small"
-              severity="danger"
-              text
-              @click="confirmDelete(data)"
+              icon="pi pi-plus"
+              :label="t('advertising.creative.create_button')"
+              @click="openCreateDialog"
             />
           </div>
-        </template>
-      </Column>
-    </DataTable>
 
-    <!-- 作成・編集ダイアログ -->
-    <Dialog
-      v-model:visible="showDialog"
-      :header="editingCreative ? t('advertising.creative.dialog_edit_title') : t('advertising.creative.dialog_create_title')"
-      modal
-      class="w-full max-w-lg"
-    >
-      <div class="flex flex-col gap-4">
-        <!-- タイトル -->
-        <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium">{{ t('advertising.creative.form.title_label') }}</label>
-          <InputText
-            v-model="form.title"
-            :placeholder="t('advertising.creative.form.title_placeholder')"
-            :maxlength="200"
-          />
+          <!-- ローディング -->
+          <div v-if="loading" class="flex justify-center py-20"><LoadingBounce /></div>
+
+          <!-- 空状態 -->
+          <div v-else-if="creatives.length === 0" class="py-20 text-center">
+            <i class="pi pi-image mb-4 text-6xl text-surface-300" />
+            <p class="text-surface-500">
+              {{ t('advertising.creative.empty') }}
+            </p>
+            <Button
+              class="mt-4"
+              icon="pi pi-plus"
+              :label="t('advertising.creative.create_button')"
+              @click="openCreateDialog"
+            />
+          </div>
+
+          <!-- クリエイティブ一覧テーブル -->
+          <DataTable v-else :value="creatives" :row-hover="true" class="w-full">
+            <Column field="title" :header="t('advertising.creative.column_title')" />
+            <Column :header="t('advertising.creative.column_status')">
+              <template #body="{ data }">
+                <Tag
+                  :value="t(`advertising.creative.status.${data.status}`)"
+                  :severity="statusSeverityMap[data.status] ?? 'secondary'"
+                />
+              </template>
+            </Column>
+            <Column :header="t('advertising.creative.column_destination')">
+              <template #body="{ data }">
+                <a
+                  :href="data.destinationUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-primary underline"
+                >
+                  {{ data.destinationUrl.length > 40 ? data.destinationUrl.slice(0, 40) + '…' : data.destinationUrl }}
+                </a>
+              </template>
+            </Column>
+            <Column :header="t('advertising.creative.column_created_at')">
+              <template #body="{ data }">
+                {{ formatDate(data.createdAt) }}
+              </template>
+            </Column>
+            <Column :header="t('advertising.creative.column_actions')">
+              <template #body="{ data }">
+                <div class="flex gap-2">
+                  <Button
+                    v-if="data.status !== 'ENDED'"
+                    icon="pi pi-pencil"
+                    size="small"
+                    severity="secondary"
+                    text
+                    @click="openEditDialog(data)"
+                  />
+                  <Button
+                    v-if="data.status !== 'ENDED'"
+                    icon="pi pi-trash"
+                    size="small"
+                    severity="danger"
+                    text
+                    @click="confirmDelete(data)"
+                  />
+                </div>
+              </template>
+            </Column>
+          </DataTable>
+
+          <!-- 作成・編集ダイアログ -->
+          <Dialog
+            v-model:visible="showDialog"
+            :header="editingCreative ? t('advertising.creative.dialog_edit_title') : t('advertising.creative.dialog_create_title')"
+            modal
+            class="w-full max-w-lg"
+          >
+            <div class="flex flex-col gap-4">
+              <!-- タイトル -->
+              <div class="flex flex-col gap-1">
+                <label class="text-sm font-medium">{{ t('advertising.creative.form.title_label') }}</label>
+                <InputText
+                  v-model="form.title"
+                  :placeholder="t('advertising.creative.form.title_placeholder')"
+                  :maxlength="200"
+                />
+              </div>
+
+              <!-- 画像URL -->
+              <div class="flex flex-col gap-1">
+                <label class="text-sm font-medium">{{ t('advertising.creative.form.image_url_label') }}</label>
+                <InputText
+                  v-model="form.imageUrl"
+                  :placeholder="t('advertising.creative.form.image_url_placeholder')"
+                  :maxlength="500"
+                />
+              </div>
+
+              <!-- リンク先URL -->
+              <div class="flex flex-col gap-1">
+                <label class="text-sm font-medium">{{ t('advertising.creative.form.destination_url_label') }}</label>
+                <InputText
+                  v-model="form.destinationUrl"
+                  :placeholder="t('advertising.creative.form.destination_url_placeholder')"
+                  :maxlength="500"
+                />
+              </div>
+            </div>
+
+            <template #footer>
+              <Button
+                :label="$t('button.cancel')"
+                severity="secondary"
+                text
+                @click="showDialog = false"
+              />
+              <Button
+                :label="$t('button.save')"
+                icon="pi pi-check"
+                :loading="submitting"
+                :disabled="!form.title || !form.destinationUrl"
+                @click="handleSubmit"
+              />
+            </template>
+          </Dialog>
         </div>
-
-        <!-- 画像URL -->
-        <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium">{{ t('advertising.creative.form.image_url_label') }}</label>
-          <InputText
-            v-model="form.imageUrl"
-            :placeholder="t('advertising.creative.form.image_url_placeholder')"
-            :maxlength="500"
-          />
-        </div>
-
-        <!-- リンク先URL -->
-        <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium">{{ t('advertising.creative.form.destination_url_label') }}</label>
-          <InputText
-            v-model="form.destinationUrl"
-            :placeholder="t('advertising.creative.form.destination_url_placeholder')"
-            :maxlength="500"
-          />
-        </div>
-      </div>
-
-      <template #footer>
-        <Button
-          :label="$t('button.cancel')"
-          severity="secondary"
-          text
-          @click="showDialog = false"
-        />
-        <Button
-          :label="$t('button.save')"
-          icon="pi pi-check"
-          :loading="submitting"
-          :disabled="!form.title || !form.destinationUrl"
-          @click="handleSubmit"
-        />
-      </template>
-    </Dialog>
+    </template>
   </div>
 </template>

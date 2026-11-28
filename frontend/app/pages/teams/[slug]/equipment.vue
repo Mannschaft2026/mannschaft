@@ -4,6 +4,7 @@ import type { EquipmentType } from '~/types/equipment'
 definePageMeta({ layout: 'team', middleware: 'auth' })
 const route = useRoute()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const { isAdminOrDeputy, loadPermissions } = useRoleAccess('team', teamSlug)
 const { createEquipment } = useEquipmentApi()
 const notification = useNotification()
@@ -21,7 +22,7 @@ const form = ref({
   description: '',
 })
 
-onMounted(async () => {
+onGateOk(async () => {
   try {
     await loadPermissions()
   } finally {
@@ -57,68 +58,77 @@ async function handleCreate() {
 </script>
 
 <template>
-  <PageLoading v-if="loading" />
-  <div v-else>
-    <!-- デスクトップ: サイドパネルレイアウト -->
-    <div class="flex gap-4">
-      <div class="min-w-0 flex-1">
-        <EquipmentList
-          ref="listRef"
-          scope-type="team"
-          scope-not-found-on-denied
-          :scope-id="teamSlug"
-          :can-manage="isAdminOrDeputy"
-          @create="openCreateDialog"
-        />
-      </div>
-      <!-- デスクトップのみサイドパネル表示 -->
-      <aside class="hidden w-80 shrink-0 lg:block">
-        <EquipmentTrending :team-id="teamSlug" />
-      </aside>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
-    <!-- モバイル・タブレット: 下部表示 -->
-    <div class="mt-4 lg:hidden">
-      <EquipmentTrending :team-id="teamSlug" />
-    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+        <PageLoading v-if="loading" />
+        <div v-else>
+          <!-- デスクトップ: サイドパネルレイアウト -->
+          <div class="flex gap-4">
+            <div class="min-w-0 flex-1">
+              <EquipmentList
+                ref="listRef"
+                scope-type="team"
+                scope-not-found-on-denied
+                :scope-id="teamSlug"
+                :can-manage="isAdminOrDeputy"
+                @create="openCreateDialog"
+              />
+            </div>
+            <!-- デスクトップのみサイドパネル表示 -->
+            <aside class="hidden w-80 shrink-0 lg:block">
+              <EquipmentTrending :team-id="teamSlug" />
+            </aside>
+          </div>
+          <!-- モバイル・タブレット: 下部表示 -->
+          <div class="mt-4 lg:hidden">
+            <EquipmentTrending :team-id="teamSlug" />
+          </div>
 
-    <Dialog v-model:visible="showCreateDialog" modal header="備品を登録" :style="{ width: '28rem' }">
-      <div class="flex flex-col gap-4 py-2">
-        <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium">備品名 <span class="text-red-500">*</span></label>
-          <InputText v-model="form.name" placeholder="例: サッカーボール" class="w-full" />
+          <Dialog v-model:visible="showCreateDialog" modal header="備品を登録" :style="{ width: '28rem' }">
+            <div class="flex flex-col gap-4 py-2">
+              <div class="flex flex-col gap-1">
+                <label class="text-sm font-medium">備品名 <span class="text-red-500">*</span></label>
+                <InputText v-model="form.name" placeholder="例: サッカーボール" class="w-full" />
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="flex flex-col gap-1">
+                  <label class="text-sm font-medium">数量 <span class="text-red-500">*</span></label>
+                  <InputNumber v-model="form.quantity" :min="1" class="w-full" />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-sm font-medium">種別</label>
+                  <Select
+                    v-model="form.equipmentType"
+                    :options="[
+                      { label: '再利用可能', value: 'REUSABLE' },
+                      { label: '消耗品', value: 'CONSUMABLE' },
+                    ]"
+                    option-label="label"
+                    option-value="value"
+                    class="w-full"
+                  />
+                </div>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-sm font-medium">カテゴリ</label>
+                <InputText v-model="form.category" placeholder="例: ボール類" class="w-full" />
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-sm font-medium">説明</label>
+                <Textarea v-model="form.description" rows="2" class="w-full" />
+              </div>
+            </div>
+            <template #footer>
+              <Button label="キャンセル" text :disabled="saving" @click="showCreateDialog = false" />
+              <Button label="登録" icon="pi pi-check" :loading="saving" @click="handleCreate" />
+            </template>
+          </Dialog>
         </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium">数量 <span class="text-red-500">*</span></label>
-            <InputNumber v-model="form.quantity" :min="1" class="w-full" />
-          </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium">種別</label>
-            <Select
-              v-model="form.equipmentType"
-              :options="[
-                { label: '再利用可能', value: 'REUSABLE' },
-                { label: '消耗品', value: 'CONSUMABLE' },
-              ]"
-              option-label="label"
-              option-value="value"
-              class="w-full"
-            />
-          </div>
-        </div>
-        <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium">カテゴリ</label>
-          <InputText v-model="form.category" placeholder="例: ボール類" class="w-full" />
-        </div>
-        <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium">説明</label>
-          <Textarea v-model="form.description" rows="2" class="w-full" />
-        </div>
-      </div>
-      <template #footer>
-        <Button label="キャンセル" text :disabled="saving" @click="showCreateDialog = false" />
-        <Button label="登録" icon="pi pi-check" :loading="saving" @click="handleCreate" />
-      </template>
-    </Dialog>
+    </template>
   </div>
 </template>

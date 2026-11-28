@@ -14,6 +14,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 const route = useRoute()
 const router = useRouter()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const campaignId = String(route.params.campaignId)
 // F09.17 Phase 11-d-4: チーム配下ページは scope='TEAM' 固定で composable を呼ぶ。
 const scopeType: ScopeType = 'TEAM'
@@ -128,209 +129,218 @@ const isApproved = computed(() => campaign.value?.status === 'APPROVED')
 const isDelivering = computed(() => campaign.value?.status === 'DELIVERING')
 const isPaused = computed(() => campaign.value?.status === 'PAUSED')
 
-onMounted(load)
+onGateOk(load)
 </script>
 
 <template>
   <div>
-    <div class="mb-4 flex items-center justify-between">
-      <NuxtLink :to="`/teams/${teamSlug}/advertiser/messaging-campaigns`" class="text-sm text-primary hover:underline">
-        <i class="pi pi-arrow-left mr-1" />{{ t('advertising.pages.advertiser_campaign_list.title') }}
-      </NuxtLink>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
-
-    <div v-if="loading" class="flex justify-center py-20"><LoadingBounce /></div>
-
-    <div v-else-if="campaign">
-      <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
         <div>
-          <PageHeader :title="campaign.name" />
-          <Tag
-            class="mt-1"
-            :value="statusLabel(campaign.status)"
-            :severity="statusSeverityMap[campaign.status]"
-          />
-          <Tag
-            class="ml-1 mt-1"
-            :value="t(`advertising.moderation_status.${campaign.moderationStatus.toLowerCase()}`)"
-            severity="secondary"
-          />
-        </div>
+          <div class="mb-4 flex items-center justify-between">
+            <NuxtLink :to="`/teams/${teamSlug}/advertiser/messaging-campaigns`" class="text-sm text-primary hover:underline">
+              <i class="pi pi-arrow-left mr-1" />{{ t('advertising.pages.advertiser_campaign_list.title') }}
+            </NuxtLink>
+          </div>
 
-        <!-- 状態遷移アクション -->
-        <div class="flex flex-wrap gap-2">
-          <Button
-            v-if="isDraft"
-            icon="pi pi-send"
-            :label="t('advertising.actions.submit')"
-            :loading="transitioning"
-            severity="primary"
-            @click="runTransition('submit', 'submit')"
-          />
-          <Button
-            v-if="isDraft || isReview"
-            icon="pi pi-ban"
-            :label="t('advertising.actions.cancel')"
-            :loading="transitioning"
-            severity="secondary"
-            @click="runTransition('cancel', 'cancel')"
-          />
-          <Button
-            v-if="isApproved"
-            icon="pi pi-play"
-            :label="t('advertising.actions.launch')"
-            :loading="transitioning"
-            severity="success"
-            @click="runTransition('launch', 'launch')"
-          />
-          <Button
-            v-if="isDelivering"
-            icon="pi pi-pause"
-            :label="t('advertising.actions.pause')"
-            :loading="transitioning"
-            severity="warn"
-            @click="runTransition('pause', 'pause')"
-          />
-          <Button
-            v-if="isPaused"
-            icon="pi pi-play"
-            :label="t('advertising.actions.resume')"
-            :loading="transitioning"
-            severity="success"
-            @click="runTransition('resume', 'resume')"
-          />
-          <Button
-            v-if="isDraft"
-            icon="pi pi-trash"
-            :label="t('advertising.actions.delete')"
-            severity="danger"
-            outlined
-            @click="deleteCampaign"
-          />
-        </div>
-      </div>
+          <div v-if="loading" class="flex justify-center py-20"><LoadingBounce /></div>
 
-      <!-- 警告: BLOCKED 理由 -->
-      <Message v-if="campaign.blockedReason" severity="error" :closable="false" class="mb-4">
-        {{ campaign.blockedReason }}
-      </Message>
-
-      <!-- タブ -->
-      <Tabs v-model:value="activeTab">
-        <TabList>
-          <Tab value="overview">{{ t('advertising.advertiser_crud.detail_tab.overview') }}</Tab>
-          <Tab value="channels">{{ t('advertising.advertiser_crud.detail_tab.channels') }}</Tab>
-          <Tab value="audience">{{ t('advertising.advertiser_crud.detail_tab.audience') }}</Tab>
-          <Tab value="moderation">{{ t('advertising.advertiser_crud.detail_tab.moderation') }}</Tab>
-        </TabList>
-        <TabPanels>
-          <!-- Overview -->
-          <TabPanel value="overview">
-            <SectionCard>
-              <dl class="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
-                <div>
-                  <dt class="text-surface-500">{{ t('advertising.advertiser_crud.form.total_budget') }}</dt>
-                  <dd class="text-lg font-bold">¥{{ campaign.totalBudgetYen.toLocaleString() }}</dd>
-                </div>
-                <div>
-                  <dt class="text-surface-500">{{ t('advertising.advertiser_crud.list_table.consumed_budget') }}</dt>
-                  <dd class="text-lg font-bold">¥{{ campaign.consumedBudgetYen.toLocaleString() }}</dd>
-                </div>
-                <div>
-                  <dt class="text-surface-500">{{ t('advertising.advertiser_crud.form.starts_at') }}</dt>
-                  <dd>{{ campaign.startsAt }}</dd>
-                </div>
-                <div>
-                  <dt class="text-surface-500">{{ t('advertising.advertiser_crud.form.ends_at') }}</dt>
-                  <dd>{{ campaign.endsAt }}</dd>
-                </div>
-                <div>
-                  <dt class="text-surface-500">{{ t('advertising.advertiser_crud.form.scheduled_timezone') }}</dt>
-                  <dd>{{ campaign.scheduledTimezone }}</dd>
-                </div>
-                <div v-if="campaign.frequencyCapOverride != null">
-                  <dt class="text-surface-500">{{ t('advertising.advertiser_crud.form.frequency_cap_override') }}</dt>
-                  <dd>{{ campaign.frequencyCapOverride }}</dd>
-                </div>
-              </dl>
-            </SectionCard>
-
-            <!-- Preview -->
-            <div class="mt-4">
-              <div class="mb-2 text-right">
-                <Button
-                  icon="pi pi-sync"
-                  :label="t('advertising.advertiser_crud.preview.fetch')"
-                  size="small"
+          <div v-else-if="campaign">
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <PageHeader :title="campaign.name" />
+                <Tag
+                  class="mt-1"
+                  :value="statusLabel(campaign.status)"
+                  :severity="statusSeverityMap[campaign.status]"
+                />
+                <Tag
+                  class="ml-1 mt-1"
+                  :value="t(`advertising.moderation_status.${campaign.moderationStatus.toLowerCase()}`)"
                   severity="secondary"
-                  outlined
-                  :loading="previewLoading"
-                  @click="fetchPreview"
                 />
               </div>
-              <AdPreviewCard :preview="preview" :loading="previewLoading" />
-            </div>
-          </TabPanel>
 
-          <!-- Channels -->
-          <TabPanel value="channels">
-            <div v-if="campaign.channels.length === 0" class="py-6 text-center text-surface-500">
-              {{ t('advertising.pages.advertiser_campaign_detail.no_channels') }}
+              <!-- 状態遷移アクション -->
+              <div class="flex flex-wrap gap-2">
+                <Button
+                  v-if="isDraft"
+                  icon="pi pi-send"
+                  :label="t('advertising.actions.submit')"
+                  :loading="transitioning"
+                  severity="primary"
+                  @click="runTransition('submit', 'submit')"
+                />
+                <Button
+                  v-if="isDraft || isReview"
+                  icon="pi pi-ban"
+                  :label="t('advertising.actions.cancel')"
+                  :loading="transitioning"
+                  severity="secondary"
+                  @click="runTransition('cancel', 'cancel')"
+                />
+                <Button
+                  v-if="isApproved"
+                  icon="pi pi-play"
+                  :label="t('advertising.actions.launch')"
+                  :loading="transitioning"
+                  severity="success"
+                  @click="runTransition('launch', 'launch')"
+                />
+                <Button
+                  v-if="isDelivering"
+                  icon="pi pi-pause"
+                  :label="t('advertising.actions.pause')"
+                  :loading="transitioning"
+                  severity="warn"
+                  @click="runTransition('pause', 'pause')"
+                />
+                <Button
+                  v-if="isPaused"
+                  icon="pi pi-play"
+                  :label="t('advertising.actions.resume')"
+                  :loading="transitioning"
+                  severity="success"
+                  @click="runTransition('resume', 'resume')"
+                />
+                <Button
+                  v-if="isDraft"
+                  icon="pi pi-trash"
+                  :label="t('advertising.actions.delete')"
+                  severity="danger"
+                  outlined
+                  @click="deleteCampaign"
+                />
+              </div>
             </div>
-            <div v-else class="space-y-3">
-              <SectionCard
-                v-for="ch in campaign.channels"
-                :key="ch.id"
-              >
-                <template #header>
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <Tag :value="t(`advertising.channel.${ch.channelType.toLowerCase()}`)" />
-                      <span class="ml-2 text-sm text-surface-500">{{ ch.locale }}</span>
+
+            <!-- 警告: BLOCKED 理由 -->
+            <Message v-if="campaign.blockedReason" severity="error" :closable="false" class="mb-4">
+              {{ campaign.blockedReason }}
+            </Message>
+
+            <!-- タブ -->
+            <Tabs v-model:value="activeTab">
+              <TabList>
+                <Tab value="overview">{{ t('advertising.advertiser_crud.detail_tab.overview') }}</Tab>
+                <Tab value="channels">{{ t('advertising.advertiser_crud.detail_tab.channels') }}</Tab>
+                <Tab value="audience">{{ t('advertising.advertiser_crud.detail_tab.audience') }}</Tab>
+                <Tab value="moderation">{{ t('advertising.advertiser_crud.detail_tab.moderation') }}</Tab>
+              </TabList>
+              <TabPanels>
+                <!-- Overview -->
+                <TabPanel value="overview">
+                  <SectionCard>
+                    <dl class="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+                      <div>
+                        <dt class="text-surface-500">{{ t('advertising.advertiser_crud.form.total_budget') }}</dt>
+                        <dd class="text-lg font-bold">¥{{ campaign.totalBudgetYen.toLocaleString() }}</dd>
+                      </div>
+                      <div>
+                        <dt class="text-surface-500">{{ t('advertising.advertiser_crud.list_table.consumed_budget') }}</dt>
+                        <dd class="text-lg font-bold">¥{{ campaign.consumedBudgetYen.toLocaleString() }}</dd>
+                      </div>
+                      <div>
+                        <dt class="text-surface-500">{{ t('advertising.advertiser_crud.form.starts_at') }}</dt>
+                        <dd>{{ campaign.startsAt }}</dd>
+                      </div>
+                      <div>
+                        <dt class="text-surface-500">{{ t('advertising.advertiser_crud.form.ends_at') }}</dt>
+                        <dd>{{ campaign.endsAt }}</dd>
+                      </div>
+                      <div>
+                        <dt class="text-surface-500">{{ t('advertising.advertiser_crud.form.scheduled_timezone') }}</dt>
+                        <dd>{{ campaign.scheduledTimezone }}</dd>
+                      </div>
+                      <div v-if="campaign.frequencyCapOverride != null">
+                        <dt class="text-surface-500">{{ t('advertising.advertiser_crud.form.frequency_cap_override') }}</dt>
+                        <dd>{{ campaign.frequencyCapOverride }}</dd>
+                      </div>
+                    </dl>
+                  </SectionCard>
+
+                  <!-- Preview -->
+                  <div class="mt-4">
+                    <div class="mb-2 text-right">
+                      <Button
+                        icon="pi pi-sync"
+                        :label="t('advertising.advertiser_crud.preview.fetch')"
+                        size="small"
+                        severity="secondary"
+                        outlined
+                        :loading="previewLoading"
+                        @click="fetchPreview"
+                      />
                     </div>
+                    <AdPreviewCard :preview="preview" :loading="previewLoading" />
                   </div>
-                </template>
-                <p v-if="ch.subject" class="mb-2 font-semibold">{{ ch.subject }}</p>
-                <pre class="whitespace-pre-wrap rounded bg-surface-50 p-3 text-sm dark:bg-surface-700">{{ ch.bodyMarkdown }}</pre>
-                <div v-if="ch.ctaLabel" class="mt-2 text-sm">
-                  CTA: {{ ch.ctaLabel }}
-                  <a v-if="ch.ctaUrl" :href="ch.ctaUrl" target="_blank" rel="noopener" class="ml-2 text-primary hover:underline">{{ ch.ctaUrl }}</a>
-                </div>
-              </SectionCard>
-            </div>
-          </TabPanel>
+                </TabPanel>
 
-          <!-- Audience -->
-          <TabPanel value="audience">
-            <div v-if="campaign.audienceSegments.length === 0" class="py-6 text-center text-surface-500">
-              {{ t('advertising.pages.advertiser_campaign_detail.no_segments') }}
-            </div>
-            <SectionCard v-else>
-              <ul class="space-y-2">
-                <li
-                  v-for="seg in campaign.audienceSegments"
-                  :key="seg.id"
-                  class="flex items-center gap-2 text-sm"
-                >
-                  <Tag
-                    :value="t(`advertising.inclusion_mode.${seg.inclusionMode.toLowerCase()}`)"
-                    :severity="seg.inclusionMode === 'INCLUDE' ? 'success' : 'danger'"
-                  />
-                  <span class="font-medium">{{ t(`advertising.segment_type.${seg.segmentType.toLowerCase()}`) }}</span>
-                  <code class="rounded bg-surface-100 px-2 py-0.5 text-xs dark:bg-surface-700">{{ JSON.stringify(seg.segmentValue) }}</code>
-                </li>
-              </ul>
-            </SectionCard>
-          </TabPanel>
+                <!-- Channels -->
+                <TabPanel value="channels">
+                  <div v-if="campaign.channels.length === 0" class="py-6 text-center text-surface-500">
+                    {{ t('advertising.pages.advertiser_campaign_detail.no_channels') }}
+                  </div>
+                  <div v-else class="space-y-3">
+                    <SectionCard
+                      v-for="ch in campaign.channels"
+                      :key="ch.id"
+                    >
+                      <template #header>
+                        <div class="flex items-center justify-between">
+                          <div>
+                            <Tag :value="t(`advertising.channel.${ch.channelType.toLowerCase()}`)" />
+                            <span class="ml-2 text-sm text-surface-500">{{ ch.locale }}</span>
+                          </div>
+                        </div>
+                      </template>
+                      <p v-if="ch.subject" class="mb-2 font-semibold">{{ ch.subject }}</p>
+                      <pre class="whitespace-pre-wrap rounded bg-surface-50 p-3 text-sm dark:bg-surface-700">{{ ch.bodyMarkdown }}</pre>
+                      <div v-if="ch.ctaLabel" class="mt-2 text-sm">
+                        CTA: {{ ch.ctaLabel }}
+                        <a v-if="ch.ctaUrl" :href="ch.ctaUrl" target="_blank" rel="noopener" class="ml-2 text-primary hover:underline">{{ ch.ctaUrl }}</a>
+                      </div>
+                    </SectionCard>
+                  </div>
+                </TabPanel>
 
-          <!-- Moderation -->
-          <TabPanel value="moderation">
-            <div class="py-6 text-center text-surface-500">
-              {{ t('advertising.advertiser_crud.detail_empty.moderation_logs') }}
-            </div>
-          </TabPanel>
-        </TabPanels>
-      </Tabs>
-    </div>
+                <!-- Audience -->
+                <TabPanel value="audience">
+                  <div v-if="campaign.audienceSegments.length === 0" class="py-6 text-center text-surface-500">
+                    {{ t('advertising.pages.advertiser_campaign_detail.no_segments') }}
+                  </div>
+                  <SectionCard v-else>
+                    <ul class="space-y-2">
+                      <li
+                        v-for="seg in campaign.audienceSegments"
+                        :key="seg.id"
+                        class="flex items-center gap-2 text-sm"
+                      >
+                        <Tag
+                          :value="t(`advertising.inclusion_mode.${seg.inclusionMode.toLowerCase()}`)"
+                          :severity="seg.inclusionMode === 'INCLUDE' ? 'success' : 'danger'"
+                        />
+                        <span class="font-medium">{{ t(`advertising.segment_type.${seg.segmentType.toLowerCase()}`) }}</span>
+                        <code class="rounded bg-surface-100 px-2 py-0.5 text-xs dark:bg-surface-700">{{ JSON.stringify(seg.segmentValue) }}</code>
+                      </li>
+                    </ul>
+                  </SectionCard>
+                </TabPanel>
+
+                <!-- Moderation -->
+                <TabPanel value="moderation">
+                  <div class="py-6 text-center text-surface-500">
+                    {{ t('advertising.advertiser_crud.detail_empty.moderation_logs') }}
+                  </div>
+                </TabPanel>
+              </TabPanels>
+            </Tabs>
+          </div>
+        </div>
+    </template>
   </div>
 </template>
