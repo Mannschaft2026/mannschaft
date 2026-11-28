@@ -601,7 +601,7 @@ config → 業務の import 41 件は、Spring 設定が業務の Bean を直接
 
 ### 7.7 共有ファイルの衝突規約
 
-- **台帳（`docs/task-list/YYYY-MM.md`）**: 子 CMP の起票は ID の月のファイルの表の末尾に追記し、無ければ作る（CLAUDE.md の台帳運用）。他セッションの末尾追記と衝突した場合は、**双方の行を残して**（自分の行を相手の行の後ろへ置き）merge して push し直す。列数は `awk -F'|'` で NF を数えて既存行と一致を確認する。
+- **台帳（`docs/task-list/YYYY-MM.md`＋申告 `docs/task-list/changes/`）**: 子 CMP の起票は `node scripts/task-list-ledger.mjs add "<7列行>"` で申告を作る（CLAUDE.md の台帳運用。月別ファイルは直接編集しない）。申告は PR ごとに別ファイルなので他セッションの起票と衝突しない。ID の重複・base の食い違い（fork・孤児）は構造検査が赤にするので、後から入る側が新しい ID で add し直すか `node scripts/task-list-ledger.mjs rebase <申告ファイル>` で直す。列数は CLI が7列を検査する。
 - **`docs/openapi.json`**: 各ロットは、**自ロットの変更の前と後で** `npm run generate:types` の入力になる openapi.json を同じ手順で再生成し、両者を比較して差分ゼロを確かめる（main のドリフトや手編集との混同を避けるため、main の既存ファイルとではなく、自分で生成した前後を比べる）。L1-M は §10 の管理2 API と専用 schema の追加だけを限定例外とし、新入口を `@Hidden` で隠さず、既存 paths / schemas・応答・エラー・認可の不変を自生成前後で照合する。比較結果を PR 本文に書く。差分が出たら原因を直し、直せなければロットを止めて上奏する。
 - **`shard-weights.properties` と `verifyShardCoverage`**: 実在パスは `backend/src/test/resources/shard-weights.properties`（`git ls-files | grep shard-weights` で確認）。新規テストを足したロットは重み表を更新しない（重み表に無いクラスはハッシュで必ず1 shard に割り当たる。`build.gradle.kts:597-610`）。重み表の再生成（`backend/scripts/regen-shard-weights.sh`）は L-SHIME が締めのついでに行い、テストタスクの構成を変える L1-B / L3-* はその PR で再生成する。
 - **凍結ストア**: 実在パスは `backend/src/test/resources/archunit_store/`（`git ls-files | grep archunit_store` で確認）。扱いは §7.4。
@@ -712,7 +712,7 @@ flowchart LR
 | 14 | Gradle 卒業（`:kernel`・パイロット・束） | L3-0・L3-P・L3 |
 | 15 | 暫定core の循環解消と終結 | L4・L5 |
 
-- 子 CMP は、そのレーンに最初に着手するセッションが着手時に `TZ=Asia/Tokyo date '+%y%m%d-%H%M'` で採番し、`docs/task-list/YYYY-MM.md`（ID の月のファイル）の**表の末尾**に起票する（無ければ作る）（worktree + PR）。
+- 子 CMP は、そのレーンに最初に着手するセッションが着手時に `TZ=Asia/Tokyo date '+%y%m%d-%H%M'` で採番し、`node scripts/task-list-ledger.mjs add "<7列行>"` で申告（`docs/task-list/changes/`）として起票する（月別ファイル `docs/task-list/YYYY-MM.md` は直接編集しない）（worktree + PR）。
 - 子 CMP 行の書き方: 戦役列は「CMP-261021-0017 子: <単位名>」、依存列に `CMP-261021-0017` と依存する子 CMP、完了条件に §8.4 の雛形（L2 の波は対象ロットの一覧を含める）、証拠列に PR 番号と親 Issue のチェックリストへのリンク。
 - 既存の CMP-260918-1406・CMP-260930-2126 は採番し直さず、親 Issue のチェックリストで対応づける。
 

@@ -119,16 +119,54 @@ test('GraphQL 取得: changes/ のネスト・.md 以外は readLedger の問題
   assert.deepEqual(ledger.changes.problems.map((p) => p.kind).sort(), ['entry', 'entry']);
 });
 
-test('等式判定: 月別ファイルを変えた PR の作者が bot でなければ notice に作者と bot 名を含める。bot なら含めない', async () => {
+test('P2-4 互換期間（enforceDirectEdit: false）: 月別ファイルを変えた PR の作者が bot でなければ notice に作者と bot 名を含める（違反にしない）。bot なら含めない', async () => {
   const mb = await readLedger(memoryLedgerReader(base));
   const head = await readLedger(memoryLedgerReader({ ...base, 'docs/task-list/2026-11.md': month(row(T, '完了')) }));
   assert.deepEqual(changedMonthFiles(mb, head), ['docs/task-list/2026-11.md']);
-  const human = evaluateLedgerChanges({ mergeBase: mb, base: mb, head, pull: { user: { login: 'kenta', type: 'User' } } });
+  const human = evaluateLedgerChanges({ mergeBase: mb, base: mb, head, pull: { user: { login: 'kenta', type: 'User' } }, enforceDirectEdit: false });
   assert.deepEqual(human.violations, []);
   assert.ok(human.notices.some((m) => m.includes('kenta') && m.includes('mannschaft-ledger-bot[bot] でない')), human.notices.join('\n'));
-  const bot = evaluateLedgerChanges({ mergeBase: mb, base: mb, head, pull: { user: { login: LEDGER_BOT_LOGIN, type: 'Bot' } } });
+  const bot = evaluateLedgerChanges({ mergeBase: mb, base: mb, head, pull: { user: { login: LEDGER_BOT_LOGIN, type: 'Bot' } }, enforceDirectEdit: false });
   assert.ok(!bot.notices.some((m) => m.includes('でない')));
   assert.equal(bot.botAuthor, true);
+});
+
+test('P2-4 施行後（既定）: 同じ旧手順 PR（月別ファイルの直接編集）は作者が bot でなければ赤で、申告 CLI と自動修復を案内する', async () => {
+  const mb = await readLedger(memoryLedgerReader(base));
+  const head = await readLedger(memoryLedgerReader({ ...base, 'docs/task-list/2026-11.md': month(row(T, '完了')) }));
+  const human = evaluateLedgerChanges({ mergeBase: mb, base: mb, head, pull: { user: { login: 'kenta', type: 'User' } } });
+  assert.ok(human.violations.length > 0);
+  const text = human.violations.join('\n');
+  assert.match(text, /direct-edit/);
+  assert.match(text, /kenta/);
+  assert.match(text, /node scripts\/task-list-ledger\.mjs add/);
+  assert.match(text, /node scripts\/task-list-ledger\.mjs update/);
+  assert.match(text, /自動修復/);
+  assert.deepEqual(human.notices.filter((m) => /direct-edit|でない/.test(m)), [], '施行後は警告に回さない');
+  // bot でも等式が崩れる月別編集（不正な畳み込み）は赤
+  const bot = evaluateLedgerChanges({ mergeBase: mb, base: mb, head, pull: { user: { login: LEDGER_BOT_LOGIN, type: 'Bot' } } });
+  assert.ok(bot.violations.some((m) => /direct-edit/.test(m)), bot.violations.join('\n'));
+});
+
+test('P2-4 施行後: 実効台帳が変わらない月別ファイルの編集（行の並べ替え）でも、作者が bot でなければ赤', async () => {
+  const P = row('CMP-261101-0000', '完了');
+  const mb = await readLedger(memoryLedgerReader({ ...base, 'docs/task-list/2026-11.md': month(P, A) }));
+  const head = await readLedger(memoryLedgerReader({ ...base, 'docs/task-list/2026-11.md': month(A, P) }));
+  const human = evaluateLedgerChanges({ mergeBase: mb, base: mb, head, pull: { user: { login: 'kenta', type: 'User' } } });
+  assert.ok(human.violations.some((m) => /direct-edit/.test(m) && m.includes('docs/task-list/2026-11.md')), human.violations.join('\n'));
+  const bot = evaluateLedgerChanges({ mergeBase: mb, base: mb, head, pull: { user: { login: LEDGER_BOT_LOGIN, type: 'Bot' } } });
+  assert.deepEqual(bot.violations, []);
+});
+
+test('P2-4 施行後: 申告の追加だけの PR（人）と bot の正しい畳み込みは緑のまま', async () => {
+  const n = cname(T, '20261127T010000Z');
+  const mb = await readLedger(memoryLedgerReader(base));
+  const withChange = await readLedger(memoryLedgerReader({ ...base, [n]: upd(A, row(T, 'P2 実装中（④）'), T) }));
+  assert.deepEqual(evaluateLedgerChanges({ mergeBase: mb, base: mb, head: withChange, pull: { user: { login: 'kenta', type: 'User' } } }).violations, []);
+  const folded = await readLedger(memoryLedgerReader({ ...base, 'docs/task-list/2026-11.md': month(row(T, 'P2 実装中（④）')) }));
+  const fold = evaluateLedgerChanges({ mergeBase: withChange, base: withChange, head: folded, pull: { user: { login: LEDGER_BOT_LOGIN, type: 'Bot' } } });
+  assert.deepEqual(fold.violations, []);
+  assert.equal(fold.fold, true);
 });
 
 // AC-9: 完了 update 申告は証拠 JSON 無しで赤・有りで緑（completion-evidence に実効台帳を渡す）。畳み込みでは選定0件。

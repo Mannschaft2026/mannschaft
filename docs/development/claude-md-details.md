@@ -12,12 +12,13 @@
 
 ## 3. 台帳 `docs/task-list.md` の編集規則の細目
 
-要点は `CLAUDE.md`「台帳 `docs/task-list.md` の扱い」。台帳は索引 `docs/task-list.md`（前置き・規約のみ）＋月別 `docs/task-list/YYYY-MM.md`（ID の YYMM の月）＋ `docs/task-list/legacy.md`（旧形式 ID）の構成（CMP-261124-1222 で月別へ移行。旧配置は1ファイルの末尾追記が全 PR の衝突点だった）。
+要点は `CLAUDE.md`「台帳 `docs/task-list.md` の扱い」。台帳は索引 `docs/task-list.md`（前置き・規約のみ）＋月別 `docs/task-list/YYYY-MM.md`（ID の YYMM の月）＋ `docs/task-list/legacy.md`（旧形式 ID）の構成（CMP-261124-1222 で月別へ移行。旧配置は1ファイルの末尾追記が全 PR の衝突点だった）。さらに CMP-261124-1222 ④ で、行の追加・更新は月別ファイルを直接編集せず変更申告 `docs/task-list/changes/` で行う形へ移した（月別ファイルへの末尾追記どうしも merge queue では必ず衝突・脱落したため）。
 
 - **worktree + PR で扱う理由**: 本陣の作業木は全セッションで共有されており、そこでの編集は隔離されない。別セッションが自分の版を先に commit すると、git の競合すら起こさずに自分の編集が消える（2026-08-14、CMP-028 の完了記録が実際にこの経路で消失した）。
 - **採番手順**: ID は日時形式 `CMP-YYMMDD-HHMM`（JST）。`date '+%y%m%d-%H%M'` で生成し（例: `CMP-260819-2131`）そのまま使う。`git fetch` して最大番号を調べる手順は不要で、採番の衝突は原理的に起きない。旧・連番形式（`CMP-001`〜）の行はそのまま残すため台帳には両形式が共存する（既存行の ID は書き換えない）。
 - **方式を変えた理由**: 旧方式（`origin/main` 上の最大 CMP 番号 +1）は、採番からマージまでの時間差の間に並行セッションが同じ番号を取るため衝突が常態化していた。2026-08-19 には1行の追加に対して採番を3度やり直した（CMP-050 → 102 → 110。いずれも待っている間に他セッションに取られた）。
-- **末尾追記の理由**（追記先は ID の月のファイル `docs/task-list/YYYY-MM.md` の末尾。無ければ見出し＋7列表ヘッダで作る。索引には CMP 行を置かない）: 直前に触った行の近くへ挿入すると、同じ ID が別々の位置に入っても git が競合として検知できず、重複したまま静かに main へ入りうる。末尾追記に統一すれば同じ月ファイルへの同時追加は必ず競合として止まる（月が違えば別ファイルで衝突しない）。重複したまま main へ入ることは番人 `TaskListCmpIdDuplicateGuardTest`（`backend/src/test/java/com/mannschaft/app/common/architecture/`）が CI で検出する（新旧両形式に対応）。重複が検出された場合は、後から merge された側が採番し直す。
+- **変更申告にした理由**（追加は `node scripts/task-list-ledger.mjs add "<7列行>"`、更新は `update <CMP-ID> --set <列名>=<値>`。索引には CMP 行を置かない）: GitHub のサーバー側マージ（merge queue を含む）は `.gitattributes` の `merge=union` を尊重しないため、月別ファイルへ行を足す PR どうしは queue で必ず衝突し脱落していた。申告は PR ごとに別ファイル（`<CMP-ID>--<UTC>--<6桁乱数>.md`）なので衝突しない。台帳 bot の App で main へ直 push する案は、直 push のたびに merge queue の全 group が組み直されるおそれがあり採らなかった。月別ファイルへの反映は台帳 bot の畳み込み PR（`task-list-fold.yml`）だけが行い、人や足軽が月別ファイル・索引を直接編集すると PR ゲートと merge_group ゲートが赤にする（段3 から。旧手順の PR は台帳の自動修復が申告へ変換する）。
+- **重複・食い違いの扱い**: 同じ ID への add は重複、同じ base からの update 2件は fork、base が実効行と合わない update は孤児で、いずれも構造検査・番人 `TaskListCmpIdDuplicateGuardTest`（`backend/src/test/java/com/mannschaft/app/common/architecture/`。新旧両形式・申告適用後）が CI で検出する。後から merge される側が直す: 孤児・fork は `node scripts/task-list-ledger.mjs rebase <申告ファイル>` で base を現在の実効行に取り直し（git の rebase ではない。内容が main 側の更新を消していないかは作者が確かめる）、ID の重複は新しい ID を採って add し直す。月別ファイル内の行の並びに意味は無い（実効台帳は ID→行 の対応で比べる）。
 - **7列**: ID / 戦役 / 状態 / 依存 / 完了条件 / 証拠(PR/テスト) / 台帳。補足事項は新しい列を増やさず既存列（多くは「証拠(PR/テスト)」）へ畳み込む。セル内で本物の `|` を使う場合は `\|` へエスケープする（コードスパン内でも必要。GFM の表仕様ではコードスパン内の未エスケープ `|` も列区切りとして扱われる）。列数のズレは同じ番人クラスの `cmpIdの行は列数が7である()` が CI で検出する。
 - **優先度**: 未完の行は状態セルの先頭に `P1`〜`P5` を必須とする（例: `P1 未着手`。完了・取り下げの行は不要。付け忘れは番人が CI で検出する）。基準は利用者への被害の大きさ: P1 認可漏れ・情報漏えい・データ破損/消失・課金誤り / P2 主要機能が動かない・到達不能 / P3 機能の不備・誤表示（回避策あり） / P4 技術負債・番人・性能・基盤・CI / P5 軽微な見た目・将来構想・調査メモ。P1 から順に片付ける。詳細は `docs/task-list.md` 冒頭「優先度」節。
 

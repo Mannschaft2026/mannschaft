@@ -11,8 +11,8 @@ Mannschaft の「タスクの地図」は二層で構成する。
 
 ### 更新タイミング
 
-1. **戦役の開始時**（`/軍議` で御裁可が下りたタイミング）— 新しい行を、ID の月のファイル `docs/task-list/YYYY-MM.md` の末尾に追加する（無ければ作る）。
-2. **`/検分`・マージ時** — 該当行の「状態」「証拠(PR/テスト)」を更新する。
+1. **戦役の開始時**（`/軍議` で御裁可が下りたタイミング）— 新しい行を **申告で追加する**: `node scripts/task-list-ledger.mjs add "| CMP-YYMMDD-HHMM | 戦役 | P3 未着手 | … |"`（7列行を1つ渡す。`docs/task-list/changes/` に申告ファイルが1つできるので、それをコミットする）。
+2. **`/検分`・マージ時** — 該当行の「状態」「証拠(PR/テスト)」を **申告で更新する**: `node scripts/task-list-ledger.mjs update <CMP-ID> --set 状態="P2 実装中" --set 証拠="…"`（列名は ID / 戦役 / 状態 / 依存 / 完了条件 / 証拠(PR/テスト)〔別名 証拠〕/ 台帳）。
 3. **戦役が完全に完了したら** — 状態を「完了」にして、行はその月のファイルに残す（移動も削除もしない。横断の履歴として残す。旧「完了アーカイブ」節は月別移行で廃止した）。
 4. **作業中に新しい問題を発見したら** — 既存行への追記でごまかさず、**必ず新しい行として登録する**。発見の経緯がわからなくなるため。
 
@@ -22,7 +22,12 @@ Mannschaft の「タスクの地図」は二層で構成する。
 
 旧方式（`origin/main` 上の最大 CMP 番号 +1）は、採番からマージまでの時間差の間に並行セッションが同じ番号を取るため衝突が常態化していた（2026-08-19 には1行の追加に対して採番を3度やり直した）。**旧・連番形式（`CMP-001`〜）の既存行は一切書き換えない**ため、本ファイルには両形式が共存する。
 
-**新規行は、ID の月のファイル `docs/task-list/YYYY-MM.md`（ID `CMP-YYMMDD-HHMM` の YYMM の月）の表の末尾に追加し、そのファイルが無ければ作ること**（見出し＋7列の表ヘッダ。既存の月別ファイルの先頭を写す）。旧形式 ID（`CMP-003` 等）の行だけが `docs/task-list/legacy.md` に入る。本ファイル（索引）には CMP 行を置かない（置くと構造検査が赤になる）。直前に触った行の近くへ挿入すると、同じ ID が別々の位置に入っても git が競合として検知できず、重複したまま静かに main へ入りうる。ファイル末尾への追加に統一すれば、同じ月への同時追加は必ず競合として止まる（月が違えば別ファイルなので衝突しない）。重複は番人 `TaskListCmpIdDuplicateGuardTest` が CI で検出する（新旧両形式・全ファイル横断）。
+**行の追加・更新は、月別ファイルを直接編集せず、CLI で変更申告を作ること**（`node scripts/task-list-ledger.mjs add` / `update`。CMP-261124-1222 ④）。申告は `docs/task-list/changes/<CMP-ID>--<UTC yyyymmddThhmmssZ>--<6桁乱数>.md` の2行ファイル（1行目 `<!-- ledger-change v1 op=add|update id=… base=none|sha256:… -->`、2行目 完全な7列行）で、PR ごとに別ファイルになるため merge queue で衝突しない。update の `base` は更新前の実効行の sha256 で、同じ行への更新は base の連鎖でつながる。読む側（構造検査・PR ゲート・Java 番人・render 等）は月別ファイルに未畳み込みの申告を適用した**実効台帳**を読む。申告は**追加のみ**（作った申告の改変・削除は PR ゲートが赤にする。内容を変えるなら新しい update 申告を足す）。行の削除の申告は無い（行は消さない）。
+
+- **月別ファイル・索引の直接編集は禁止**（段3 から PR ゲートと merge_group ゲートが赤にする。月別ファイルを変えてよいのは台帳 bot `mannschaft-ledger-bot[bot]` の畳み込みだけ）。旧手順で月別ファイル・索引に行を書いた PR は、台帳の自動修復（`task-list-conflict-autofix`）が行の追加・更新を申告へ変換し、月別ファイルを main の内容に戻す merge commit を push する（行の削除・月別ファイルの行以外の変更・main と三者で食い違う更新は変換せず PR にコメントする）。
+- **重複・食い違いの扱い**: 同じ行への update が同じ base から2件以上あると **fork**、base が実効行と合わない update は **孤児**、既にある ID への add は **重複** で、いずれも構造検査が赤にする（ファイル名つきで報告）。後から main に入る側が直す: 孤児・fork は `node scripts/task-list-ledger.mjs rebase <申告ファイル>` で base を現在の実効行に取り直し、内容（2行目）が main 側の更新を消していないか作者が確かめる（rebase は申告の取り直しで、git の rebase ではない）。ID の重複は新しい ID を採って add し直す。
+- **置き場所**: 申告の add は ID の月（`CMP-YYMMDD-HHMM` の YYMM）の月別ファイル `docs/task-list/YYYY-MM.md` に入り（無ければ畳み込み時に雛形で作る）、旧形式 ID（`CMP-003` 等）の行は `docs/task-list/legacy.md`。本ファイル（索引）には CMP 行を置かない（置くと構造検査が赤になる）。月別ファイル内の行の並びに意味は無い（実効台帳は ID→行 の対応で比べる）。
+- **畳み込み**: 台帳 bot（`.github/workflows/task-list-fold.yml`・`scripts/task-list-fold.mjs`）が未畳み込みの申告を月別ファイルへ反映し申告を消す畳み込み PR を作る（開いている畳み込み PR は常に1本。fork を含む行は畳み込まない）。畳み込みの前後で実効台帳は変わらない。重複 ID は番人 `TaskListCmpIdDuplicateGuardTest` が CI で検出する（新旧両形式・全ファイル横断・申告適用後）。
 
 ### 優先度（P1〜P5・状態列の先頭に必須）
 
@@ -62,7 +67,8 @@ Mannschaft の「タスクの地図」は二層で構成する。
 
 - 行は `docs/task-list/YYYY-MM.md`（月は ID の YYMM。例: `CMP-261124-1222` → `docs/task-list/2026-11.md`）と `docs/task-list/legacy.md`（旧形式 ID）にある。索引（本ファイル）には月の一覧を置かない（月が変わるたびに共有ファイルを書き換えないため）。`docs/task-list/` を見ること。
 - 全体を表で見る: `node scripts/task-list-ledger.mjs render [--open] [--priority P1] [--month 2026-11]`（全ファイル合わせた表を標準出力へ。0件は空表）。
-- 旧配置（本ファイルに行を足す形）で書かれた PR を新配置へ移す: 移行前に作った PR は、マージ待ちの意思（auto-merge 予約済み、または merge_conflict で queue から外れた）があれば自動修復 Action が月別ファイルへ自動で移植する。それ以外（予約なし・`no-ledger-autofix` ラベル付き・行削除や前置き変更を含む PR）は手で `node scripts/task-list-ledger.mjs port-diff <base> <head>`（行追加・行更新を月別ファイルへ適用する）。
+- 未畳み込みの申告を含めた実効台帳を見る: `node scripts/task-list-ledger.mjs effective [--json]`（`render` も実効台帳を表にする）。
+- 旧手順（本ファイルや月別ファイルに行を直接書く形）で書かれた PR: 台帳の自動修復 Action が、月別ファイル・索引を直接編集した bot 以外の PR を（衝突やマージ待ちの意思に関係なく）選び、行追加・行更新を申告へ変換して月別ファイル・索引を main の内容に戻す。`no-ledger-autofix` ラベル付き・自動で変換できない差分（行削除・前置き変更・三者相違）は、PR のコメントに従って手で `add` / `update` の申告に直す。
 - 月別ファイル内の相対リンクは `../evidence/<CMP-ID>.json` の形にする（`docs/task-list/` から見た相対 path）。
 - 台帳列（各行の最終列）はローカル限定（`.gitignore` 済み）のファイル名を指すため、clone 直後の環境や worktree には存在しない。`—` は「まだ台帳を作っていない」の意。戦役の再開時に台帳ファイルを作成したら、この列にファイル名を書き足すこと。
 

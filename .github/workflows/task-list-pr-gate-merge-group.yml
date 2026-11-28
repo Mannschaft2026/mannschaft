@@ -13,8 +13,13 @@
 #
 # 変更申告（docs/task-list/changes/*.md。CMP-261124-1222 ④）: 構造検査は申告を適用した実効台帳に対して行い、申告の形式・名前・サイズ・
 # ID 一致・連鎖（fork・孤児・重複）・changes/ 配下の不正なものを赤にする。加えて --base .（信頼 base_sha の作業木）と group head を
-# 直接比べる等式検査（merge_group は実マージなので分岐点 = base）を行う。申告の改変・削除（正しい畳み込み以外）は赤、
-# 月別ファイルの直接編集は互換期間のため警告（::warning::）のみ。head の sparse-checkout は docs/task-list/ 配下（changes/ を含む）を取得する。
+# 直接比べる等式検査（merge_group は実マージなので分岐点 = base）を行う。申告の改変・削除（正しい畳み込み以外）と
+# 月別ファイルの直接編集（段3 で施行。--allow-direct-edit は付けない）は赤。head の sparse-checkout は docs/task-list/ 配下（changes/ を含む）を取得する。
+#
+# 作者の扱い: merge_group では PR の作者を引かない（権限は contents: read のみのまま）。queue に入るのは必須チェック
+# "Task-List PR Gate" が PR 側（pull_request_target）で緑の head だけで、「月別ファイルを変えてよいのは台帳 bot の畳み込みだけ」は
+# PR 側で検査済みの前提とする。ここでは作者に依らず、等式が崩れる月別編集・申告の改変・畳み込みでない削除をすべて赤にする
+# （正しい畳み込みと等価な変更だけが緑。試験 scripts/task-list-pr-gate-workflow.test.mjs の「AC-6 表」）。
 
 name: Task-List PR Gate (merge queue)
 

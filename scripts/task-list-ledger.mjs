@@ -290,10 +290,10 @@ export const TABLE_SEPARATOR = '|----|------|------|------|---------|-----------
 function fileHeading(path) {
   const name = path.slice(path.lastIndexOf('/') + 1);
   if (name === LEGACY_FILE_NAME) {
-    return '# 台帳 旧形式 ID（CMP-003 等）の行\n\n旧形式 ID の行はここに置く（月が決まらないため）。新しい行は ID の月のファイル docs/task-list/YYYY-MM.md の末尾に追加する。規約は [索引](../task-list.md) を参照。\n';
+    return '# 台帳 旧形式 ID（CMP-003 等）の行\n\n旧形式 ID の行はここに置く（月が決まらないため）。行の追加・更新は node scripts/task-list-ledger.mjs add / update で申告（docs/task-list/changes/）を作り、本ファイルは直接編集しない（反映は台帳 bot の畳み込み）。規約は [索引](../task-list.md) を参照。\n';
   }
   const month = name.slice(0, -3);
-  return '# 台帳 ' + month + '（ID が CMP-' + month.slice(2, 4) + month.slice(5, 7) + 'DD-HHMM の行）\n\n新しい行は本ファイルの末尾に追加する。規約は [索引](../task-list.md) を参照。\n';
+  return '# 台帳 ' + month + '（ID が CMP-' + month.slice(2, 4) + month.slice(5, 7) + 'DD-HHMM の行）\n\n行の追加・更新は node scripts/task-list-ledger.mjs add / update で申告（docs/task-list/changes/）を作り、本ファイルは直接編集しない（反映は台帳 bot の畳み込み）。規約は [索引](../task-list.md) を参照。\n';
 }
 
 /** 月別ファイルの新規作成時の本文（見出し＋7列表ヘッダ）。申告の add が新しい月に入るときもこの雛形から作る。 */

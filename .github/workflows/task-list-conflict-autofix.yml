@@ -4,6 +4,9 @@
 # main は merge queue（SQUASH）必須。台帳に行を末尾追記する PR どうしが衝突すると queue から
 # merge_conflict で外れ、auto-merge の予約も消える。GitHub のサーバ側マージは merge=union を見ないため、
 # ここ（Actions 上のローカル git）で「台帳だけで衝突している PR」を union で直して push し、予約し直す。
+# 段3（CMP-261124-1222 ④）: 月別ファイル・索引を直接編集した bot 以外の PR（旧手順）は、衝突の有無に関係なく
+# 行の追加・更新を変更申告（docs/task-list/changes/）へ変換し、月別ファイル・索引を main の内容に戻して push する（planChangePort）。
+# 三者相違・行削除・前置き変更など変換できない差分は push せずコメントする。マージ待ちの意思が無い PR は予約しない。
 # ロジック本体: scripts/task-list-conflict-autofix.mjs（試験: scripts/task-list-conflict-autofix.test.mjs）
 # 運用: docs/development/merge_queue_operations.md「脱落時の扱い」
 #

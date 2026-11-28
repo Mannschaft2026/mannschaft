@@ -311,12 +311,29 @@ test('等式: 申告の追加だけの PR は緑', async () => {
   assert.deepEqual(kinds(r), { violations: [], warnings: [] });
 });
 
-test('等式（互換期間 P2-4）: 月別ファイルの直接編集は警告（direct-edit）で、違反にはしない', async () => {
-  const r = await vh({ mb: base, h: { ...base, 'docs/task-list/2026-11.md': M11.replace(A, B) } });
+test('等式（互換期間 P2-4）: enforceDirectEdit: false では月別ファイルの直接編集は警告（direct-edit）で、違反にはしない', async () => {
+  const compat = async (h) => checkVirtualHead({ mergeBase: await read(base), base: await read(base), head: await read(h), enforceDirectEdit: false });
+  const r = await compat({ ...base, 'docs/task-list/2026-11.md': M11.replace(A, B) });
   assert.equal(r.ok, true);
   assert.deepEqual(kinds(r), { violations: [], warnings: ['direct-edit'] });
-  const r2 = await vh({ mb: base, h: { ...base, 'docs/task-list/2026-11.md': M11.replace('# 2026-11', '# 2026-11 改') } });
+  const r2 = await compat({ ...base, 'docs/task-list/2026-11.md': M11.replace('# 2026-11', '# 2026-11 改') });
   assert.deepEqual(kinds(r2), { violations: [], warnings: ['direct-edit'] });
+});
+
+test('等式（施行後 P2-4・段3）: 既定では月別ファイルの直接編集（行・行以外）は違反（direct-edit）で、申告 CLI と自動修復を案内する', async () => {
+  const r = await vh({ mb: base, h: { ...base, 'docs/task-list/2026-11.md': M11.replace(A, B) } });
+  assert.equal(r.ok, false);
+  assert.deepEqual(kinds(r), { violations: ['direct-edit'], warnings: [] });
+  assert.match(r.violations[0].message, /node scripts\/task-list-ledger\.mjs add/);
+  assert.match(r.violations[0].message, /update/);
+  assert.match(r.violations[0].message, /自動修復/);
+  const r2 = await vh({ mb: base, h: { ...base, 'docs/task-list/2026-11.md': M11.replace('# 2026-11', '# 2026-11 改') } });
+  assert.deepEqual(kinds(r2), { violations: ['direct-edit'], warnings: [] });
+  // 申告の追加だけ・正しい畳み込みは施行後も緑（同じ入力で互換期間と結果が変わるのは直接編集だけ）
+  const c1 = cname('CMP-261124-1222', '20261127T010000Z');
+  assert.deepEqual(kinds(await vh({ mb: base, h: { ...base, [c1]: upd(A, B, 'CMP-261124-1222') } })), { violations: [], warnings: [] });
+  const mb = { ...base, [c1]: upd(A, B, 'CMP-261124-1222') };
+  assert.deepEqual(kinds(await vh({ mb, h: await fold(mb) })), { violations: [], warnings: [] });
 });
 
 test('等式: 申告の改変・削除は違反', async () => {
@@ -373,18 +390,32 @@ test('仮想マージ: 分岐後に main が同じ ID を add し、古い PR �
   }
 });
 
-test('CLI: --base <dir> で等式検査。直接編集は警告で exit 0、申告削除は exit 1', async () => {
+test('等式（施行後）: 分岐点・base・head がすべて旧単一ファイル配置なら直接編集は警告のまま（施行は新配置の台帳だけ）', async () => {
+  const single = (...rows) => ({ 'docs/task-list.md': '# 台帳\n\n' + H + '\n' + rows.join('\n') + '\n' });
+  const r = await vh({ mb: single(A), h: single(B) });
+  assert.deepEqual(kinds(r), { violations: [], warnings: ['direct-edit'] });
+  // head だけ旧配置（main は新配置）なら施行する
+  const r2 = await vh({ mb: single(A), b: base, h: single(B) });
+  assert.deepEqual(kinds(r2).violations, ['direct-edit']);
+});
+
+test('CLI: --base <dir> で等式検査。施行後は直接編集も exit 1、--allow-direct-edit（互換期間）なら警告で exit 0、申告削除は常に exit 1', async () => {
   const c1 = cname('CMP-261124-1222', '20261127T010000Z');
   const baseDir = writeTree({ ...base, [c1]: upd(A, B, 'CMP-261124-1222') });
   const directDir = writeTree({ ...base, [c1]: upd(A, B, 'CMP-261124-1222'), 'docs/task-list/legacy.md': LEG.replace('P5 未着手', '完了') });
   const deletedDir = writeTree(base);
   try {
-    const run = (dir) => spawnSync(process.execPath, [checkCli, join(dir, 'docs/task-list.md'), '--base', baseDir], { encoding: 'utf8' });
-    const direct = run(directDir);
+    const run = (dir, ...extra) => spawnSync(process.execPath, [checkCli, join(dir, 'docs/task-list.md'), '--base', baseDir, ...extra], { encoding: 'utf8' });
+    const enforced = run(directDir);
+    assert.equal(enforced.status, 1, enforced.stdout + enforced.stderr);
+    assert.match(enforced.stderr, /direct-edit/);
+    assert.match(enforced.stderr, /task-list-ledger\.mjs add/);
+    const direct = run(directDir, '--allow-direct-edit');
     assert.equal(direct.status, 0, direct.stdout + direct.stderr);
     assert.match(direct.stdout + direct.stderr, /警告.*direct-edit|direct-edit.*警告/);
     const deleted = run(deletedDir);
     assert.equal(deleted.status, 1);
+    assert.equal(run(deletedDir, '--allow-direct-edit').status, 1, '互換期間でも申告の削除は赤');
     assert.match(deleted.stderr, /change-deleted/);
     assert.match(deleted.stderr, new RegExp(c1.replace(/[.]/g, '\\.')));
   } finally {
@@ -401,8 +432,11 @@ test('CLI: --base <git ref> でも等式検査ができる', async () => {
     assert.equal(git('commit', '-q', '-m', 'x').status, 0);
     writeFileSync(join(dir, 'docs/task-list/2026-11.md'), M11.replace(A, B));
     const res = spawnSync(process.execPath, [checkCli, 'docs/task-list.md', '--base', 'HEAD'], { cwd: dir, encoding: 'utf8' });
-    assert.equal(res.status, 0, res.stdout + res.stderr);
+    assert.equal(res.status, 1, '施行後は直接編集が exit 1: ' + res.stdout + res.stderr);
     assert.match(res.stdout + res.stderr, /direct-edit/);
+    const compat = spawnSync(process.execPath, [checkCli, 'docs/task-list.md', '--base', 'HEAD', '--allow-direct-edit'], { cwd: dir, encoding: 'utf8' });
+    assert.equal(compat.status, 0, '互換期間は警告のみ: ' + compat.stdout + compat.stderr);
+    assert.match(compat.stdout + compat.stderr, /direct-edit/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

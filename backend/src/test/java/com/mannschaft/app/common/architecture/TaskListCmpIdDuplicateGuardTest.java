@@ -123,7 +123,7 @@ class TaskListCmpIdDuplicateGuardTest {
                         + "両方が自動マージされた。2026-08-14 CMP-028 消失事故と同根）。または、緩い計数と厳密抽出の件数が一致せず"
                         + "「重複なし」の判定自体が信用できない（ファイルパスの解決ミス・表形式の変更）。\n"
                         + "対処: 後から origin/main へ merge された側が採番し直すこと（新形式 CMP-YYMMDD-HHMM（JST・date '+%y%m%d-%H%M'）を"
-                        + "採り直し、行の内容はそのまま ID のみ振り直す）。新規行は必ず表の末尾に追加すること。"
+                        + "採り直し、行の内容はそのまま ID のみ振り直す）。行の追加・更新は node scripts/task-list-ledger.mjs add / update の申告で行うこと（月別ファイルを直接編集しない）。"
                         + "本番人の検出を緩めて通す（重複IDをそのまま許容する等）ことは禁止。",
                 violations)).isEmpty();
     }

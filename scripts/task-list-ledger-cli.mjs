@@ -346,7 +346,8 @@ export function escapeCell(value) {
   return text.replace(/(?<!\\)\|/g, '\\|');
 }
 
-function changeContent(op, id, base, line) {
+/** 申告の本文（1行目メタ・2行目の7列行）。上限 16KiB を超えれば例外。台帳の自動修復（planChangePort）も使う。 */
+export function changeContent(op, id, base, line) {
   const content = '<!-- ledger-change v1 op=' + op + ' id=' + id + ' base=' + base + ' -->\n' + line + '\n';
   const bytes = Buffer.byteLength(content, 'utf8');
   if (bytes > MAX_CHANGE_BYTES) throw new Error('申告が ' + bytes + ' バイトで上限 ' + MAX_CHANGE_BYTES + ' バイト（16KiB）を超える。行を短くすること');
