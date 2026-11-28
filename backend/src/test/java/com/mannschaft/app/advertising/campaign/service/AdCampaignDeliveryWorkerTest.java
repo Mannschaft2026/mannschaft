@@ -10,6 +10,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -36,6 +37,7 @@ class AdCampaignDeliveryWorkerTest {
     @Mock private AdAudienceResolver audienceResolver;
     @Mock private AdCampaignDeliveryDispatcher dispatcher;
     @Mock private AdCampaignDeliveryClaimService claimService;
+    @Mock private PlatformTransactionManager transactionManager;
     @InjectMocks private AdCampaignDeliveryWorker worker;
 
     private void stubNoClaims() {

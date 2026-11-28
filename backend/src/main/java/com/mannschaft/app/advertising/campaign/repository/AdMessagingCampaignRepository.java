@@ -100,9 +100,10 @@ public interface AdMessagingCampaignRepository
      * F09.17 Phase 11-b ε-B 配信ワーカー用: 配信中（ウィンドウ内）の対象キャンペーンを
      * 悲観ロック付きで取得する。
      *
-     * <p>配信ワーカーが 1 分間隔で起動するため、複数ノードで同時にスキャンする場合の
-     * 重複配信を {@code SELECT ... FOR UPDATE} で防ぐ。
-     * {@code @SchedulerLock} はトップレベル多重実行を防ぐが、念のため二重防御とする。</p>
+     * <p>{@code SELECT ... FOR UPDATE} のロックは呼び出し側トランザクションのコミットで即解放されるため、
+     * 重複配信の防止は担わない。進行中の更新のコミットを待ち、最新のコミット済みデータを読むだけである。
+     * 重複配信の防止は {@code @SchedulerLock}（多重起動防止）と配信 Claim（DB 一意制約）が担う。
+     * 呼び出しには実トランザクションが必須（無いと {@code TransactionRequiredException}）。</p>
      *
      * @param status DELIVERING を渡す
      * @param now    現在時刻（starts_at &lt;= now AND ends_at &gt;= now の判定基準）
