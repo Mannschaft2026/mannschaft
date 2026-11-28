@@ -1034,3 +1034,20 @@ CMP-261030-0648。管理者向け予約通知・問い合わせ通知・業務�
 - D-3T: `AdminBusinessAlertService` では `getSlugsByIds` を `buildSummary` の中から直接呼び、新しい private ヘルパやラムダを作らなかった。`buildSummary` → `TeamRepository` の到達は既存行のままで、D-3T の新しい行は 0。
 - ローカルの絞り込み無し `archUnitTest` は、既存の古い行（例: D-5 :63-65・:76-77、D-3 :44-46・:57-58）を自動で消してストアを書き戻す。これらは本変更の範囲外なので元に戻し、diff を上記 10 行の置き換えだけにした。
 - 凍結ストアを触る open PR #3655・#4308 と並行マージしない。
+
+## 2026-11-27 CMP-261124-0159 PR-D0 D-3T の認可境界（共通の門）と、移行で消える行の扱い（殿の裁定）
+
+CMP-261124-0159 の第1波では、各ドメインの読み取り経路を F00 §20.3 の共通の門 `com.mannschaft.app.common.ScopeContentAccessGate` へ移す。D-3T（`CrossDomainTransactionalTransitiveArchTest`）は `@Transactional` 入口から呼び出しを BFS で辿り、common の中継も通り抜け、interface の単一実装へも展開するため、門を呼ぶと 門 → `AccessControlService.isRegularMemberOrAbove` → `DefaultAccessControlService` → `UserRoleRepository` / `RoleRepository` / `MembershipRepository` へ届く扱いになる。PR-D2（#4963）ではこれで新規違反が 73 件出た。第1波の約 30 本すべてに同じことが起きる。
+
+殿の裁定: 案 (B) を門の 1 クラスに限って採る。
+
+- 門は、ドメインがドメインの外の認可を問い合わせる正規の経路（Service 経由）であり、読み取り専用の認可ポートである。D-3T の趣旨は書き込みの整合性が他ドメインの Repository に広がらないことで、その趣旨に反しない。
+- 採らない案: (D) 凍結ストアへ約千件を足す（負債が増え、約 30 本の PR が同じストアを触って直列マージになる）。(A) 門を native SQL に寄せる（精査 M-2「判定器を二つ作らない」に反する）。
+
+実装（PR-D0）:
+
+- D-3T は `AUTHORIZATION_BOUNDARIES`（門の完全修飾名 1 つだけ。ワイルドカード・パッケージ指定なし）への呼び出しで展開を止める。ほかの common の中継はこれまでどおり通り抜ける。メタテスト `CrossDomainTransactionalTransitiveGuardConditionTest` が「門では止まる（境界を外すと role / membership の Repository へ届くことも確かめる）」「ほかの common の中継は引き続き探索する」「境界は門の 1 クラスだけ」を固定する。
+- 境界の前提条件として、新しい番人 `ScopeContentAccessGateReadOnlyArchTest` が、門の `@Transactional` は readOnly のみ・門から推移的に Repository の書き込み系（`save*` / `delete*` / `flush*` / `@Modifying`）や `EntityManager` / `Query#executeUpdate` / `JdbcTemplate` の書き込みへ到達しない・悲観ロック（`@Lock` / `FOR UPDATE` / `LockModeType.PESSIMISTIC_*`）を使わない、を強制する。自己検査は `ScopeContentAccessGateReadOnlyGuardConditionTest`。
+- 本 PR の凍結ストアの変更: 本 PR では D-3T のストア（`296295dd-…`）と `EXPECTED_LINES_CROSS_DOMAIN_TX_D3T` を変更していない。現時点で門を呼ぶのは PR-01 の分だけで、境界によって消えうるのはその入口の行だけ（減る向きのみ。上限超過は起きない）。ローカルの絞り込み無し `archUnitTest` による実測は、計測時にマシンの `gradle-turnstile` ロックが他作業に約 5 時間占有されていたため未実施で、CI の診断原本で確かめる。
+
+**返済として数えない**: 以後、各ドメインを門へ移す PR で、旧 `checkMembership` / `isMember` 経由で D-3T に載っていた行（入口 → `role.repository.*` / `membership.repository.*`）が chip-away で消える。これは越境の解消（負債の返済）ではなく、境界の定義による付け替えである。締めレーンは、これらの減少を返済件数に数えず、「門への移行による付け替え」として本節を参照して分類すること。門を経由しない越境（同じ入口から別の経路で他ドメインの Repository へ届くもの）は従来どおり残り、その解消だけが返済である。

@@ -3215,6 +3215,8 @@ Resolver を通らない読み取り経路（スコープ単位の一覧・集�
 - GUEST（user_roles の権限ロール）は在籍（memberships）を持たないため `isMember` で落ちる。
 - 門と Resolver（§20.2）の結果が非公開チームで一致することを等価性の番人（§20.6 `ScopeContentAccessGateEquivalenceTest`）で固定する。
 - 中身を返さない書き込みは不変条件（非公開チームにサポーター・ゲストが在籍しない）で守る。**応答本文で中身を返す書き込み**（作成・更新の応答に一覧・他人の投稿・添付 URL 等を含むもの）は門を通す（精査 S-5）。
+- **D-3T の認可境界（PR-D0・殿の裁定）**: 門は、ドメインがドメインの外の認可（在籍・ロール・チームの公開範囲）を Service 経由で問い合わせる正規の経路であり、**読み取り専用の認可ポート**である。番人 D-3T（`CrossDomainTransactionalTransitiveArchTest`）は門の 1 クラス（`AUTHORIZATION_BOUNDARIES`。完全修飾名で明示し、ワイルドカードは使わない）を「越境読み取り専用の認可境界」として扱い、門への呼び出しで展開を止める。ほかの common の中継はこれまでどおり通り抜ける（メタテスト `CrossDomainTransactionalTransitiveGuardConditionTest` が両方を固定）。D-3T の趣旨は書き込みの整合性が他ドメインの Repository に広がらないことで、門の先の role / membership の Repository の読み取りはこれに反しない。門の中まで辿ると、門を呼ぶ全ドメインの `@Transactional` 入口が `UserRoleRepository` / `RoleRepository` / `MembershipRepository` へ届く扱いになり、移行 PR ごとに数十件の見かけの新規違反が出る（PR-D2 #4963 で 73 件）。凍結ストアへの大量追加（負債増・約 30 本の PR が同じストアを触り直列マージになる）と門の native SQL 化（精査 M-2 に反する）は採らない。
+- **門の読み取り専用の番人**（境界を名乗る前提条件）: `ScopeContentAccessGateReadOnlyArchTest` が、(1) 門のクラス・メソッドの `@Transactional` は付かないか `readOnly = true`、(2) 門から推移的に（interface は全実装へ展開して）Repository の `save*` / `delete*` / `flush*` / `@Modifying`、`EntityManager` の `persist` / `merge` / `remove` / `flush` / `lock`、`Query#executeUpdate`、`JdbcTemplate` の更新系へ到達しない、(3) `@Lock`・`FOR UPDATE` / `FOR SHARE` の `@Query`・`LockModeType.PESSIMISTIC_*` を使わない、を機械的に強制する。自己検査 `ScopeContentAccessGateReadOnlyGuardConditionTest` が違反するダミーの門で赤になることを確かめる。門に書き込みが必要になったら境界は名乗れない（境界の定義から見直す）。
 
 #### 20.3.1 通知の読み出し時の除外（精査 S-4）
 
@@ -3416,6 +3418,7 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 
 - `ScopeContentAccessMatrixIT`（新設）: §20.5.2 の棚卸し表（門・Resolver の行）と §20.5.3 の公開 EP 表から読み取りエンドポイントを**表駆動**で生成し、非公開チームに対して、**期待値を「既存の認可 AND 親チーム上限」**とする（MEMBER 一律 200 とはしない）。各エンドポイントの行に既存の許可ロール・所有者条件・ACL（例: `ShiftHourlyRateAuthorizer` の他人の時給は管理者のみ、回覧の受信者 ACL、チャンネルメンバー行）を記載し、権限あり側は「本戦役前に 200 だった閲覧者は 200 のまま」、権限なし側（在籍サポーター（是正前データを模したフィクスチャ）・GUEST・部外者・他チームのメンバー・他組織のメンバー）は**部外者と同一応答**を表駆動で検証する。期待値表は本戦役前の実挙動を記録して作り（スナップショット）、上限の追加で変わるのは権限なし側だけであることを確かめる。公開チーム（`SUPPORTERS_AND_ABOVE`）では従来の結果を回帰固定する。
 - `ScopeContentAccessGateCoverageTest`（新設・ArchUnit）: **全パッケージ**の Service / Guard / Controller / Facade / Listener から `AccessControlService#checkMembership` / `#isMember`（および `ActivityScopeAccessGuard` 等の同名ラッパ）を直接呼ぶと落ちる。呼び出しは `ScopeContentAccessGate` の `checkScopeContentAccess` 系か `checkMembershipForWrite` のどちらかに書き分ける（§20.5.1）。例外は理由付きの許可リスト（クラス名＋理由）だけ。
+- `ScopeContentAccessGateReadOnlyArchTest`（PR-D0・ArchUnit）: 門が読み取り専用であること（§20.3「門の読み取り専用の番人」）。D-3T が門を認可境界として展開を止める前提条件。自己検査は `ScopeContentAccessGateReadOnlyGuardConditionTest`。
 - `ScopeContentAccessGateEquivalenceTest`（新設）: 非公開チームで、閲覧者ロール（ADMIN / DEPUTY_ADMIN / MEMBER / SUPPORTER / GUEST / 非在籍の親組織 ADMIN / 部外者 / SYSTEM_ADMIN）ごとに、門（`canAccessScopeContent`）と Resolver（`canView(TEAM, teamId)`）の結果が一致する（SYSTEM_ADMIN は既存挙動どおりの差を許可リストで明示）。
 - `TeamContentAudienceCoverageTest`（新設・ArchUnit）: §20.5.4 の宛先作成メソッドを、非公開チーム用の絞り込みを経ずに通知・fan-out へ渡す呼び出しを禁止する（許可リストは理由付き）。
 - `MembersOnlyTeamEntryChokePointTest`（新設・ArchUnit）: `memberships` への SUPPORTER 在籍の作成・変更と `user_roles` への GUEST 付与が、入口の関所（F01.2 03「入口の関所」）以外から行われないこと（入口の網羅の番人。精査 S-5）。

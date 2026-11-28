@@ -1,6 +1,8 @@
 package com.mannschaft.app.common.architecture;
 
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.resident.transitivetx.ClassTransactionalFixture;
+import com.mannschaft.app.resident.transitivetx.GateBoundaryFixture;
 import org.junit.jupiter.api.Tag;
 import com.mannschaft.app.resident.transitivetx.InheritedClassTransactionalFixture;
 import com.mannschaft.app.resident.transitivetx.TransitiveTransactionalFixture;
@@ -11,6 +13,7 @@ import com.tngtech.archunit.core.importer.ClassFileImporter;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -110,6 +113,49 @@ class CrossDomainTransactionalTransitiveGuardConditionTest {
             .satisfies(v -> assertThat(v.entryFullName())
                 .contains("InheritedClassTransactionalFixture.inheritedExecute")
                 .contains("inherited from"));
+    }
+
+    @Test
+    void 認可境界は共通の門の1クラスだけを完全修飾名で指す() {
+        assertThat(CrossDomainTransactionalTransitiveArchTest.AUTHORIZATION_BOUNDARIES)
+            .containsExactly(ScopeContentAccessGate.class.getName())
+            .noneMatch(name -> name.contains("*") || name.endsWith(".."));
+    }
+
+    @Test
+    void 共通の門では展開を止める() {
+        JavaClasses classes = gateBoundaryClasses();
+        JavaClass fixture = classes.get(GateBoundaryFixture.class);
+        // 前提: 境界が無ければ、門の先の role / membership の Repository まで届く（境界が検出を消していることの確認）。
+        assertThat(CrossDomainTransactionalTransitiveArchTest.findViolations(fixture, classes, Set.of()))
+            .filteredOn(v -> v.entryFullName().contains("readThroughGate"))
+            .isNotEmpty()
+            .allSatisfy(v -> assertThat(v.diagnosticPath()).contains("ScopeContentAccessGate."));
+        // 本番の境界では、門を呼ぶ入口は違反にならない。
+        assertThat(CrossDomainTransactionalTransitiveArchTest.findViolations(fixture, classes))
+            .noneMatch(v -> v.entryFullName().contains("readThroughGate"));
+    }
+
+    @Test
+    void 門以外のcommon中継は境界があっても引き続き探索する() {
+        JavaClasses classes = gateBoundaryClasses();
+        assertThat(CrossDomainTransactionalTransitiveArchTest.findViolations(
+                classes.get(GateBoundaryFixture.class), classes))
+            .filteredOn(v -> v.entryFullName().contains("throughOtherCommonRelay"))
+            .singleElement()
+            .satisfies(v -> assertThat(v.diagnosticPath())
+                .contains("CommonConstructorBridge.<init>()")
+                .contains("TransitiveProxyRepository.<init>()"));
+    }
+
+    private JavaClasses gateBoundaryClasses() {
+        // fixture と、本物の門から role / membership の Repository へ届くまでの本番の一部（common 配下は fixture も含む）。
+        return new ClassFileImporter().importPackages(
+            "com.mannschaft.app.resident.transitivetx",
+            "com.mannschaft.app.proxy.repository",
+            "com.mannschaft.app.common",
+            "com.mannschaft.app.role",
+            "com.mannschaft.app.membership.repository");
     }
 
     private List<CrossDomainTransactionalTransitiveArchTest.TransitiveViolation> detect(
