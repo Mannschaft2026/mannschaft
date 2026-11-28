@@ -12,8 +12,10 @@
 //   （違反は構造検査・番人が引き続き赤にする）。
 // - 自己検査: 出す前に E(month(main), changes(main)) == E(month(fold), changes(fold)) を PR-1 の checkVirtualHead で確かめる
 //   （PR 側 mb=main と同じ評価。違反・警告が1件でもあれば書き込まない）。
-// - 開いている畳み込み PR は常に1本（ブランチ固定）。merge queue 投入中なら触らない。未投入なら最新 main から作り直し、
-//   bot 専用ブランチに限り lease 付き force push する。同じ main・同じ木なら push しない。
+// - 開いている畳み込み PR は常に1本（ブランチ固定）。merge queue 投入中（isInMergeQueue か mergeQueueEntry）なら触らない。
+//   未投入なら最新 main から作り直す: auto-merge 予約を解除 → queue 外を再確認 → bot 専用ブランチに限り lease 付き force push
+//   → 再予約（予約が残ったままだと push 前に自動で queue 投入されうる。投入は SHA を変えないので lease では防げない）。
+//   同じ main・同じ木なら push しない。
 // - 起動: 畳み込める申告が N≥20 件、または最古の申告（ファイル名時刻）が 6 時間を超えたとき（threshold）。
 //   1日1回の定期実行・workflow_dispatch（force）は1件でもあれば畳み込む。0件なら何もしない（未投入の古い畳み込み PR は閉じる）。
 // - 既定は dry-run（計画をログに出すだけで git・GitHub に一切書かない）。--apply のときだけ書く
@@ -218,7 +220,7 @@ export async function runFold({ gitOps, ghOps, now = Date.now(), mode = 'thresho
     for (const k of plan.kept) log('  残す ' + k.path + ': ' + k.reason);
     const pr = ghOps.findFoldPullRequest();
     if (pr) log('開いている畳み込み PR: #' + pr.number + '（head ' + pr.headRefOid + (pr.isInMergeQueue ? '、merge queue 投入中' : '') + '）');
-    if (pr?.isInMergeQueue) return done('skip-in-queue', 0, { reason: '#' + pr.number + ' が merge queue 投入中のため触らない' });
+    if (inMergeQueue(pr)) return done('skip-in-queue', 0, { reason: '#' + pr.number + ' が merge queue 投入中のため触らない' });
 
     if (plan.folded.length === 0) {
       if (pr) {
@@ -253,9 +255,17 @@ export async function runFold({ gitOps, ghOps, now = Date.now(), mode = 'thresho
     if (!same) {
       const commit = gitOps.commitTree(tree, mainOid, foldCommitMessage(plan));
       if (pr) {
-        // 判定から push までのあいだに queue へ入っていたら触らない（force push で queue から外さない）
+        // auto-merge 予約が残ったままだと、push までのあいだに必須チェックが揃って GitHub が自動で queue へ投入しうる。
+        // queue 投入では head の SHA が変わらないため force-with-lease では防げない。先に予約を解除して自動投入の道を断ち、
+        // 解除の後に queue 外であることを確かめてから push する（解除前に投入済みなら触らずに終える）。
+        // 解除〜再予約のあいだで失敗しても、次回は「予約なしの PR」として同じ手順で作り直して再予約する。
+        if (pr.autoMergeRequest) {
+          ghOps.disableAutoMerge(pr);
+          log('#' + pr.number + ' の auto-merge 予約を解除した（作り直しのあいだの自動 queue 投入を防ぐ）');
+        }
         const latest = ghOps.findFoldPullRequest();
-        if (latest?.isInMergeQueue) return done('skip-in-queue', 0, { reason: '#' + latest.number + ' が push 直前に merge queue へ入ったため触らない' });
+        if (inMergeQueue(latest)) return done('skip-in-queue', 0, { reason: '#' + latest.number + ' が push 前に merge queue へ入っていたため触らない' });
+        if (latest && latest.number !== pr.number) throw new Error('畳み込み PR が判定中に入れ替わった（#' + pr.number + ' → #' + latest.number + '）');
       }
       const r = gitOps.forcePush(commit, FOLD_BRANCH, remoteOid ?? null);
       if (!r.ok) return done('skip-push-rejected', 0, { reason: 'push 拒否（次回に回す）: ' + r.reason });
@@ -286,6 +296,11 @@ export async function runFold({ gitOps, ghOps, now = Date.now(), mode = 'thresho
   } catch (error) {
     return done('api-failed', 1, { reason: '取得・書き込みに失敗（次回の起動でやり直す）: ' + (error?.message ?? error) });
   }
+}
+
+/** merge queue 投入中か（isInMergeQueue と mergeQueueEntry のどちらかが立っていれば投入中とみなす）。 */
+export function inMergeQueue(pr) {
+  return Boolean(pr && (pr.isInMergeQueue || pr.mergeQueueEntry));
 }
 
 /** auto-merge（SQUASH）を予約する。push 直後の head 反映遅れ（push 前の head が返る）は待って再試行する。 */
@@ -366,8 +381,9 @@ export function createFoldGitOps({ git, cwd }) {
 }
 
 const FIND_PR = 'query($owner:String!,$name:String!,$head:String!){repository(owner:$owner,name:$name){pullRequests(states:OPEN,headRefName:$head,first:10){nodes{'
-  + 'id number baseRefName headRefOid isCrossRepository isInMergeQueue autoMergeRequest{enabledAt}}}}}';
+  + 'id number baseRefName headRefOid isCrossRepository isInMergeQueue mergeQueueEntry{state} autoMergeRequest{enabledAt}}}}}';
 const ENABLE_AUTO_MERGE = 'mutation($id:ID!,$oid:GitObjectID!){enablePullRequestAutoMerge(input:{pullRequestId:$id,mergeMethod:SQUASH,expectedHeadOid:$oid}){pullRequest{number}}}';
+const DISABLE_AUTO_MERGE = 'mutation($id:ID!){disablePullRequestAutoMerge(input:{pullRequestId:$id}){pullRequest{number}}}';
 const HEAD_OID = 'query($id:ID!){node(id:$id){... on PullRequest{headRefOid}}}';
 
 export function createFoldGhOps({ repo }) {
@@ -394,6 +410,9 @@ export function createFoldGhOps({ repo }) {
     closePullRequest(number, comment) {
       rest('POST', 'repos/' + repo + '/issues/' + number + '/comments', { body: FOLD_PR_MARKER + '\n' + comment }, '#' + number + ' へのコメント');
       rest('PATCH', 'repos/' + repo + '/pulls/' + number, { state: 'closed' }, '#' + number + ' を閉じる');
+    },
+    disableAutoMerge(pr) {
+      must(gh(['api', 'graphql', '-f', 'query=' + DISABLE_AUTO_MERGE, '-f', 'id=' + pr.id]), '#' + pr.number + ' の auto-merge 予約解除');
     },
     enableAutoMerge(pr, expectedHeadOid) {
       const r = gh(['api', 'graphql', '-f', 'query=' + ENABLE_AUTO_MERGE, '-f', 'id=' + pr.id, '-f', 'oid=' + expectedHeadOid]);

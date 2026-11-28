@@ -283,9 +283,9 @@ test('閾値: 違反で残す申告は件数・最古の判定に数えない', 
 // runFold（git・GitHub はモック）
 // ---------------------------------------------------------------------------
 
-const WRITE_OPS = new Set(['writeTree', 'commitTree', 'forcePush', 'createPullRequest', 'updatePullRequest', 'enableAutoMerge', 'closePullRequest']);
+const WRITE_OPS = new Set(['writeTree', 'commitTree', 'forcePush', 'createPullRequest', 'updatePullRequest', 'enableAutoMerge', 'disableAutoMerge', 'closePullRequest']);
 
-function mocks({ files, pr = null, remote = null, remoteInfo = null, fail = {}, pushResult = { ok: true }, mainOid = 'main1' } = {}) {
+function mocks({ files, pr = null, prSeq = null, remote = null, remoteInfo = null, fail = {}, pushResult = { ok: true }, mainOid = 'main1' } = {}) {
   const calls = [];
   const rec = (name, args, value) => {
     calls.push({ name, args });
@@ -303,10 +303,12 @@ function mocks({ files, pr = null, remote = null, remoteInfo = null, fail = {}, 
     forcePush: (commit, branch, expected) => rec('forcePush', [commit, branch, expected], pushResult),
   };
   const ghOps = {
-    findFoldPullRequest: () => rec('findFoldPullRequest', [], pr),
+    // prSeq: 呼ぶたびに次の状態を返す（queue 状態が途中で遷移する注入）。尽きたら最後の状態のまま
+    findFoldPullRequest: () => rec('findFoldPullRequest', [], prSeq ? prSeq[Math.min(calls.filter((c) => c.name === 'findFoldPullRequest').length, prSeq.length - 1)] : pr),
     createPullRequest: (a) => rec('createPullRequest', [a], { id: 'PR_new', number: 9001, headRefOid: 'foldcommit' }),
     updatePullRequest: (n, a) => rec('updatePullRequest', [n, a], undefined),
     enableAutoMerge: (p, oid) => rec('enableAutoMerge', [p, oid], { ok: true }),
+    disableAutoMerge: (p) => rec('disableAutoMerge', [p], undefined),
     closePullRequest: (n, body) => rec('closePullRequest', [n, body], undefined),
   };
   return { gitOps, ghOps, calls, writes: () => calls.filter((c) => WRITE_OPS.has(c.name)) };
@@ -461,4 +463,80 @@ test('workflow: 既定 dry-run（LEDGER_FOLD_ENABLED が true のときだけ --
   assert.match(y, /docs\/task-list\/changes\/\*\*/);
   assert.doesNotMatch(y, /pull_request/);
   assert.match(y, /node scripts\/task-list-fold\.mjs/);
+});
+
+
+// ---------------------------------------------------------------------------
+// auto-merge 予約済みの畳み込み PR の作り直し（検分 P2: 予約が残ったまま push すると、push 前に GitHub が自動で
+// queue に投入しうる。queue 投入では SHA が変わらず force-with-lease で防げない）
+// ---------------------------------------------------------------------------
+
+const reserved = { id: 'PR_1', number: 77, headRefOid: 'old', isInMergeQueue: false, mergeQueueEntry: null, autoMergeRequest: { enabledAt: '2026-11-27T00:00:00Z' } };
+const reservedRemote = { remote: 'old', remoteInfo: { tree: 'oldtree', parents: ['main0'] } };
+
+test('P2: 予約済みの畳み込み PR は、予約解除 → queue 外を再確認 → force-with-lease → 再予約の順で作り直す', async () => {
+  const unreserved = { ...reserved, autoMergeRequest: null };
+  const m = mocks({ files: oneChange, prSeq: [reserved, unreserved], ...reservedRemote });
+  const r = await run(m);
+  assert.equal(r.outcome, 'updated');
+  const seq = m.calls.map((c) => c.name).filter((n) => ['disableAutoMerge', 'findFoldPullRequest', 'forcePush', 'enableAutoMerge'].includes(n));
+  assert.deepEqual(seq, ['findFoldPullRequest', 'disableAutoMerge', 'findFoldPullRequest', 'forcePush', 'enableAutoMerge']);
+  assert.equal(m.calls.find((c) => c.name === 'enableAutoMerge').args[1], 'foldcommit');
+});
+
+test('P2: 予約解除の後の再確認で queue 投入中（解除前に投入済み）なら push せずに終える', async () => {
+  const queued = { ...reserved, autoMergeRequest: null, isInMergeQueue: true };
+  const m = mocks({ files: oneChange, prSeq: [reserved, queued], ...reservedRemote });
+  const r = await run(m);
+  assert.equal(r.outcome, 'skip-in-queue');
+  assert.equal(r.exitCode, 0);
+  assert.ok(m.writes().some((c) => c.name === 'disableAutoMerge'));
+  assert.ok(!m.writes().some((c) => ['forcePush', 'updatePullRequest', 'enableAutoMerge'].includes(c.name)));
+});
+
+test('P2: isInMergeQueue=false でも mergeQueueEntry があれば queue 投入中とみなして触らない（最初の確認・再確認の両方）', async () => {
+  const entry = { ...reserved, mergeQueueEntry: { state: 'AWAITING_CHECKS' } };
+  const m1 = mocks({ files: oneChange, pr: entry, ...reservedRemote });
+  assert.equal((await run(m1)).outcome, 'skip-in-queue');
+  assert.deepEqual(m1.writes(), []);
+  const m2 = mocks({ files: oneChange, prSeq: [reserved, { ...entry, autoMergeRequest: null }], ...reservedRemote });
+  assert.equal((await run(m2)).outcome, 'skip-in-queue');
+  assert.ok(!m2.writes().some((c) => c.name === 'forcePush'));
+});
+
+test('P2: 予約が無い PR でも push 直前に queue 外を再確認し、再確認の直後に queued へ変わっていたら push しない', async () => {
+  const free = { ...reserved, autoMergeRequest: null };
+  const m = mocks({ files: oneChange, prSeq: [free, { ...free, isInMergeQueue: true }], ...reservedRemote });
+  const r = await run(m);
+  assert.equal(r.outcome, 'skip-in-queue');
+  assert.ok(!m.writes().some((c) => c.name === 'disableAutoMerge' || c.name === 'forcePush'));
+});
+
+test('P2: 予約解除の API 失敗は push せずに赤で終える', async () => {
+  const m = mocks({ files: oneChange, prSeq: [reserved], fail: { disableAutoMerge: true }, ...reservedRemote });
+  const r = await run(m);
+  assert.equal(r.outcome, 'api-failed');
+  assert.equal(r.exitCode, 1);
+  assert.ok(!m.writes().some((c) => c.name === 'forcePush'));
+});
+
+test('P2: 予約解除〜再予約の間で失敗しても、次回は予約なしの PR を正しく作り直して再予約する', async () => {
+  const unreserved = { ...reserved, autoMergeRequest: null };
+  // 1回目: 解除後の push が拒否される（予約なし・head は old のまま）
+  const m1 = mocks({ files: oneChange, prSeq: [reserved, unreserved], pushResult: { ok: false, reason: 'stale info' }, ...reservedRemote });
+  assert.equal((await run(m1)).outcome, 'skip-push-rejected');
+  // 2回目: 予約なしの PR（head old）→ 解除はせず、再確認 → push → 再予約
+  const m2 = mocks({ files: oneChange, pr: unreserved, ...reservedRemote });
+  const r2 = await run(m2);
+  assert.equal(r2.outcome, 'updated');
+  assert.ok(!m2.writes().some((c) => c.name === 'disableAutoMerge'));
+  assert.ok(m2.writes().some((c) => c.name === 'enableAutoMerge' && c.args[1] === 'foldcommit'));
+  // 1回目: push 後の再予約が失敗 → 2回目: 同じ内容なので push せず予約だけ
+  const m3 = mocks({ files: oneChange, prSeq: [reserved, unreserved], fail: { enableAutoMerge: true }, ...reservedRemote });
+  assert.equal((await run(m3)).exitCode, 1);
+  const m4 = mocks({ files: oneChange, pr: { ...unreserved, headRefOid: 'foldcommit' }, remote: 'foldcommit', remoteInfo: { tree: 'newtree', parents: ['main1'] } });
+  const r4 = await run(m4);
+  assert.equal(r4.outcome, 'up-to-date');
+  assert.ok(!m4.writes().some((c) => c.name === 'forcePush'));
+  assert.ok(m4.writes().some((c) => c.name === 'enableAutoMerge'));
 });
