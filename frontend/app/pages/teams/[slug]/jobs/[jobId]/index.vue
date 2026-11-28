@@ -25,6 +25,7 @@ const postingApi = useJobPostingApi()
 const applicationApi = useJobApplicationApi()
 const contractApi = useJobContractApi()
 const { success, error, warn } = useNotification()
+const { markIfDenied } = useScopeNotFound()
 
 const teamSlug = computed(() => String(route.params.slug))
 const jobId = computed(() => Number(route.params.jobId))
@@ -57,8 +58,11 @@ async function loadJob() {
     job.value = res.data
   }
   catch (e) {
-    error(t('jobmatching.error.loadFailed'), String(e))
     job.value = null
+    // 見えない求人・不存在（403/404）は共通の「見つかりません」（ScopeNotFound）へ。トーストは出さない。
+    // BE は見えない求人を不在と同一の 404 で返す（存在秘匿・CMP-261127-1118、FE 規約 §12）
+    if (markIfDenied(e)) return
+    error(t('jobmatching.error.loadFailed'), String(e))
     jobLoadFailed.value = true
   }
   finally {

@@ -65,6 +65,18 @@
 
 ### 6.2 主要 DTO
 
+#### `GET /api/v1/jobs/{id}`
+
+**権限**: F00 可視性基盤（`ContentVisibilityChecker`。求人一覧と同じ判定）で閲覧できる者。`TEAM_MEMBERS` は当該チームのメンバー、`TEAM_MEMBERS_SUPPORTERS` はメンバーとサポーター、`JOBBER_PUBLIC_BOARD` は認証済みの全員、`DRAFT` の求人は作成者本人と SYSTEM_ADMIN のみ。
+
+**エラー**（存在秘匿。CMP-261127-1118、`docs/security/01_authorization_baseline.md` §3.3.2）
+| ステータス | コード | 条件 |
+|-----------|-------|------|
+| 401 | — | 未認証（実在・不在を問わず同一応答） |
+| 404 | `JOB_NOT_FOUND`（「求人が見つかりません」） | 求人が存在しない、または閲覧できない（他チームの ADMIN・一般、非所属、可視範囲外の同チームメンバー等）。両者は status・`error.code`・`error.message` まで完全一致し、実在を判別できない |
+
+> 以前は閲覧できない実在求人に 403 `VISIBILITY_001` を返しており、不在 ID の 404 との差から連番の求人 ID の実在を判別できた。契約は `JobDetailExistenceOracleParityContractIT` が固定する。画面側（`pages/jobs/[id]`・`pages/teams/[slug]/jobs/[jobId]`）は 403/404 を「見つかりません」表示に寄せ、トーストを出さない。
+
 #### `POST /api/v1/jobs/fee-preview`
 
 **リクエスト**

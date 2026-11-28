@@ -47,8 +47,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>金型: {@code EquipmentScopeContractIT}（{@code @AutoConfigureMockMvc(addFilters=false)} +
  * 実 MySQL + 手動 SecurityContext + {@code MembershipTestHelper}）。</p>
  *
- * <p><b>象限</b>: 非権限（求人=非メンバー／応募=無関係の第三者）403 / 越境 BOLA（別チームの
- * ADMIN・メンバーが id 直打ちで他チームのリソースへアクセス）403 / 正当（チームメンバー・
+ * <p><b>象限</b>: 非権限（求人=非メンバー／応募=無関係の第三者）404 / 越境 BOLA（別チームの
+ * ADMIN・メンバーが id 直打ちで他チームのリソースへアクセス）404 / 正当（チームメンバー・
  * 応募者本人・採否権限者）200。</p>
  */
 @AutoConfigureMockMvc(addFilters = false)
@@ -143,19 +143,19 @@ class JobDetailScopeContractIT extends AbstractMySqlIntegrationTest {
     class GetJob {
 
         @Test
-        @DisplayName("非権限: 非メンバーは403")
-        void 非権限は403() throws Exception {
+        @DisplayName("非権限: 非メンバーは不在時と同じ404（CMP-261127-1118 存在秘匿）")
+        void 非権限は404() throws Exception {
             setAuth(outsiderId);
             mockMvc.perform(get("/api/v1/jobs/{id}", postingTeamAId))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isNotFound());
         }
 
         @Test
-        @DisplayName("越境BOLA: teamBのADMINがid直打ちでteamAの求人を閲覧しようとすると403")
-        void 越境BOLAは403() throws Exception {
+        @DisplayName("越境BOLA: teamBのADMINがid直打ちでteamAの求人を閲覧しようとしても、不在時と同じ404（CMP-261127-1118）")
+        void 越境BOLAは404() throws Exception {
             setAuth(adminTeamBId);
             mockMvc.perform(get("/api/v1/jobs/{id}", postingTeamAId))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isNotFound());
         }
 
         @Test

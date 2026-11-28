@@ -273,15 +273,23 @@ public class JobPostingService {
      * <p>BOLA対策: 一覧（{@link #listByTeamForViewer}）では {@link ContentVisibilityChecker}
      * によるフィルタリングを行っているが、詳細取得はこれまで存在確認のみで viewer の可視性を
      * 見ていなかった（他チームの DRAFT 求人等が id 直打ちで閲覧できてしまう欠陥）。
-     * {@link ContentVisibilityChecker#assertCanView} で一覧と同じ可視性基盤を通す。</p>
+     * {@link ContentVisibilityChecker#canView} で一覧と同じ可視性基盤を通す。</p>
+     *
+     * <p>存在秘匿（CMP-261127-1118、{@code docs/security/01_authorization_baseline.md} §3.3.2）:
+     * 見えない求人は不在 ID と同一の {@link JobmatchingErrorCode#JOB_NOT_FOUND}（404・同一本文）で拒否する。
+     * 以前は {@link ContentVisibilityChecker#assertCanView} の 403 {@code VISIBILITY_001} を返しており、
+     * 連番の求人 ID の実在を応答差から判別できた。書込側の門 {@link JobPostingViewAccessGuard} と同じ契約。</p>
      *
      * @param postingId    求人ID
      * @param viewerUserId 閲覧者ユーザーID（未認証は {@code null}）
      * @return 求人エンティティ
+     * @throws BusinessException 不在・閲覧不可（{@link JobmatchingErrorCode#JOB_NOT_FOUND} / 404）
      */
     public JobPostingEntity findById(Long postingId, Long viewerUserId) {
         JobPostingEntity posting = findOrThrow(postingId);
-        visibilityChecker.assertCanView(ReferenceType.JOB_POSTING, postingId, viewerUserId);
+        if (!visibilityChecker.canView(ReferenceType.JOB_POSTING, postingId, viewerUserId)) {
+            throw new BusinessException(JobmatchingErrorCode.JOB_NOT_FOUND);
+        }
         return posting;
     }
 

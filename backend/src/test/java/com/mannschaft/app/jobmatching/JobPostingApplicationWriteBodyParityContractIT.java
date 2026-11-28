@@ -71,7 +71,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * status・error.code・message まで完全一致する（閲覧ガード {@code JobPostingViewAccessGuard} /
  * {@code JobApplicationViewAccessGuard} / {@code JobContractViewAccessGuard} が TX・ロックより前に不在コードで拒否）。
  * 対象を閲覧できる者（閲覧者）の権限不足は、従来の診断 {@code JOB_PERMISSION_DENIED} を維持する。
- * 求人の閲覧（GET /jobs/{id}）は公開情報のため対象外。</p>
+ * 求人の閲覧（GET /jobs/{id}）の本文一致は {@link JobDetailExistenceOracleParityContractIT}（CMP-261127-1118）が固定する。</p>
  *
  * <p>金型: {@link JobContractReadScopeContractIT}（#3814）/ {@code JobApplicationReadScopeContractIT}（#3818）。</p>
  */
