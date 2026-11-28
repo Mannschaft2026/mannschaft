@@ -237020,6 +237020,9 @@
           },
           "scopeAdmin": {
             "type": "boolean"
+          },
+          "scopeAdminOrDeputy": {
+            "type": "boolean"
           }
         }
       },

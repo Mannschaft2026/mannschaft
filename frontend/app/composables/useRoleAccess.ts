@@ -15,6 +15,11 @@ interface EffectivePermissions {
    * SYSTEM_ADMIN 兼任者は scopeAdmin=true でも false。旧 BE は返さない（undefined）。
    */
   canGrantAdminOnlyPermissions?: boolean
+  /**
+   * 対象スコープの ADMIN または DEPUTY_ADMIN か（BE の AccessControlService#isAdminOrAbove）。
+   * SYSTEM_ADMIN 単独は false、SYSTEM_ADMIN とスコープ ADMIN/DEPUTY_ADMIN の兼任は true。旧 BE は返さない（undefined）。
+   */
+  scopeAdminOrDeputy?: boolean
 }
 
 export function useRoleAccess(
@@ -28,6 +33,7 @@ export function useRoleAccess(
   const roleName = ref<RoleName | null>(null)
   const scopeAdminFromApi = ref<boolean | null>(null)
   const canGrantFromApi = ref<boolean | null>(null)
+  const scopeAdminOrDeputyFromApi = ref<boolean | null>(null)
   const loading = ref(false)
   /**
    * ロール解決が完了したか（成功・失敗いずれでも true）。roleName=null は「読込中」「未所属」
@@ -87,6 +93,7 @@ export function useRoleAccess(
         roleResolved.value = true
         roleLoadFailed.value = false
         canGrantFromApi.value = response.data.canGrantAdminOnlyPermissions ?? null
+        scopeAdminOrDeputyFromApi.value = response.data.scopeAdminOrDeputy ?? null
       }
       result = { ok: true }
     }
@@ -99,6 +106,7 @@ export function useRoleAccess(
         roleResolved.value = true
         roleLoadFailed.value = true
         canGrantFromApi.value = null
+        scopeAdminOrDeputyFromApi.value = null
       }
       result = { ok: false, error }
     }
@@ -140,6 +148,15 @@ export function useRoleAccess(
     isAdmin.value || roleName.value === 'DEPUTY_ADMIN',
   )
 
+  /**
+   * 対象スコープの管理者（ADMIN/DEPUTY_ADMIN）か。管理者 UI（活動統計の管理操作など）の出し分けに使う。
+   * roleName は SYSTEM_ADMIN が優先されるため、SYSTEM_ADMIN 兼任者の判定には BE の scopeAdminOrDeputy を使う。
+   * 返さない旧 BE では roleName が ADMIN/DEPUTY_ADMIN のときだけ true（SYSTEM_ADMIN 単独は不可）。
+   */
+  const canManageScope = computed(() =>
+    scopeAdminOrDeputyFromApi.value ?? (roleName.value === 'ADMIN' || roleName.value === 'DEPUTY_ADMIN'),
+  )
+
   /** ADMIN/DEPUTY_ADMIN/MEMBER は書き込み可（SUPPORTER/GUEST は不可） */
   const isMember = computed(() =>
     isAdminOrDeputy.value || roleName.value === 'MEMBER',
@@ -153,6 +170,7 @@ export function useRoleAccess(
     permissions.value = []
     scopeAdminFromApi.value = null
     canGrantFromApi.value = null
+    scopeAdminOrDeputyFromApi.value = null
     roleResolved.value = false
     roleLoadFailed.value = false
     loading.value = false
@@ -180,6 +198,7 @@ export function useRoleAccess(
     isScopeAdmin,
     canGrantAdminOnlyPermissions,
     isAdminOrDeputy,
+    canManageScope,
     isMember,
   }
 }

@@ -1535,6 +1535,7 @@ officers と同じ仕様・エラーハンドリング（数値上限のみ 20 �
 |---|---|---|
 | `scopeAdmin` | Boolean | 対象スコープの ADMIN 割当があるか（SYSTEM_ADMIN の有無とは独立）|
 | `canGrantAdminOnlyPermissions` | Boolean | ADMIN 専用権限（`PermissionGroupService.ADMIN_ONLY_GRANTABLE_PERMISSIONS`）を含む権限グループの作成・更新・割当（付与・剥奪とも）ができるか。`AccessControlService.canActAsScopeAdminOnly`（スコープ ADMIN 本人で、かつ SYSTEM_ADMIN でない）。SYSTEM_ADMIN とスコープ ADMIN の兼任者は `scopeAdmin=true` でも `false`（`checkScopeAdminOnly` が拒否するため）|
+| `scopeAdminOrDeputy` | Boolean | 対象スコープの ADMIN または DEPUTY_ADMIN か（`AccessControlService.isAdminOrAbove` の結果。CMP-261124-0159 PR-R）。SYSTEM_ADMIN 単独（対象スコープの割当なし）は `false`、SYSTEM_ADMIN とスコープ ADMIN/DEPUTY_ADMIN の兼任は `true`、MEMBER 以下は `false`。FE の `useRoleAccess().canManageScope` が管理者 UI の出し分けに使う（旧 BE が返さない間は roleName が ADMIN/DEPUTY_ADMIN のときだけ true）|
 
 権限グループ一覧の各要素には `containsAdminOnlyPermission`（そのグループが ADMIN 専用権限を含むか）を載せる。含むグループの更新・削除・割当（外す操作も）は `canGrantAdminOnlyPermissions=true` の操作者だけができる。
 

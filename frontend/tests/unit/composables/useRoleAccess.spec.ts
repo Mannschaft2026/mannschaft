@@ -116,6 +116,37 @@ describe('useRoleAccess', () => {
     expect(access.canGrantAdminOnlyPermissions.value).toBe(false)
   })
 
+  // CMP-261124-0159 PR-R: スコープ管理者（ADMIN/DEPUTY_ADMIN）か。BE の AccessControlService#isAdminOrAbove の結果。
+  // roleName は SYSTEM_ADMIN が優先されるため、SYSTEM_ADMIN とスコープ ADMIN/DEPUTY の兼任は roleName では判定できない。
+  async function loadCanManage(roleName: string, scopeAdminOrDeputy?: boolean) {
+    mockFetch.mockResolvedValueOnce({ data: { roleName, permissions: [], scopeAdminOrDeputy } })
+    const access = useRoleAccess('team', 'team-1')
+    await access.loadPermissions()
+    return access.canManageScope.value
+  }
+
+  it('ROLE-014: canManageScope は BE が返す scopeAdminOrDeputy に従う（SYSTEM_ADMIN 単独 false／兼任 true）', async () => {
+    expect(await loadCanManage('SYSTEM_ADMIN', false)).toBe(false)
+    expect(await loadCanManage('SYSTEM_ADMIN', true)).toBe(true)
+    expect(await loadCanManage('ADMIN', true)).toBe(true)
+    expect(await loadCanManage('DEPUTY_ADMIN', true)).toBe(true)
+    expect(await loadCanManage('MEMBER', false)).toBe(false)
+  })
+
+  it('ROLE-015: 項目を返さない旧応答は roleName が ADMIN/DEPUTY_ADMIN のときだけ true（SYSTEM_ADMIN は不可）', async () => {
+    expect(await loadCanManage('ADMIN')).toBe(true)
+    expect(await loadCanManage('DEPUTY_ADMIN')).toBe(true)
+    expect(await loadCanManage('SYSTEM_ADMIN')).toBe(false)
+    expect(await loadCanManage('MEMBER')).toBe(false)
+  })
+
+  it('ROLE-016: 取得失敗時は canManageScope=false', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('500'))
+    const access = useRoleAccess('team', 'team-1')
+    await access.loadPermissions()
+    expect(access.canManageScope.value).toBe(false)
+  })
+
   it('ROLE-010: 取得失敗時は isScopeAdmin=false', async () => {
     mockFetch.mockRejectedValueOnce(new Error('500'))
     const access = useRoleAccess('organization', 'org-1')

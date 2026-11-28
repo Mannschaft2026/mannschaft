@@ -79287,6 +79287,7 @@ export interface components {
             permissions?: string[];
             roleName?: string;
             scopeAdmin?: boolean;
+            scopeAdminOrDeputy?: boolean;
         };
         ApiResponseListInviteTokenResponse: {
             data?: components["schemas"]["InviteTokenResponse"][];
