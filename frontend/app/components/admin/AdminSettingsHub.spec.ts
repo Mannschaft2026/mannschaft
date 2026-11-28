@@ -13,10 +13,18 @@ const state = vi.hoisted(() => ({
   role: 'ADMIN',
   scopeAdmin: undefined as boolean | undefined,
   shift: false,
+  recruitment: true,
   loaded: true,
   permissions: vi.fn(),
   loadFlags: vi.fn(),
   probe: vi.fn(),
+}))
+// 無断欠席・ペナルティ管理への導線用に、管理者の表示時だけスコープ詳細（getTeam / getOrganization）の numericId を引く
+mockNuxtImport('useTeamApi', () => () => ({
+  getTeam: vi.fn().mockResolvedValue({ data: { numericId: 42 } }),
+}))
+mockNuxtImport('useOrganizationApi', () => () => ({
+  getOrganization: vi.fn().mockResolvedValue({ data: { numericId: 42 } }),
 }))
 mockNuxtImport('useRoleAccess', () => () => ({
   roleName: ref(state.role),
@@ -27,7 +35,7 @@ mockNuxtImport('useFeatureFlagStore', () => () => ({
   get publicLoaded() {
     return state.loaded
   },
-  isEnabled: () => state.shift,
+  isEnabled: (key: string) => (key === 'FEATURE_RECRUITMENT_ENABLED' ? state.recruitment : state.shift),
   loadPublicFlags: state.loadFlags,
 }))
 mockNuxtImport('useScopeTabApi', () => () => ({ getAdminActionRequired: state.probe }))
@@ -58,6 +66,7 @@ describe('既存設定の集約ハブ', () => {
     state.role = 'ADMIN'
     state.scopeAdmin = undefined
     state.shift = false
+    state.recruitment = true
     state.loaded = true
     state.permissions.mockReset().mockResolvedValue({ ok: true })
     state.loadFlags.mockReset().mockImplementation(async () => {
@@ -187,7 +196,10 @@ describe('既存設定の集約ハブ', () => {
     state.role = 'DEPUTY_ADMIN'
     const wrapper = await mountHub('organization')
     expect(wrapper.find('a[href$="/public-settings"]').exists()).toBe(true)
-    expect(wrapper.findAll('a')).toHaveLength(1)
+    // 副管理者はADMIN限定リンクを持たず、BE の checkAdminOrAbove に合わせた無断欠席・ペナルティ管理の2本だけが加わる
+    expect(wrapper.findAll('a')).toHaveLength(3)
+    expect(wrapper.find('a[href$="/no-shows"]').exists()).toBe(true)
+    expect(wrapper.find('a[href$="/penalty-settings"]').exists()).toBe(true)
     expect(state.loadFlags).not.toHaveBeenCalled()
   })
 

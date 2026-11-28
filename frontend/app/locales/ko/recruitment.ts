@@ -276,6 +276,7 @@ export default {
     "noShow": {
       "pageTitle": "NO_SHOW 이력",
       "adminPageTitle": "NO_SHOW 관리",
+      "empty": "무단 결석 기록이 없습니다.",
       "status": {
         "pending": "확인 대기",
         "confirmed": "확정",
@@ -306,6 +307,8 @@ export default {
     "penalty": {
       "pageTitle": "패널티 설정",
       "penaltiesPageTitle": "패널티 목록",
+      "emptyPenalties": "현재 패널티를 받고 있는 멤버가 없습니다.",
+      "notConfigured": "패널티 설정이 아직 되어 있지 않습니다. 기본값을 표시하고 있으며, 저장하면 설정이 등록되고 적용 여부는 '활성화' 스위치 상태에 따릅니다.",
       "enabled": "활성",
       "disabled": "비활성",
       "thresholdCount": "임계값 횟수",

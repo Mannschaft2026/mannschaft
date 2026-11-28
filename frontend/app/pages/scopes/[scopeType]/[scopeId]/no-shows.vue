@@ -12,6 +12,8 @@ const scopeId = computed(() => String(route.params.scopeId))
 
 const noShows = ref<RecruitmentNoShowRecordResponse[]>([])
 const loading = ref(false)
+// 取得失敗は空状態へ倒さず DashboardErrorState で出す（BE の 403 は権限なしとして表示する）
+const loadError = ref<unknown>(null)
 const page = ref(0)
 const pageSize = ref(20)
 const totalElements = ref(0)
@@ -25,6 +27,7 @@ const resolveSubmitting = ref(false)
 
 async function load() {
   loading.value = true
+  loadError.value = null
   try {
     const result = await api.getNoShowsByScope(
       scopeType.value,
@@ -36,7 +39,9 @@ async function load() {
     totalElements.value = result.meta.total
   }
   catch (e) {
-    error(String(e))
+    noShows.value = []
+    totalElements.value = 0
+    loadError.value = e
   }
   finally {
     loading.value = false
@@ -117,11 +122,13 @@ onMounted(() => load())
       <LoadingBounce />
     </div>
 
+    <DashboardErrorState v-else-if="loadError" :error="loadError" @retry="load" />
+
     <div
       v-else-if="noShows.length === 0"
       class="rounded border border-dashed p-8 text-center text-gray-500"
     >
-      {{ t('recruitment.label.noListings') }}
+      {{ t('recruitment.noShow.empty') }}
     </div>
 
     <div v-else class="flex flex-col gap-3">
@@ -161,7 +168,7 @@ onMounted(() => load())
     </div>
 
     <Paginator
-      v-if="totalElements > pageSize"
+      v-if="!loadError && totalElements > pageSize"
       :rows="pageSize"
       :total-records="totalElements"
       class="mt-4"

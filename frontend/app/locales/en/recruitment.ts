@@ -276,6 +276,7 @@ export default {
     "noShow": {
       "pageTitle": "NO_SHOW History",
       "adminPageTitle": "NO_SHOW Management",
+      "empty": "There are no no-show records.",
       "status": {
         "pending": "Pending",
         "confirmed": "Confirmed",
@@ -306,6 +307,8 @@ export default {
     "penalty": {
       "pageTitle": "Penalty Settings",
       "penaltiesPageTitle": "Penalty List",
+      "emptyPenalties": "No members are currently under a penalty.",
+      "notConfigured": "The penalty policy has not been set up yet. Default values are shown; saving registers the settings, and whether they apply follows the Enabled switch.",
       "enabled": "Enabled",
       "disabled": "Disabled",
       "thresholdCount": "Threshold Count",

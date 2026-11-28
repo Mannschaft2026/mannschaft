@@ -1,12 +1,14 @@
 import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { components } from '~/types/generated'
 import PenaltySettingsPage from './penalty-settings.vue'
 
 const api = vi.hoisted(() => ({
   getPenaltySetting: vi.fn(),
   getScopePenalties: vi.fn(),
+  upsertPenaltySetting: vi.fn(),
+  liftPenalty: vi.fn(),
 }))
 
 mockNuxtImport('useRoute', () => () => ({ params: { scopeType: 'TEAM', scopeId: '42' } }))
@@ -71,6 +73,112 @@ describe('ペナルティ設定の解除操作', () => {
         'recruitment.penalty.status.expired',
         'recruitment.penalty.status.lifted',
       ])
+    }
+    finally {
+      wrapper.unmount()
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// CMP-261005-2103 I2/I3: 空表示・未設定表示の専用文言と、非管理者の直打ちに対する権限ゲート
+// ---------------------------------------------------------------------------
+
+const gateStubs = {
+  PageHeader: true,
+  Dialog: true,
+  Paginator: true,
+  SectionCard: { template: '<div><slot /></div>' },
+  InputSwitch: { template: '<input data-testid="penalty-form-control" type="checkbox" />' },
+  InputNumber: { template: '<input data-testid="penalty-form-control" type="number" />' },
+  Button: {
+    props: ['label'],
+    template: '<button>{{ label }}</button>',
+  },
+  Tag: {
+    props: ['value'],
+    template: '<span>{{ value }}</span>',
+  },
+}
+
+const savedSetting = {
+  id: 5,
+  scopeType: 'TEAM',
+  scopeId: '42',
+  isEnabled: true,
+  thresholdCount: 3,
+  thresholdPeriodDays: 90,
+  penaltyDurationDays: 30,
+  applyScope: 'THIS_SCOPE_ONLY',
+  autoNoShowDetection: false,
+  disputeAllowedDays: 7,
+  createdAt: '2026-11-01T00:00:00',
+  updatedAt: '2026-11-01T00:00:00',
+}
+
+async function mountGatePage() {
+  const wrapper = await mountSuspended(PenaltySettingsPage, { global: { stubs: gateStubs } })
+  await flushPromises()
+  return wrapper
+}
+
+describe('ペナルティ設定画面の文言と権限ゲート（CMP-261005-2103）', () => {
+  beforeEach(() => {
+    api.getPenaltySetting.mockReset()
+    api.getScopePenalties.mockReset()
+    api.upsertPenaltySetting.mockReset()
+    api.liftPenalty.mockReset()
+  })
+
+  it('I2: ペナルティ0件のときは専用の文言を出し、募集一覧の「募集はありません」を流用しない', async () => {
+    api.getPenaltySetting.mockResolvedValue({ data: savedSetting })
+    api.getScopePenalties.mockResolvedValue({ data: [], meta: { total: 0 } })
+    const wrapper = await mountGatePage()
+    try {
+      expect(wrapper.text()).toContain('recruitment.penalty.emptyPenalties')
+      expect(wrapper.text()).not.toContain('recruitment.label.noListings')
+      // 保存済みのポリシーがあるときは「未設定」を出さない
+      expect(wrapper.text()).not.toContain('recruitment.penalty.notConfigured')
+    }
+    finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('I2: ポリシー未設定（BE が既定値を id なしで返す）のときは未設定の専用文言を出す', async () => {
+    api.getPenaltySetting.mockResolvedValue({
+      data: { ...savedSetting, id: null, isEnabled: false, createdAt: null, updatedAt: null },
+    })
+    api.getScopePenalties.mockResolvedValue({ data: [], meta: { total: 0 } })
+    const wrapper = await mountGatePage()
+    try {
+      expect(wrapper.text()).toContain('recruitment.penalty.notConfigured')
+      expect(wrapper.text()).not.toContain('recruitment.label.noListings')
+    }
+    finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('I3: 非管理者がURL直打ちしてBEが403を返したら、権限なしを表示し設定フォーム・保存ボタンを出さない', async () => {
+    const forbidden = () => Object.assign(new Error('Forbidden'), {
+      statusCode: 403,
+      data: { error: { code: 'COMMON_002' } },
+    })
+    api.getPenaltySetting.mockRejectedValue(forbidden())
+    api.getScopePenalties.mockRejectedValue(forbidden())
+    const wrapper = await mountGatePage()
+    try {
+      const errorState = wrapper.find('[data-testid="load-error-state"]')
+      expect(errorState.exists()).toBe(true)
+      expect(errorState.text()).toContain('loadErrorState.states.forbidden.title')
+      expect(wrapper.find('[data-testid="penalty-form-control"]').exists()).toBe(false)
+      const operationLabels = ['recruitment.penalty.saveButton', 'recruitment.penalty.liftButton']
+      expect(wrapper.findAll('button').filter(b => operationLabels.includes(b.text()))).toHaveLength(0)
+      // 権限なしを「0件」と取り違えさせない
+      expect(wrapper.text()).not.toContain('recruitment.penalty.emptyPenalties')
+      expect(wrapper.text()).not.toContain('recruitment.label.noListings')
+      expect(api.upsertPenaltySetting).not.toHaveBeenCalled()
     }
     finally {
       wrapper.unmount()
