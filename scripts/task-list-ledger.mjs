@@ -77,6 +77,17 @@ export function splitTableRow(line) {
   return result;
 }
 
+/**
+ * 表の行が終端の | で閉じているか（行末の U+0020 以下を除いた最後の文字が | で、\| のエスケープでない）。
+ * 終端の | が無い行は splitTableRow の要素数から列数を数えられない（"| … | 台帳 | EXTRA" が7列に見える）ため、
+ * 列数の検査（月別ファイル・申告の両方）はこれを満たすことを先に要求する。
+ */
+export function closesTableRow(line) {
+  let end = line.length;
+  while (end > 0 && line.charCodeAt(end - 1) <= 0x20) end--;
+  return end > 0 && line[end - 1] === '|' && !(end > 1 && line[end - 2] === '\\');
+}
+
 /** docs/task-list/ 直下のファイル名として正しいか（YYYY-MM.md か legacy.md）。 */
 export function isLedgerFileName(name) {
   return name === LEGACY_FILE_NAME || MONTH_FILE_NAME.test(name);
@@ -338,6 +349,8 @@ export function parseChangeFile(path, content) {
   const cells = line.startsWith('|') ? splitTableRow(line) : [];
   if (cells.length < 3) {
     errors.push(problem('format', path, '形式: 2行目が表の行（| で始まる7列行）でない。'));
+  } else if (!closesTableRow(line)) {
+    errors.push(problem('format', path, '形式: 2行目の列数を数えられない（行末が | で閉じていない）。7列の各セルを | で囲むこと。'));
   } else if (cells.length - 2 !== 7) {
     // 最終の実効本文だけでなく申告ごとに7列を検査する（壊れた中間行を経由する連鎖を通さない）
     errors.push(problem('format', path, '形式: 2行目の列数が ' + (cells.length - 2) + '（期待 7 列）。セル内の | は \\| にエスケープすること。'));

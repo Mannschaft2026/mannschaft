@@ -105,6 +105,18 @@ final class TaskListLedger {
         }
     }
 
+    /**
+     * 表の行が終端の | で閉じているか（Node: closesTableRow）。終端の | が無い行は splitTableRow の要素数から列数を数えられない
+     * （"| … | 台帳 | EXTRA" が7列に見える）ため、列数の検査（月別ファイル・申告の両方）はこれを先に要求する。
+     */
+    static boolean closesTableRow(String line) {
+        int end = line.length();
+        while (end > 0 && line.charAt(end - 1) <= ' ') {
+            end--;
+        }
+        return end > 0 && line.charAt(end - 1) == '|' && !(end > 1 && line.charAt(end - 2) == '\\');
+    }
+
     static boolean isLedgerFileName(String name) {
         return LEGACY_FILE_NAME.equals(name) || MONTH_FILE_NAME.matcher(name).matches();
     }
@@ -282,7 +294,10 @@ final class TaskListLedger {
                 }
                 rowTotal++;
                 int columns = cells.size() - 2;
-                if (columns != EXPECTED_COLUMN_COUNT) {
+                if (!closesTableRow(line)) {
+                    v.add(new Violation(Kind.COLUMNS, file.path() + ": 列数: " + firstCell + " の行が | で閉じていない（終端の | が無い行は列数を数えられない。"
+                            + "7列の各セルを | で囲むこと）。"));
+                } else if (columns != EXPECTED_COLUMN_COUNT) {
                     v.add(new Violation(Kind.COLUMNS, file.path() + ": 列数: " + firstCell + " の行は " + columns + " 列（期待 "
                             + EXPECTED_COLUMN_COUNT + " 列）。セル内の | は \\| にエスケープすること（コードスパン内でも）。"));
                 }
@@ -456,6 +471,8 @@ final class TaskListLedger {
         List<String> cells = line.startsWith("|") ? splitTableRow(line) : List.of();
         if (cells.size() < 3) {
             errors.add(problem("format", path, "形式: 2行目が表の行（| で始まる7列行）でない。"));
+        } else if (!closesTableRow(line)) {
+            errors.add(problem("format", path, "形式: 2行目の列数を数えられない（行末が | で閉じていない）。7列の各セルを | で囲むこと。"));
         } else if (cells.size() - 2 != EXPECTED_COLUMN_COUNT) {
             // 申告ごとに7列を検査する（壊れた中間行を経由する連鎖を通さない）
             errors.add(problem("format", path, "形式: 2行目の列数が " + (cells.size() - 2) + "（期待 7 列）。セル内の | は \\| にエスケープすること。"));

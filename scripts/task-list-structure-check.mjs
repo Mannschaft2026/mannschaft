@@ -26,6 +26,7 @@ import {
   LEGACY_FILE_NAME,
   applyChanges,
   asLedger,
+  closesTableRow,
   expectedLedgerFile,
   extractRows,
   fsLedgerReader,
@@ -82,7 +83,9 @@ function analyzeContent(text) {
     if (!CMP_ID_PREFIX.test(firstCell)) continue;
     rows++;
     const columns = cells.length - 2;
-    if (columns !== EXPECTED_COLUMN_COUNT) {
+    if (!closesTableRow(line)) {
+      columnErrors.push('列数: ' + firstCell + ' の行が | で閉じていない（終端の | が無い行は列数を数えられない。7列の各セルを | で囲むこと）。');
+    } else if (columns !== EXPECTED_COLUMN_COUNT) {
       columnErrors.push('列数: ' + firstCell + ' の行は ' + columns + ' 列（期待 ' + EXPECTED_COLUMN_COUNT + ' 列）。セル内の | は \\| にエスケープすること（コードスパン内でも）。');
     }
     if (cells.length < 4 || !CMP_ID_EXACT.test(firstCell)) continue;
