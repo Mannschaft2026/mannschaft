@@ -115,7 +115,7 @@ class BulletinArchiveFolderServiceTest {
         @DisplayName("ツリー取得_非メンバー403")
         void ツリー取得_非メンバー403() {
             doThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .when(accessGuard).checkMembership(USER_ID, SCOPE, SCOPE_ID);
+                    .when(accessGuard).checkScopeContentAccess(USER_ID, SCOPE, SCOPE_ID);
             assertThatThrownBy(() -> service.getFolderTree(SCOPE, SCOPE_ID, USER_ID))
                     .isInstanceOf(BusinessException.class);
         }

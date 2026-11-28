@@ -98,7 +98,7 @@ public class BulletinThreadService {
         // 所属認可は本メソッド直下で呼ぶ（Wave4 番人が委譲深さ2で認可シグナルを辿れるよう private 委譲にしない）。
         // 大会/ディビジョンは Controller の BulletinTournamentScopeAccessGuard が取引外で認可済み（D-3T）。
         if (!isTournamentScope(scopeType)) {
-            accessGuard.checkMembership(userId, scopeType, scopeId);
+            accessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
         }
         Page<BulletinThreadEntity> page =
                 threadRepository.findByScopeTypeAndScopeIdOrderByIsPinnedDescUpdatedAtDesc(scopeType, scopeId, pageable);
@@ -109,7 +109,7 @@ public class BulletinThreadService {
      * カテゴリ指定でスレッド一覧をページング取得する。所属メンバーのみ。
      *
      * <p><b>帰属検証（越境 BOLA 封鎖）</b>: {@code categoryId} は URL のスコープに属するもので
-     * なければならない。所属判定（{@link BulletinAccessGuard#checkMembership}）は URL の
+     * なければならない。所属判定（{@link BulletinAccessGuard#checkScopeContentAccess}）は URL の
      * {@code scopeType/scopeId} に対してしか効かないため、カテゴリ側の帰属を検証しないと
      * 「自スコープの URL に他スコープの categoryId を差し込む」だけで他テナントのスレッド
      * （タイトル・本文・投稿者）を読み出せてしまう。近隣の {@link #createThread} と同じ
@@ -138,7 +138,7 @@ public class BulletinThreadService {
     public Page<ThreadResponse> listThreadsByCategory(ScopeType scopeType, Long scopeId, Long categoryId, Long userId, Pageable pageable) {
         // 所属認可は本メソッド直下で呼ぶ（Wave4 番人の委譲深さ上限のため）。大会は Controller 側の Guard が認可済み。
         if (!isTournamentScope(scopeType)) {
-            accessGuard.checkMembership(userId, scopeType, scopeId);
+            accessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
         }
         // カテゴリの帰属検証。越境 ID と不在 ID はいずれも CATEGORY_NOT_FOUND で同一応答となり、
         // 応答差分から他スコープのカテゴリ実在を判別できない（実在オラクル封じ）。
@@ -159,7 +159,7 @@ public class BulletinThreadService {
      * @return スレッドレスポンス
      */
     public ThreadResponse getThread(ScopeType scopeType, Long scopeId, Long threadId, Long userId) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
         BulletinThreadEntity entity = findThreadOrThrow(scopeType, scopeId, threadId);
         return enrichSingle(entity, userId);
     }
@@ -226,7 +226,7 @@ public class BulletinThreadService {
      * その {@code scopeType} に応じて認可経路を分岐する:</p>
      * <ul>
      *   <li>{@code VILLAGE}: 当該スレッドの {@code scope_village_id} で村可視性認可（PUBLIC/MEMBERS_ONLY）</li>
-     *   <li>{@code TEAM/ORGANIZATION/PERSONAL}: 既存の {@link BulletinAccessGuard#checkMembership} で所属認可</li>
+     *   <li>{@code TEAM/ORGANIZATION/PERSONAL}: 既存の {@link BulletinAccessGuard#checkScopeContentAccess} で所属認可</li>
      * </ul>
      *
      * @param threadId スレッド ID
@@ -240,7 +240,7 @@ public class BulletinThreadService {
         if (entity.getScopeType() == ScopeType.VILLAGE) {
             villageBulletinAccessService.checkVillageBulletinViewAccess(entity.getScopeVillageId(), userId);
         } else if (!isTournamentScope(entity.getScopeType())) {
-            accessGuard.checkMembership(userId, entity.getScopeType(), entity.getScopeId());
+            accessGuard.checkScopeContentAccess(userId, entity.getScopeType(), entity.getScopeId());
         }
         // 大会/ディビジョン連絡の閲覧は BulletinReadFacade が tx 外で認可済み（存在秘匿つき・D-3T。CMP-261116-0726）。
         return enrichSingle(entity, userId);
@@ -269,7 +269,7 @@ public class BulletinThreadService {
      * @return スレッドレスポンスのページ
      */
     public Page<ThreadResponse> searchThreads(ScopeType scopeType, Long scopeId, Long userId, String keyword, Pageable pageable) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
         Page<BulletinThreadEntity> page =
                 threadRepository.searchByKeyword(scopeType.name(), scopeId, keyword, pageable);
         return enrichPage(page, userId);
@@ -316,10 +316,10 @@ public class BulletinThreadService {
 
         // 村スコープの資格検証は村ドメインが担う（本メソッド下方の
         // PostingIdentityService#validatePostingIdentity が村メンバーであることを検証する）。
-        // BulletinAccessGuard#checkMembership は村を判定できず fail-closed で拒否するため、
+        // BulletinAccessGuard#checkMembershipForWrite は村を判定できず fail-closed で拒否するため、
         // ここで村分岐を明示し、村側の検証へ委譲する。
         if (scopeType != ScopeType.VILLAGE) {
-            accessGuard.checkMembership(userId, scopeType, scopeId);
+            accessGuard.checkMembershipForWrite(userId, scopeType, scopeId);
         }
 
         // カテゴリの存在確認 + post_min_role の取得（未分類=null の場合はデフォルト MEMBER 扱い）
@@ -392,7 +392,7 @@ public class BulletinThreadService {
      */
     @Transactional
     public ThreadResponse updateThread(ScopeType scopeType, Long scopeId, Long threadId, Long userId, UpdateThreadRequest request) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
         BulletinThreadEntity entity = findThreadOrThrow(scopeType, scopeId, threadId);
 
         // 投稿者本人 or ADMIN（現状 NOT_AUTHOR のみで ADMIN が編集できないバグを是正）
@@ -429,7 +429,7 @@ public class BulletinThreadService {
      */
     @Transactional
     public void deleteThread(ScopeType scopeType, Long scopeId, Long threadId, Long userId) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkMembershipForWrite(userId, scopeType, scopeId);
         BulletinThreadEntity entity = findThreadOrThrow(scopeType, scopeId, threadId);
 
         // 安否確認スレッドは手動削除不可（設計書 §6）
@@ -469,7 +469,7 @@ public class BulletinThreadService {
      */
     @Transactional
     public ThreadResponse togglePin(ScopeType scopeType, Long scopeId, Long threadId, Long userId) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
         accessGuard.requireManageContent(userId, scopeType, scopeId);
         BulletinThreadEntity entity = findThreadOrThrow(scopeType, scopeId, threadId);
         entity.togglePin();
@@ -489,7 +489,7 @@ public class BulletinThreadService {
      */
     @Transactional
     public ThreadResponse toggleLock(ScopeType scopeType, Long scopeId, Long threadId, Long userId) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
         accessGuard.requireManageContent(userId, scopeType, scopeId);
         BulletinThreadEntity entity = findThreadOrThrow(scopeType, scopeId, threadId);
         entity.toggleLock();
@@ -520,7 +520,7 @@ public class BulletinThreadService {
     @Transactional
     public ThreadResponse archive(ScopeType scopeType, Long scopeId, Long threadId, Long userId,
                                   boolean isArchived, UUID archiveFolderId) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
         accessGuard.requireManageContent(userId, scopeType, scopeId);
         BulletinThreadEntity entity = findThreadOrThrow(scopeType, scopeId, threadId);
         if (isArchived) {
@@ -781,7 +781,7 @@ public class BulletinThreadService {
             tournamentContactAccessService.checkPost(
                     toContactScope(entity.getScopeType()), entity.getScopeId(), userId);
         } else {
-            accessGuard.checkMembership(userId, entity.getScopeType(), entity.getScopeId());
+            accessGuard.checkScopeContentAccess(userId, entity.getScopeType(), entity.getScopeId());
             accessGuard.requireManageContent(userId, entity.getScopeType(), entity.getScopeId());
         }
     }
@@ -815,7 +815,7 @@ public class BulletinThreadService {
      */
     public Page<ThreadResponse> listArchiveThreads(ScopeType scopeType, Long scopeId, Long userId,
                                                    UUID folderId, boolean allFolders, Pageable pageable) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
         Page<BulletinThreadEntity> page;
         if (allFolders) {
             page = threadRepository.findByScopeTypeAndScopeIdAndIsArchivedTrue(scopeType, scopeId, pageable);
@@ -848,7 +848,7 @@ public class BulletinThreadService {
     @Transactional
     public ThreadResponse moveThreadToFolder(ScopeType scopeType, Long scopeId, Long threadId, Long userId,
                                              UUID archiveFolderId) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
         accessGuard.requireManageContent(userId, scopeType, scopeId);
         BulletinThreadEntity entity = findThreadOrThrow(scopeType, scopeId, threadId);
 

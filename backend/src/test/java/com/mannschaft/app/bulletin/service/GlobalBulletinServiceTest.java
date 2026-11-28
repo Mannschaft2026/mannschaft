@@ -191,7 +191,7 @@ class GlobalBulletinServiceTest {
             service.createCategoryGlobal(ScopeType.TEAM, SCOPE_ID, null, USER_ID,
                     new CreateCategoryRequest("一般", null, null, null, null));
 
-            verify(accessGuard).checkMembership(USER_ID, ScopeType.TEAM, SCOPE_ID);
+            verify(accessGuard).checkMembershipForWrite(USER_ID, ScopeType.TEAM, SCOPE_ID);
             verify(villageBulletinAccessService, never()).checkVillageBulletinModerator(any(), any());
         }
 
@@ -379,7 +379,7 @@ class GlobalBulletinServiceTest {
 
             service.listRepliesGlobal(THREAD_ID, USER_ID, org.springframework.data.domain.PageRequest.of(0, 20));
 
-            verify(accessGuard).checkMembership(USER_ID, ScopeType.TEAM, SCOPE_ID);
+            verify(accessGuard).checkScopeContentAccess(USER_ID, ScopeType.TEAM, SCOPE_ID);
             verify(villageBulletinAccessService, never()).checkVillageBulletinViewAccess(any(), any());
         }
     }
@@ -467,7 +467,7 @@ class GlobalBulletinServiceTest {
 
             service.markAsReadGlobal(THREAD_ID, USER_ID);
 
-            verify(accessGuard).checkMembership(USER_ID, ScopeType.TEAM, SCOPE_ID);
+            verify(accessGuard).checkMembershipForWrite(USER_ID, ScopeType.TEAM, SCOPE_ID);
             verify(villageBulletinAccessService, never()).checkVillageBulletinViewAccess(any(), any());
         }
 

@@ -66,7 +66,7 @@ public class BulletinArchiveFolderService {
      * 各ノードに childCount / threadCount を付与する。閲覧は所属メンバーなら可（MEMBER/SUPPORTER も閲覧可）。</p>
      */
     public ArchiveFolderTreeResponse getFolderTree(ScopeType scopeType, Long scopeId, Long userId) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
 
         List<BulletinArchiveFolderEntity> folders =
                 folderRepository.findByScopeTypeAndScopeIdOrderByDisplayOrderAsc(scopeType, scopeId);
@@ -139,7 +139,7 @@ public class BulletinArchiveFolderService {
     @Transactional
     public ArchiveFolderResponse createFolder(
             ScopeType scopeType, Long scopeId, Long userId, CreateArchiveFolderRequest request) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkMembershipForWrite(userId, scopeType, scopeId);
         accessGuard.requireManageContent(userId, scopeType, scopeId);
 
         int depth = 0;
@@ -194,7 +194,7 @@ public class BulletinArchiveFolderService {
     @Transactional
     public ArchiveFolderResponse updateFolder(
             ScopeType scopeType, Long scopeId, Long userId, UUID folderId, UpdateArchiveFolderRequest request) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
         accessGuard.requireManageContent(userId, scopeType, scopeId);
 
         // スコープ全フォルダを悲観ロック取得（移動時のサブツリー展開・循環判定・depth 再計算を安全化）
@@ -287,7 +287,7 @@ public class BulletinArchiveFolderService {
     @Transactional
     public DeleteArchiveFolderResponse deleteFolder(
             ScopeType scopeType, Long scopeId, Long userId, UUID folderId) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkMembershipForWrite(userId, scopeType, scopeId);
         accessGuard.requireManageContent(userId, scopeType, scopeId);
 
         List<BulletinArchiveFolderEntity> all = folderRepository.findByScopeForUpdate(scopeType, scopeId);

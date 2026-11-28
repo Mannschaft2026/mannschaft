@@ -1,6 +1,7 @@
 package com.mannschaft.app.filesharing;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.filesharing.dto.CreateFolderRequest;
 import com.mannschaft.app.filesharing.dto.FolderResponse;
@@ -47,6 +48,9 @@ class SharedFolderServiceTest {
     /** 認可根治 Wave7: SharedFolderService に per-scope 認可が入ったため注入対象に追加。 */
     @Mock
     private AccessControlService accessControlService;
+
+    @Mock
+    private ScopeContentAccessGate scopeContentAccessGate;
 
     /**
      * 親フォルダの接ぎ木封鎖を担う認可ガード。

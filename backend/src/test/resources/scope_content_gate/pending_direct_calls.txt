@@ -37,42 +37,6 @@ com.mannschaft.app.budget.service.BudgetTransactionService#listByScope
 com.mannschaft.app.budget.service.BudgetTransactionService#requireMemberOrConceal
 
 ## bulletin
-com.mannschaft.app.bulletin.service.BulletinAccessGuard#checkMembership
-com.mannschaft.app.bulletin.service.BulletinArchiveFolderService#createFolder
-com.mannschaft.app.bulletin.service.BulletinArchiveFolderService#deleteFolder
-com.mannschaft.app.bulletin.service.BulletinArchiveFolderService#getFolderTree
-com.mannschaft.app.bulletin.service.BulletinArchiveFolderService#updateFolder
-com.mannschaft.app.bulletin.service.BulletinAttachmentService#checkViewAuthorization
-com.mannschaft.app.bulletin.service.BulletinCategoryService#createCategory
-com.mannschaft.app.bulletin.service.BulletinCategoryService#deleteCategory
-com.mannschaft.app.bulletin.service.BulletinCategoryService#getCategory
-com.mannschaft.app.bulletin.service.BulletinCategoryService#listCategories
-com.mannschaft.app.bulletin.service.BulletinCategoryService#updateCategory
-com.mannschaft.app.bulletin.service.BulletinReactionService#checkTargetMembership
-com.mannschaft.app.bulletin.service.BulletinReadFacade#assertReadable
-com.mannschaft.app.bulletin.service.BulletinReadStatusService#listReadUsers
-com.mannschaft.app.bulletin.service.BulletinReadStatusService#markAllAsReadGlobal
-com.mannschaft.app.bulletin.service.BulletinReadStatusService#markAsRead
-com.mannschaft.app.bulletin.service.BulletinReadStatusService#markAsReadGlobal
-com.mannschaft.app.bulletin.service.BulletinReplyService#createReply
-com.mannschaft.app.bulletin.service.BulletinReplyService#deleteReply
-com.mannschaft.app.bulletin.service.BulletinReplyService#listReplies
-com.mannschaft.app.bulletin.service.BulletinReplyService#updateReply
-com.mannschaft.app.bulletin.service.BulletinThreadService#archive
-com.mannschaft.app.bulletin.service.BulletinThreadService#createThread
-com.mannschaft.app.bulletin.service.BulletinThreadService#deleteThread
-com.mannschaft.app.bulletin.service.BulletinThreadService#getThread
-com.mannschaft.app.bulletin.service.BulletinThreadService#getThreadGlobal
-com.mannschaft.app.bulletin.service.BulletinThreadService#listArchiveThreads
-com.mannschaft.app.bulletin.service.BulletinThreadService#listThreads
-com.mannschaft.app.bulletin.service.BulletinThreadService#listThreadsByCategory
-com.mannschaft.app.bulletin.service.BulletinThreadService#moveThreadToFolder
-com.mannschaft.app.bulletin.service.BulletinThreadService#requireModeration
-com.mannschaft.app.bulletin.service.BulletinThreadService#searchThreads
-com.mannschaft.app.bulletin.service.BulletinThreadService#toggleLock
-com.mannschaft.app.bulletin.service.BulletinThreadService#togglePin
-com.mannschaft.app.bulletin.service.BulletinThreadService#updateThread
-com.mannschaft.app.bulletin.service.SurveyBulletinThreadService#findThreadResponseBySurveyId
 
 ## chart
 com.mannschaft.app.chart.service.ChartFormulaService#listFormulas
@@ -199,13 +163,6 @@ com.mannschaft.app.family.service.ShoppingListService#updateList
 com.mannschaft.app.family.service.WallpaperService#getAvailableWallpapers
 
 ## filesharing
-com.mannschaft.app.filesharing.service.SharedFolderAccessGuard#authorizeBaseView
-com.mannschaft.app.filesharing.service.SharedFolderQueryService#authorizeScopeView
-com.mannschaft.app.filesharing.service.SharedFolderService#checkFolderViewAccess
-com.mannschaft.app.filesharing.service.SharedFolderService#createOrgFolder
-com.mannschaft.app.filesharing.service.SharedFolderService#createTeamFolder
-com.mannschaft.app.filesharing.service.SharedFolderService#listOrgRootFolders
-com.mannschaft.app.filesharing.service.SharedFolderService#listTeamRootFolders
 
 ## forms
 com.mannschaft.app.forms.controller.FormPresetCatalogController#listCatalog

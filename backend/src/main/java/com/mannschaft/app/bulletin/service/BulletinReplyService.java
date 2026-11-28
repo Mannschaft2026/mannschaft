@@ -69,7 +69,7 @@ public class BulletinReplyService {
      * @return 返信レスポンスのページ（子返信付き）
      */
     public Page<ReplyResponse> listReplies(ScopeType scopeType, Long scopeId, Long threadId, Long userId, Pageable pageable) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
         threadService.findThreadOrThrow(scopeType, scopeId, threadId);
 
         Page<BulletinReplyEntity> page =
@@ -89,7 +89,7 @@ public class BulletinReplyService {
      */
     @Transactional
     public ReplyResponse createReply(ScopeType scopeType, Long scopeId, Long threadId, Long userId, CreateReplyRequest request) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkMembershipForWrite(userId, scopeType, scopeId);
         BulletinThreadEntity thread = threadService.findThreadOrThrow(scopeType, scopeId, threadId);
 
         if (!thread.isWritable()) {
@@ -143,7 +143,7 @@ public class BulletinReplyService {
      */
     @Transactional
     public ReplyResponse updateReply(ScopeType scopeType, Long scopeId, Long threadId, Long replyId, Long userId, UpdateReplyRequest request) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
         BulletinThreadEntity thread = threadService.findThreadOrThrow(scopeType, scopeId, threadId);
         BulletinReplyEntity entity = findReplyOrThrow(threadId, replyId);
 
@@ -173,7 +173,7 @@ public class BulletinReplyService {
      */
     @Transactional
     public void deleteReply(ScopeType scopeType, Long scopeId, Long threadId, Long replyId, Long userId) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkMembershipForWrite(userId, scopeType, scopeId);
         BulletinThreadEntity thread = threadService.findThreadOrThrow(scopeType, scopeId, threadId);
         BulletinReplyEntity entity = findReplyOrThrow(threadId, replyId);
 

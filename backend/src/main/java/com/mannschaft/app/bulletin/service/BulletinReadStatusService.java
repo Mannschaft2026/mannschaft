@@ -48,7 +48,7 @@ public class BulletinReadStatusService {
      */
     @Transactional
     public void markAsRead(ScopeType scopeType, Long scopeId, Long threadId, Long userId) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkMembershipForWrite(userId, scopeType, scopeId);
         BulletinThreadEntity thread = threadService.findThreadOrThrow(scopeType, scopeId, threadId);
 
         if (readStatusRepository.existsByThreadIdAndUserId(threadId, userId)) {
@@ -89,7 +89,7 @@ public class BulletinReadStatusService {
      */
     public List<ReadStatusResponse> listReadUsers(ScopeType scopeType, Long scopeId, Long threadId,
                                                   Long userId, String filter) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
         BulletinThreadEntity thread = threadService.findThreadOrThrow(scopeType, scopeId, threadId);
 
         // filter=unread は ADMIN のみ
@@ -140,7 +140,7 @@ public class BulletinReadStatusService {
         if (thread.getScopeType() == ScopeType.VILLAGE) {
             villageBulletinAccessService.checkVillageBulletinViewAccess(thread.getScopeVillageId(), userId);
         } else if (!isTournamentScope(thread.getScopeType())) {
-            accessGuard.checkMembership(userId, thread.getScopeType(), thread.getScopeId());
+            accessGuard.checkMembershipForWrite(userId, thread.getScopeType(), thread.getScopeId());
         }
         // F08.7.1: 大会/ディビジョン連絡の既読化は閲覧可能なら可。閲覧は Controller が tx 外で認可済み
         // （BulletinTournamentScopeAccessGuard#checkThreadView・存在秘匿つき・D-3T。CMP-261116-0726）。
@@ -174,7 +174,7 @@ public class BulletinReadStatusService {
             // （BulletinTournamentScopeAccessGuard#checkListView・存在秘匿つき・D-3T。CMP-261116-0726）。
             threadIds = threadRepository.findIdsByScopeTypeAndScopeId(scopeType, scopeId);
         } else {
-            accessGuard.checkMembership(userId, scopeType, scopeId);
+            accessGuard.checkMembershipForWrite(userId, scopeType, scopeId);
             threadIds = threadRepository.findIdsByScopeTypeAndScopeId(scopeType, scopeId);
         }
         if (threadIds.isEmpty()) {

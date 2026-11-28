@@ -44,15 +44,15 @@ R-billing-3	HTTP	GET /api/v1/teams/{teamId}/beta-perks	com.mannschaft.app.billin
 R-budget-1	HTTP	GET /api/v1/teams/{teamId}/budget/config	com.mannschaft.app.budget.controller.TeamBudgetConfigController#get	門	PR-W4		未移行
 R-budget-2	HTTP	GET /api/v1/teams/{teamId}/budget/fiscal-years	com.mannschaft.app.budget.controller.TeamBudgetFiscalYearController#list	門	PR-W4		未移行
 R-budget-3	HTTP	GET /api/v1/teams/{teamId}/budget/transactions	com.mannschaft.app.budget.controller.TeamBudgetTransactionController#list	門	PR-W4		未移行
-R-bulletin-1	HTTP	GET /api/v1/{scopeType}/{scopeId}/bulletin/archive/folders	com.mannschaft.app.bulletin.controller.BulletinArchiveFolderController#getFolderTree	門	PR-D1		未移行
-R-bulletin-2	HTTP	GET /api/v1/{scopeType}/{scopeId}/bulletin/archive/threads	com.mannschaft.app.bulletin.controller.BulletinArchiveFolderController#listArchiveThreads	門	PR-D1		未移行
-R-bulletin-3	HTTP	GET /api/v1/{scopeType}/{scopeId}/bulletin/categories/{categoryId}	com.mannschaft.app.bulletin.controller.BulletinCategoryController#getCategory	門	PR-D1		未移行
-R-bulletin-4	HTTP	GET /api/v1/{scopeType}/{scopeId}/bulletin/categories	com.mannschaft.app.bulletin.controller.BulletinCategoryController#listCategories	門	PR-D1		未移行
-R-bulletin-5	HTTP	GET /api/v1/{scopeType}/{scopeId}/bulletin/threads/{threadId}/read-status	com.mannschaft.app.bulletin.controller.BulletinReadStatusController#listReadUsers	門	PR-D1		未移行
-R-bulletin-6	HTTP	GET /api/v1/{scopeType}/{scopeId}/bulletin/threads/{threadId}/replies	com.mannschaft.app.bulletin.controller.BulletinReplyController#listReplies	門	PR-D1		未移行
-R-bulletin-7	HTTP	GET /api/v1/{scopeType}/{scopeId}/bulletin/threads/{threadId}	com.mannschaft.app.bulletin.controller.BulletinThreadController#getThread	門	PR-D1		未移行
-R-bulletin-8	HTTP	GET /api/v1/{scopeType}/{scopeId}/bulletin/threads	com.mannschaft.app.bulletin.controller.BulletinThreadController#listThreads	門	PR-D1		未移行
-R-bulletin-9	HTTP	GET /api/v1/{scopeType}/{scopeId}/bulletin/threads/search	com.mannschaft.app.bulletin.controller.BulletinThreadController#searchThreads	門	PR-D1		未移行
+R-bulletin-1	HTTP	GET /api/v1/{scopeType}/{scopeId}/bulletin/archive/folders	com.mannschaft.app.bulletin.controller.BulletinArchiveFolderController#getFolderTree	門	PR-D1	BulletinScopeContentAccessMatrixIT#表に全読み取り経路が載っている	移行済み
+R-bulletin-2	HTTP	GET /api/v1/{scopeType}/{scopeId}/bulletin/archive/threads	com.mannschaft.app.bulletin.controller.BulletinArchiveFolderController#listArchiveThreads	門	PR-D1	BulletinScopeContentAccessMatrixIT#表に全読み取り経路が載っている	移行済み
+R-bulletin-3	HTTP	GET /api/v1/{scopeType}/{scopeId}/bulletin/categories/{categoryId}	com.mannschaft.app.bulletin.controller.BulletinCategoryController#getCategory	門	PR-D1	BulletinScopeContentAccessMatrixIT#表に全読み取り経路が載っている	移行済み
+R-bulletin-4	HTTP	GET /api/v1/{scopeType}/{scopeId}/bulletin/categories	com.mannschaft.app.bulletin.controller.BulletinCategoryController#listCategories	門	PR-D1	BulletinScopeContentAccessMatrixIT#表に全読み取り経路が載っている	移行済み
+R-bulletin-5	HTTP	GET /api/v1/{scopeType}/{scopeId}/bulletin/threads/{threadId}/read-status	com.mannschaft.app.bulletin.controller.BulletinReadStatusController#listReadUsers	門	PR-D1	BulletinScopeContentAccessMatrixIT#表に全読み取り経路が載っている	移行済み
+R-bulletin-6	HTTP	GET /api/v1/{scopeType}/{scopeId}/bulletin/threads/{threadId}/replies	com.mannschaft.app.bulletin.controller.BulletinReplyController#listReplies	門	PR-D1	BulletinScopeContentAccessMatrixIT#表に全読み取り経路が載っている	移行済み
+R-bulletin-7	HTTP	GET /api/v1/{scopeType}/{scopeId}/bulletin/threads/{threadId}	com.mannschaft.app.bulletin.controller.BulletinThreadController#getThread	門	PR-D1	BulletinScopeContentAccessMatrixIT#表に全読み取り経路が載っている	移行済み
+R-bulletin-8	HTTP	GET /api/v1/{scopeType}/{scopeId}/bulletin/threads	com.mannschaft.app.bulletin.controller.BulletinThreadController#listThreads	門	PR-D1	BulletinScopeContentAccessMatrixIT#表に全読み取り経路が載っている	移行済み
+R-bulletin-9	HTTP	GET /api/v1/{scopeType}/{scopeId}/bulletin/threads/search	com.mannschaft.app.bulletin.controller.BulletinThreadController#searchThreads	門	PR-D1	BulletinScopeContentAccessMatrixIT#表に全読み取り経路が載っている	移行済み
 R-chart-1	HTTP	GET /api/v1/teams/{teamId}/charts/{id}/formulas	com.mannschaft.app.chart.controller.ChartFormulaController#listFormulas	門	PR-W6		未移行
 R-chart-2	HTTP	GET /api/v1/teams/{teamId}/charts/{id}/intake-form	com.mannschaft.app.chart.controller.ChartIntakeFormController#getIntakeForms	門	PR-W6		未移行
 R-chart-3	HTTP	GET /api/v1/teams/{teamId}/charts/{id}/pdf	com.mannschaft.app.chart.controller.ChartRecordController#exportPdf	門	PR-W6		未移行
@@ -117,9 +117,9 @@ R-family-12	HTTP	GET /api/v1/teams/{teamId}/shopping-lists	com.mannschaft.app.fa
 R-family-13	HTTP	GET /api/v1/teams/{teamId}/care-overrides/{careLinkId}	com.mannschaft.app.family.controller.TeamCareOverrideController#getTeamOverride	門	PR-W3		未移行
 R-family-14	HTTP	GET /api/v1/teams/{teamId}/wallpapers	com.mannschaft.app.family.controller.WallpaperController#getWallpapers	門	PR-W3		未移行
 R-faq-1	HTTP	GET /api/v1/admin/teams/{teamId}/faqs	com.mannschaft.app.faq.controller.AdminFaqController#getTeamFaqs	未分類	PR-Z		未移行
-R-filesharing-1	HTTP	GET /api/v1/teams/{teamId}/folders/{folderId}	com.mannschaft.app.filesharing.controller.TeamFolderController#getFolder	門	PR-D1		未移行
-R-filesharing-2	HTTP	GET /api/v1/teams/{teamId}/folders/{folderId}/children	com.mannschaft.app.filesharing.controller.TeamFolderController#listChildFolders	門	PR-D1		未移行
-R-filesharing-3	HTTP	GET /api/v1/teams/{teamId}/folders	com.mannschaft.app.filesharing.controller.TeamFolderController#listRootFolders	門	PR-D1		未移行
+R-filesharing-1	HTTP	GET /api/v1/teams/{teamId}/folders/{folderId}	com.mannschaft.app.filesharing.controller.TeamFolderController#getFolder	門	PR-D1	FilesharingScopeContentAccessMatrixIT#表に全読み取り経路が載っている	移行済み
+R-filesharing-2	HTTP	GET /api/v1/teams/{teamId}/folders/{folderId}/children	com.mannschaft.app.filesharing.controller.TeamFolderController#listChildFolders	門	PR-D1	FilesharingScopeContentAccessMatrixIT#表に全読み取り経路が載っている	移行済み
+R-filesharing-3	HTTP	GET /api/v1/teams/{teamId}/folders	com.mannschaft.app.filesharing.controller.TeamFolderController#listRootFolders	門	PR-D1	FilesharingScopeContentAccessMatrixIT#表に全読み取り経路が載っている	移行済み
 R-forms-1	HTTP	GET /api/v1/{scopeType}/{scopeId}/form-templates/{templateId}/submissions/export	com.mannschaft.app.forms.controller.FormCsvExportController#exportCsv	門	PR-D3		未移行
 R-forms-2	HTTP	GET /api/v1/{scopeType}/{scopeId}/form-submissions/{submissionId}/pdf/download-url	com.mannschaft.app.forms.controller.FormPdfController#downloadUrl	門	PR-D3		未移行
 R-forms-3	HTTP	GET /api/v1/{scopeType}/{scopeId}/form-presets	com.mannschaft.app.forms.controller.FormPresetCatalogController#listCatalog	門	PR-D3		未移行

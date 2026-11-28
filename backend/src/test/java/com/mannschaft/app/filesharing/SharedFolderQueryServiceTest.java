@@ -1,6 +1,7 @@
 package com.mannschaft.app.filesharing;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.NameResolverService;
@@ -82,6 +83,9 @@ class SharedFolderQueryServiceTest {
 
     @Mock
     private AccessControlService accessControlService;
+
+    @Mock
+    private ScopeContentAccessGate scopeContentAccessGate;
 
     @Mock
     private NameResolverService nameResolverService;
@@ -392,14 +396,14 @@ class SharedFolderQueryServiceTest {
                     service.listFolders("TEAM", String.valueOf(TEAM_ID), null, USER_ID);
 
             assertThat(result).hasSize(1);
-            verify(accessControlService).checkMembership(USER_ID, TEAM_ID, "TEAM");
+            verify(scopeContentAccessGate).checkScopeContentAccess(USER_ID, TEAM_ID, "TEAM");
         }
 
         @Test
         @DisplayName("TEAM 非メンバーは一覧で 403（COMMON_002）")
         void TEAM非メンバー_一覧403() {
             willThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .given(accessControlService).checkMembership(USER_ID, TEAM_ID, "TEAM");
+                    .given(scopeContentAccessGate).checkScopeContentAccess(USER_ID, TEAM_ID, "TEAM");
 
             assertThatThrownBy(() ->
                     service.listFolders("TEAM", String.valueOf(TEAM_ID), null, USER_ID))
@@ -431,7 +435,7 @@ class SharedFolderQueryServiceTest {
                     service.createFolder(request, String.valueOf(TEAM_ID), USER_ID);
 
             assertThat(result.name()).isEqualTo("新規");
-            verify(accessControlService).checkMembership(USER_ID, TEAM_ID, "TEAM");
+            verify(scopeContentAccessGate).checkScopeContentAccess(USER_ID, TEAM_ID, "TEAM");
             verify(folderRepository).save(any(SharedFolderEntity.class));
         }
 
@@ -441,7 +445,7 @@ class SharedFolderQueryServiceTest {
             CreateFolderRequest request =
                     new CreateFolderRequest("新規", null, null, "TEAM", String.valueOf(TEAM_ID), null, null);
             willThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .given(accessControlService).checkMembership(USER_ID, TEAM_ID, "TEAM");
+                    .given(scopeContentAccessGate).checkScopeContentAccess(USER_ID, TEAM_ID, "TEAM");
 
             assertThatThrownBy(() ->
                     service.createFolder(request, String.valueOf(TEAM_ID), USER_ID))

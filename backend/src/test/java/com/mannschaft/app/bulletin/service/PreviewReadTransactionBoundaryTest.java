@@ -95,7 +95,7 @@ class PreviewReadTransactionBoundaryTest {
             doAnswer(invocation -> {
                 assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
                 return null;
-            }).when(accessGuard).checkMembership(anyLong(), any(), anyLong());
+            }).when(accessGuard).checkScopeContentAccess(anyLong(), any(), anyLong());
             doAnswer(invocation -> {
                 // 既存 common Checker 自身の readOnly TX は外側 Facade TX と区別する。
                 assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();

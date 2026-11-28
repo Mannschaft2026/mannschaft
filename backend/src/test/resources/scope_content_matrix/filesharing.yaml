@@ -1,0 +1,27 @@
+# CMP-261124-0159 PR-D1: ファイル共有（F05.5）のチームフォルダ読み取り経路の Matrix 表（F00 §20.6）。
+# 権限あり（ADMIN / DEPUTY_ADMIN / MEMBER）は本戦役前の実挙動（2xx）のまま。権限なしは部外者と同一応答（既定 OUTSIDER）。
+package: filesharing
+routes:
+  - id: R-filesharing-1
+    method: GET
+    path: /api/v1/teams/{teamId}/folders/{folderId}
+    params: { folderId: "@folder" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-filesharing-2
+    method: GET
+    path: /api/v1/teams/{teamId}/folders/{folderId}/children
+    params: { folderId: "@folder" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-filesharing-3
+    method: GET
+    path: /api/v1/teams/{teamId}/folders
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW

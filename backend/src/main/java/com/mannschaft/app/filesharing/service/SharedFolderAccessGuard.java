@@ -3,6 +3,7 @@ package com.mannschaft.app.filesharing.service;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.filesharing.FileScopeType;
 import com.mannschaft.app.filesharing.FileSharingErrorCode;
 import com.mannschaft.app.filesharing.FileVisibilityRole;
@@ -36,6 +37,7 @@ import java.util.Set;
 public class SharedFolderAccessGuard {
 
     private final AccessControlService accessControlService;
+    private final ScopeContentAccessGate scopeContentAccessGate;
     private final FolderScopeAccessGuard folderScopeAccessGuard;
 
     /**
@@ -147,9 +149,10 @@ public class SharedFolderAccessGuard {
                     throw new BusinessException(FileSharingErrorCode.FOLDER_NOT_FOUND);
                 }
             }
-            case TEAM -> accessControlService.checkMembership(userId, folder.getTeamId(), "TEAM");
+            // 親チーム上限（CMP-261124-0159）: 非公開チームの中身は正式メンバー以上だけ。拒否は従来の非所属拒否と同一（403 COMMON_002）。
+            case TEAM -> scopeContentAccessGate.checkScopeContentAccess(userId, folder.getTeamId(), "TEAM");
             case ORGANIZATION ->
-                    accessControlService.checkMembership(userId, folder.getOrganizationId(), "ORGANIZATION");
+                    scopeContentAccessGate.checkScopeContentAccess(userId, folder.getOrganizationId(), "ORGANIZATION");
             case TOURNAMENT, TOURNAMENT_DIVISION ->
                     folderScopeAccessGuard.checkFolderViewByFolderId(folder.getId(), userId);
         }

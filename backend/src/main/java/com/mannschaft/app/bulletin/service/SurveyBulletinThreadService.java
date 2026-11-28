@@ -117,7 +117,7 @@ public class SurveyBulletinThreadService {
      * {@link BulletinThreadService#enrichSingle} に委譲する。スレッドが無ければ empty。</p>
      *
      * <p><b>認可（軍議④・F00漏洩根治）:</b> スレッドが存在する場合は、そのスレッド自身のスコープに対し
-     * {@link BulletinAccessGuard#checkMembership} で所属を検証する。非所属は COMMON_002(403)。
+     * {@link BulletinAccessGuard#checkScopeContentAccess} で所属を検証する。非所属は COMMON_002(403)。
      * これにより surveyId を知るだけで他スコープの専用スレッド本文/投稿を取得できる漏洩を塞ぐ。
      * 掲示板ドメインのスレッド読取（{@link BulletinThreadService#getThreadGlobal}）と同一の手本。
      * スレッド未存在（empty）はガード前に短絡し、従来どおり 404 となる。</p>
@@ -133,7 +133,7 @@ public class SurveyBulletinThreadService {
                     // 軍議④ F00漏洩根治: アンケート専用スレッドも per-scope 所属者のみ閲覧可。
                     // 掲示板ドメインのスレッド読取(BulletinThreadService)と同じ BulletinAccessGuard で守る。
                     // 非所属は COMMON_002(403)。スレッド未存在は従来どおり empty→404（存在しないものは gate 前）。
-                    accessGuard.checkMembership(currentUserId, thread.getScopeType(), thread.getScopeId());
+                    accessGuard.checkScopeContentAccess(currentUserId, thread.getScopeType(), thread.getScopeId());
                     return bulletinThreadService.enrichSingle(thread, currentUserId);
                 });
     }

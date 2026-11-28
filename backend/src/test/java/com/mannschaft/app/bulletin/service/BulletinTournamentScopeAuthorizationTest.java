@@ -103,7 +103,8 @@ class BulletinTournamentScopeAuthorizationTest {
             service.listRepliesGlobal(THREAD_ID, USER_ID, PageRequest.of(0, 20));
 
             verify(tournamentContactAccessService, never()).checkView(any(), any(), any(), any());
-            verify(accessGuard, never()).checkMembership(any(), any(), any());
+            verify(accessGuard, never()).checkScopeContentAccess(any(), any(), any());
+            verify(accessGuard, never()).checkMembershipForWrite(any(), any(), any());
         }
 
         @Test
@@ -118,7 +119,8 @@ class BulletinTournamentScopeAuthorizationTest {
 
             verify(tournamentContactAccessService).checkPost(
                     eq(ContactSpaceScopeType.TOURNAMENT_DIVISION), eq(SCOPE_ID), eq(USER_ID));
-            verify(accessGuard, never()).checkMembership(any(), any(), any());
+            verify(accessGuard, never()).checkScopeContentAccess(any(), any(), any());
+            verify(accessGuard, never()).checkMembershipForWrite(any(), any(), any());
             verify(accessGuard, never()).requireManageContent(any(), any(), any());
         }
 
@@ -133,7 +135,8 @@ class BulletinTournamentScopeAuthorizationTest {
             assertThatThrownBy(() -> service.createReplyGlobal(THREAD_ID, null, USER_ID, "本文"))
                     .isInstanceOf(BusinessException.class);
             verify(replyRepository, never()).save(any());
-            verify(accessGuard, never()).checkMembership(any(), any(), any());
+            verify(accessGuard, never()).checkScopeContentAccess(any(), any(), any());
+            verify(accessGuard, never()).checkMembershipForWrite(any(), any(), any());
         }
 
         @Test
@@ -149,7 +152,8 @@ class BulletinTournamentScopeAuthorizationTest {
 
             verify(tournamentContactAccessService).checkPost(
                     eq(ContactSpaceScopeType.TOURNAMENT), eq(SCOPE_ID), eq(USER_ID));
-            verify(accessGuard, never()).checkMembership(any(), any(), any());
+            verify(accessGuard, never()).checkScopeContentAccess(any(), any(), any());
+            verify(accessGuard, never()).checkMembershipForWrite(any(), any(), any());
             verify(accessGuard, never()).requireManageContent(any(), any(), any());
         }
     }
@@ -180,7 +184,8 @@ class BulletinTournamentScopeAuthorizationTest {
             service.addReaction(USER_ID, new CreateReactionRequest(TargetType.THREAD.name(), THREAD_ID, "👍"));
 
             verify(reactionRepository).save(any());
-            verify(accessGuard, never()).checkMembership(any(), any(), any());
+            verify(accessGuard, never()).checkScopeContentAccess(any(), any(), any());
+            verify(accessGuard, never()).checkMembershipForWrite(any(), any(), any());
             verify(villageBulletinAccessService, never()).checkVillageBulletinViewAccess(any(), any());
         }
     }

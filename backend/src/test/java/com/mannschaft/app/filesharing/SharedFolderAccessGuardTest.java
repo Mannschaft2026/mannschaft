@@ -1,6 +1,7 @@
 package com.mannschaft.app.filesharing;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.filesharing.entity.SharedFileEntity;
@@ -46,6 +47,9 @@ class SharedFolderAccessGuardTest {
 
     @Mock
     private AccessControlService accessControlService;
+
+    @Mock
+    private ScopeContentAccessGate scopeContentAccessGate;
 
     @Mock
     private FolderScopeAccessGuard folderScopeAccessGuard;
@@ -116,7 +120,7 @@ class SharedFolderAccessGuardTest {
         void PERSONAL本人_通過() {
             guard.authorizeView(personalFolder(USER_ID), USER_ID);
             // 例外が出なければ OK（個人スコープでは外部サービス呼び出しなし）
-            verify(accessControlService, never()).checkMembership(anyLong(), anyLong(), any());
+            verify(scopeContentAccessGate, never()).checkScopeContentAccess(anyLong(), anyLong(), any());
         }
 
         @Test
@@ -135,7 +139,7 @@ class SharedFolderAccessGuardTest {
         void TEAMメンバー_通過() {
             guard.authorizeView(teamFolder(), USER_ID);
 
-            verify(accessControlService).checkMembership(USER_ID, TEAM_ID, "TEAM");
+            verify(scopeContentAccessGate).checkScopeContentAccess(USER_ID, TEAM_ID, "TEAM");
         }
 
         @Test
@@ -143,7 +147,7 @@ class SharedFolderAccessGuardTest {
         void TEAM非メンバー_403() {
             SharedFolderEntity folder = teamFolder();
             willThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .given(accessControlService).checkMembership(USER_ID, TEAM_ID, "TEAM");
+                    .given(scopeContentAccessGate).checkScopeContentAccess(USER_ID, TEAM_ID, "TEAM");
 
             assertThatThrownBy(() -> guard.authorizeView(folder, USER_ID))
                     .isInstanceOf(BusinessException.class)
@@ -156,7 +160,7 @@ class SharedFolderAccessGuardTest {
         void ORGANIZATION_メンバーシップ検証() {
             guard.authorizeView(orgFolder(), USER_ID);
 
-            verify(accessControlService).checkMembership(USER_ID, ORG_ID, "ORGANIZATION");
+            verify(scopeContentAccessGate).checkScopeContentAccess(USER_ID, ORG_ID, "ORGANIZATION");
         }
 
         @Test
@@ -172,7 +176,7 @@ class SharedFolderAccessGuardTest {
         void authorizeBaseView_minRole評価なし() {
             guard.authorizeBaseView(teamFolder(FileVisibilityRole.ADMINS_AND_ABOVE), USER_ID);
 
-            verify(accessControlService).checkMembership(USER_ID, TEAM_ID, "TEAM");
+            verify(scopeContentAccessGate).checkScopeContentAccess(USER_ID, TEAM_ID, "TEAM");
             verify(accessControlService, never()).hasRoleOrAbove(anyLong(), anyLong(), any(), any());
         }
     }
@@ -234,7 +238,7 @@ class SharedFolderAccessGuardTest {
 
             // 削除権限の関門は checkAdminOrAbove（メンバーシップ判定では弱すぎる）。
             verify(accessControlService).checkAdminOrAbove(USER_ID, TEAM_ID, "TEAM");
-            verify(accessControlService, never()).checkMembership(anyLong(), anyLong(), any());
+            verify(scopeContentAccessGate, never()).checkScopeContentAccess(anyLong(), anyLong(), any());
         }
 
         @Test
@@ -245,7 +249,7 @@ class SharedFolderAccessGuardTest {
             assertThatCode(() -> guard.authorizeDelete(orgFolder(), USER_ID)).doesNotThrowAnyException();
 
             verify(accessControlService).checkAdminOrAbove(USER_ID, ORG_ID, "ORGANIZATION");
-            verify(accessControlService, never()).checkMembership(anyLong(), anyLong(), any());
+            verify(scopeContentAccessGate, never()).checkScopeContentAccess(anyLong(), anyLong(), any());
         }
 
         @Test
@@ -313,7 +317,7 @@ class SharedFolderAccessGuardTest {
         void ACB6_NULL_非回帰() {
             guard.authorizeView(teamFolder(null), USER_ID);
 
-            verify(accessControlService).checkMembership(USER_ID, TEAM_ID, "TEAM");
+            verify(scopeContentAccessGate).checkScopeContentAccess(USER_ID, TEAM_ID, "TEAM");
             verify(accessControlService, never()).hasRoleOrAbove(anyLong(), anyLong(), any(), any());
             verify(accessControlService, never()).isSystemAdmin(anyLong());
         }
@@ -527,7 +531,7 @@ class SharedFolderAccessGuardTest {
             SharedFileEntity file = fileIn(folder, null, false);
 
             assertThatCode(() -> guard.requireDownloadEnabled(folder, file)).doesNotThrowAnyException();
-            verify(accessControlService, never()).checkMembership(anyLong(), anyLong(), any());
+            verify(scopeContentAccessGate, never()).checkScopeContentAccess(anyLong(), anyLong(), any());
         }
     }
 

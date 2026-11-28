@@ -1,6 +1,7 @@
 package com.mannschaft.app.filesharing.service;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.NameResolverService;
 import com.mannschaft.app.common.storage.acl.StorageAclAttachmentBinding;
@@ -58,6 +59,7 @@ public class SharedFolderQueryService {
     private final SharedFolderRepository folderRepository;
     private final SharedFileRepository fileRepository;
     private final AccessControlService accessControlService;
+    private final ScopeContentAccessGate scopeContentAccessGate;
     private final SharedFolderAccessGuard folderAccessGuard;
     private final NameResolverService nameResolverService;
     private final SharedFileQuotaService sharedFileQuotaService;
@@ -528,8 +530,10 @@ public class SharedFolderQueryService {
                     throw new BusinessException(FileSharingErrorCode.FOLDER_NOT_FOUND);
                 }
             }
-            case TEAM -> accessControlService.checkMembership(userId, parseScopeId(scopeId), "TEAM");
-            case ORGANIZATION -> accessControlService.checkMembership(userId, parseScopeId(scopeId), "ORGANIZATION");
+            // 親チーム上限（CMP-261124-0159）。作成にも使う共通入口のため、中身を返す読み取りの門で判定する（より狭い側）。
+            case TEAM -> scopeContentAccessGate.checkScopeContentAccess(userId, parseScopeId(scopeId), "TEAM");
+            case ORGANIZATION ->
+                    scopeContentAccessGate.checkScopeContentAccess(userId, parseScopeId(scopeId), "ORGANIZATION");
             // 大会スコープのルート一覧／作成は本汎用 EP の対象外（各専用 EP・連絡スペース認可を使う）。
             default -> throw new BusinessException(FileSharingErrorCode.FOLDER_NOT_FOUND);
         }

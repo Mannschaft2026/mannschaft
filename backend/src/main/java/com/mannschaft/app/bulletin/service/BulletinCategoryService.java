@@ -50,7 +50,7 @@ public class BulletinCategoryService {
      * @return カテゴリレスポンスリスト
      */
     public List<CategoryResponse> listCategories(ScopeType scopeType, Long scopeId, Long userId) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
         List<BulletinCategoryEntity> categories =
                 categoryRepository.findByScopeTypeAndScopeIdOrderByDisplayOrderAsc(scopeType, scopeId);
         return bulletinMapper.toCategoryResponseList(categories);
@@ -103,7 +103,7 @@ public class BulletinCategoryService {
      * @return カテゴリレスポンス
      */
     public CategoryResponse getCategory(ScopeType scopeType, Long scopeId, Long categoryId, Long userId) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
         BulletinCategoryEntity entity = findCategoryOrThrow(scopeType, scopeId, categoryId);
         return bulletinMapper.toCategoryResponse(entity);
     }
@@ -119,7 +119,7 @@ public class BulletinCategoryService {
      */
     @Transactional
     public CategoryResponse createCategory(ScopeType scopeType, Long scopeId, Long userId, CreateCategoryRequest request) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkMembershipForWrite(userId, scopeType, scopeId);
         accessGuard.requireManageContent(userId, scopeType, scopeId);
 
         if (categoryRepository.existsByScopeTypeAndScopeIdAndName(scopeType, scopeId, request.getName())) {
@@ -154,7 +154,7 @@ public class BulletinCategoryService {
      */
     @Transactional
     public CategoryResponse updateCategory(ScopeType scopeType, Long scopeId, Long categoryId, Long userId, UpdateCategoryRequest request) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
         accessGuard.requireManageContent(userId, scopeType, scopeId);
 
         BulletinCategoryEntity entity = findCategoryOrThrow(scopeType, scopeId, categoryId);
@@ -191,7 +191,7 @@ public class BulletinCategoryService {
      */
     @Transactional
     public DeleteCategoryResponse deleteCategory(ScopeType scopeType, Long scopeId, Long categoryId, Long userId) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        accessGuard.checkMembershipForWrite(userId, scopeType, scopeId);
         accessGuard.requireManageContent(userId, scopeType, scopeId);
 
         BulletinCategoryEntity entity = findCategoryOrThrow(scopeType, scopeId, categoryId);

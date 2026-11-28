@@ -170,7 +170,7 @@ class BulletinThreadServiceTest {
 
             // Then
             assertThat(result.getContent()).hasSize(1);
-            verify(accessGuard).checkMembership(USER_ID, SCOPE_TYPE, SCOPE_ID);
+            verify(accessGuard).checkScopeContentAccess(USER_ID, SCOPE_TYPE, SCOPE_ID);
         }
 
         @Test
@@ -178,7 +178,7 @@ class BulletinThreadServiceTest {
         void スレッド一覧取得_非メンバー_403() {
             // Given: 非メンバーは checkMembership で 403
             doThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .when(accessGuard).checkMembership(USER_ID, SCOPE_TYPE, SCOPE_ID);
+                    .when(accessGuard).checkScopeContentAccess(USER_ID, SCOPE_TYPE, SCOPE_ID);
 
             // When & Then
             assertThatThrownBy(() -> bulletinThreadService.listThreads(SCOPE_TYPE, SCOPE_ID, USER_ID, PageRequest.of(0, 10)))
@@ -213,7 +213,7 @@ class BulletinThreadServiceTest {
 
             // Then
             assertThat(result.getContent()).hasSize(1);
-            verify(accessGuard).checkMembership(USER_ID, SCOPE_TYPE, SCOPE_ID);
+            verify(accessGuard).checkScopeContentAccess(USER_ID, SCOPE_TYPE, SCOPE_ID);
             // カテゴリの帰属検証が呼ばれること（越境 categoryId 差し込みの封鎖）
             verify(categoryService).findCategoryOrThrow(SCOPE_TYPE, SCOPE_ID, CATEGORY_ID);
         }
@@ -837,7 +837,7 @@ class BulletinThreadServiceTest {
                     SCOPE_TYPE, SCOPE_ID, USER_ID, null, false, PageRequest.of(0, 20));
 
             assertThat(result.getContent()).hasSize(1);
-            verify(accessGuard).checkMembership(USER_ID, SCOPE_TYPE, SCOPE_ID);
+            verify(accessGuard).checkScopeContentAccess(USER_ID, SCOPE_TYPE, SCOPE_ID);
         }
 
         @Test
@@ -998,7 +998,8 @@ class BulletinThreadServiceTest {
             assertThat(result).isNotNull();
             // VILLAGE は村可視性認可、所属認可（accessGuard）は呼ばれない
             verify(villageBulletinAccessService).checkVillageBulletinViewAccess(VILLAGE_ID, USER_ID);
-            verify(accessGuard, never()).checkMembership(anyLong(), any(), anyLong());
+            verify(accessGuard, never()).checkScopeContentAccess(anyLong(), any(), anyLong());
+            verify(accessGuard, never()).checkMembershipForWrite(anyLong(), any(), anyLong());
         }
 
         @Test
@@ -1013,7 +1014,7 @@ class BulletinThreadServiceTest {
 
             assertThat(result).isNotNull();
             // TEAM は所属認可、村可視性認可は呼ばれない
-            verify(accessGuard).checkMembership(USER_ID, ScopeType.TEAM, SCOPE_ID);
+            verify(accessGuard).checkScopeContentAccess(USER_ID, ScopeType.TEAM, SCOPE_ID);
             verify(villageBulletinAccessService, never()).checkVillageBulletinViewAccess(any(), any());
         }
 
@@ -1113,7 +1114,7 @@ class BulletinThreadServiceTest {
             bulletinThreadService.updateThreadGlobal(THREAD_ID, USER_ID, req);
 
             // 既存経路の所属認可が効く
-            verify(accessGuard).checkMembership(USER_ID, ScopeType.TEAM, SCOPE_ID);
+            verify(accessGuard).checkScopeContentAccess(USER_ID, ScopeType.TEAM, SCOPE_ID);
             verify(villageBulletinAccessService, never()).checkVillageBulletinModerator(any(), any());
         }
 
@@ -1169,7 +1170,7 @@ class BulletinThreadServiceTest {
 
             bulletinThreadService.deleteThreadGlobal(THREAD_ID, USER_ID);
 
-            verify(accessGuard).checkMembership(USER_ID, ScopeType.TEAM, SCOPE_ID);
+            verify(accessGuard).checkMembershipForWrite(USER_ID, ScopeType.TEAM, SCOPE_ID);
             assertThat(entity.getDeletedAt()).isNotNull();
         }
     }
@@ -1245,7 +1246,7 @@ class BulletinThreadServiceTest {
 
             bulletinThreadService.setPinGlobal(THREAD_ID, USER_ID, true);
 
-            verify(accessGuard).checkMembership(USER_ID, ScopeType.TEAM, SCOPE_ID);
+            verify(accessGuard).checkScopeContentAccess(USER_ID, ScopeType.TEAM, SCOPE_ID);
             verify(accessGuard).requireManageContent(USER_ID, ScopeType.TEAM, SCOPE_ID);
             verify(villageBulletinAccessService, never()).checkVillageBulletinModerator(any(), any());
         }
@@ -1304,7 +1305,8 @@ class BulletinThreadServiceTest {
             bulletinThreadService.createThreadGlobal(ScopeType.VILLAGE, 0L, USER_ID, req);
 
             // 村は共通ガードの守備範囲外。呼べば fail-closed で 403 になるため呼んではならない。
-            verify(accessGuard, never()).checkMembership(any(), eq(ScopeType.VILLAGE), any());
+            verify(accessGuard, never()).checkScopeContentAccess(any(), eq(ScopeType.VILLAGE), any());
+            verify(accessGuard, never()).checkMembershipForWrite(any(), eq(ScopeType.VILLAGE), any());
             // 村メンバー判定は村ドメインの主体検証が担う
             verify(postingIdentityService)
                     .validatePostingIdentity(USER_ID, VILLAGE_ID, VillageSubjectType.USER, USER_ID);
@@ -1321,7 +1323,7 @@ class BulletinThreadServiceTest {
                     null, "題名", "本文", "INFO", "COUNT_ONLY", null, null);
             bulletinThreadService.createThreadGlobal(SCOPE_TYPE, SCOPE_ID, USER_ID, req);
 
-            verify(accessGuard).checkMembership(USER_ID, SCOPE_TYPE, SCOPE_ID);
+            verify(accessGuard).checkMembershipForWrite(USER_ID, SCOPE_TYPE, SCOPE_ID);
         }
     }
 
