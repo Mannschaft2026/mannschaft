@@ -193,6 +193,8 @@ R-notification-4	HTTP	GET /api/v1/teams/{teamId}/confirmable-notifications	com.m
 R-notification-5	HTTP	GET /api/v1/teams/{teamId}/confirmable-notification-settings	com.mannschaft.app.notification.confirmable.controller.TeamConfirmableNotificationSettingsController#getSettings	門	PR-W7		未移行
 R-notification-6	HTTP	GET /api/v1/teams/{teamId}/confirmable-notification-templates	com.mannschaft.app.notification.confirmable.controller.TeamConfirmableNotificationTemplateController#list	門	PR-W7		未移行
 R-notification-7	HTTP	GET /api/v1/teams/{teamId}/confirmable-recipient-groups	com.mannschaft.app.notification.confirmable.controller.TeamConfirmableRecipientGroupController#list	門	PR-W7		未移行
+R-notification-8	HTTP	GET /api/v1/teams/{teamId}/confirmable-notifications/drafts/{draftId}	com.mannschaft.app.notification.confirmable.controller.TeamConfirmableNotificationDraftController#get	門	PR-W7		未移行
+R-notification-9	HTTP	GET /api/v1/teams/{teamId}/confirmable-notifications/drafts	com.mannschaft.app.notification.confirmable.controller.TeamConfirmableNotificationDraftController#list	門	PR-W7		未移行
 R-onboarding-1	HTTP	GET /api/v1/teams/{teamId}/onboarding/progresses	com.mannschaft.app.onboarding.controller.TeamOnboardingProgressController#list	未分類	PR-Z		未移行
 R-onboarding-2	HTTP	GET /api/v1/teams/{teamId}/onboarding/templates	com.mannschaft.app.onboarding.controller.TeamOnboardingTemplateController#list	未分類	PR-Z		未移行
 R-parking-1	HTTP	GET /api/v1/teams/{teamId}/parking/applications	com.mannschaft.app.parking.controller.TeamParkingApplicationController#list	門	PR-W1		未移行

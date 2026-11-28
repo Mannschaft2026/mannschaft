@@ -2,7 +2,7 @@
 
 > このファイルは自動生成されます。手で編集しないでください。再生成: `cd backend && ./gradlew generateErDiagrams`
 
-- テーブル数: 20
+- テーブル数: 21
 - ビュー数: 0
 
 ## ER 図
@@ -11,6 +11,10 @@
 
 ```mermaid
 erDiagram
+    confirmable_notification_drafts {
+        binary id PK
+        bigint user_id "ID参照"
+    }
     confirmable_notification_recipients {
         bigint id PK
         bigint confirmable_notification_id FK
@@ -103,6 +107,7 @@ erDiagram
     organizations
     teams
     users
+    users ||..o{ confirmable_notification_drafts : "ID参照(FKなし) user_id"
     confirmable_notifications ||--o{ confirmable_notification_recipients : "confirmable_notification_id"
     users |o..o{ confirmable_notification_recipients : "ID参照(FKなし) excluded_by"
     users ||..o{ confirmable_notification_recipients : "ID参照(FKなし) user_id"
@@ -146,6 +151,7 @@ erDiagram
 
 | テーブル | 種別列 | ID列 |
 | --- | --- | --- |
+| `confirmable_notification_drafts` | `scope_type` | `scope_id` |
 | `confirmable_notification_settings` | `scope_type` | `scope_id` |
 | `confirmable_notification_targets` | `target_type` | `target_id` |
 | `confirmable_notification_templates` | `scope_type` | `scope_id` |
@@ -162,6 +168,8 @@ erDiagram
 
 | テーブル | 列 | 理由 |
 | --- | --- | --- |
+| `confirmable_notification_drafts` | `selected_group_id` | 参照先テーブルを特定できない |
+| `confirmable_notification_drafts` | `selected_template_id` | 参照先テーブルを特定できない |
 | `confirmable_notification_templates` | `default_recipient_group_id` | 参照先テーブルを特定できない |
 | `confirmable_notifications` | `template_id` | 参照先テーブルを特定できない |
 | `notification_credit_packages` | `stripe_price_id` | 参照先テーブルを特定できない |
@@ -173,6 +181,26 @@ erDiagram
 | `notifications` | `actor_id` | 参照先テーブルを特定できない |
 
 ## テーブル定義
+
+### `confirmable_notification_drafts`
+
+| 列名 | 型 | NULL | 既定値 | コメント |
+| --- | --- | --- | --- | --- |
+| `id` | `binary(16)` | NO | （なし） |  |
+| `scope_type` | `enum('TEAM','ORGANIZATION')` | NO | （なし） | 下書きの送信スコープの種類 |
+| `scope_id` | `bigint unsigned` | NO | （なし） | 送信スコープのチームまたは組織の ID |
+| `user_id` | `bigint unsigned` | NO | （なし） | 作成者（本人だけが読み書きできる） |
+| `title` | `varchar(200)` | NO | （空文字） | 件名（入力途中は空でもよい） |
+| `body` | `text` | YES | NULL | 本文（API の上限は10,000文字） |
+| `priority` | `enum('NORMAL','HIGH','URGENT')` | NO | `NORMAL` | 優先度 |
+| `deadline_at` | `datetime(6)` | YES | NULL | 確認期限（UTC） |
+| `audience_mode` | `enum('DEFAULT','TARGETS','GROUP')` | NO | `DEFAULT` | 宛先の選び方 |
+| `selected_targets` | `json` | YES | NULL | 直接指定した宛先 [{"type":"TEAM","id":1}]（最大200件） |
+| `selected_group_id` | `binary(16)` | YES | NULL | 選んだ宛先グループの ID |
+| `selected_template_id` | `bigint unsigned` | YES | NULL | 選んだテンプレートの ID |
+| `version` | `bigint` | NO | `0` | 楽観ロック。PUT の baseVersion と照合する |
+| `created_at` | `datetime(6)` | NO | （なし） |  |
+| `updated_at` | `datetime(6)` | NO | （なし） |  |
 
 ### `confirmable_notification_recipients`
 

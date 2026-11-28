@@ -82,6 +82,14 @@ public class ConfirmableNotificationCreateRequest {
     private java.util.UUID recipientGroupId;
 
     /**
+     * CMP-261126-1558: 送信元の下書きID（任意）。
+     *
+     * <p>送信が成功したら、同じトランザクションでこの下書き（本人・同スコープのものに限る）を削除する。
+     * 送信が失敗（ロールバック）した場合は下書きを残す。省略時は従来どおり。</p>
+     */
+    private java.util.UUID draftId;
+
+    /**
      * 確認期限を JST の {@link LocalDateTime} に変換して返す。
      *
      * <p>{@code deadlineAt} が NULL の場合は NULL を返す（無期限）。

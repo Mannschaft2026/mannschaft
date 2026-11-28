@@ -23,6 +23,7 @@ import com.mannschaft.app.notification.event.NotificationAnonymizationEventListe
 import com.mannschaft.app.parking.event.ParkingWatchlistPurgeEventListener;
 import com.mannschaft.app.pointcard.event.PointCardAnonymizationEventListener;
 import com.mannschaft.app.property.event.PropertyWorkHistoryViewPurgeEventListener;
+import com.mannschaft.app.notification.confirmable.event.ConfirmableNotificationDraftPurgeEventListener;
 import com.mannschaft.app.quickmemo.event.QuickMemoSettingsPurgeEventListener;
 import com.mannschaft.app.reflection.event.ReflectionSettingsPurgeEventListener;
 import com.mannschaft.app.schedule.listener.CalendarLayerCleanupExecutor;
@@ -105,6 +106,7 @@ public class GdprSettingsPurgeRetryService {
     private final UserAdPreferencePurgeEventListener userAdPreferencePurgeEventListener;
     private final PropertyWorkHistoryViewPurgeEventListener propertyWorkHistoryViewPurgeEventListener;
     private final VillagePersonalSettingsPurgeEventListener villagePersonalSettingsPurgeEventListener;
+    private final ConfirmableNotificationDraftPurgeEventListener confirmableNotificationDraftPurgeEventListener;
 
     /** 受け付けるドメイン名の集合。不明なドメイン名は即時 IllegalArgumentException。 */
     private static final Set<String> VALID_DOMAINS =
@@ -114,7 +116,9 @@ public class GdprSettingsPurgeRetryService {
                     "reflection", "timetable.personal", "cms", "chat", "knowledgebase",
                     "favorite", "membership", "weather", "inbox", "timetable.notes",
                     "seal", "schedule", "visibility",
-                    "shift", "parking", "advertising", "property", "village");
+                    "shift", "parking", "advertising", "property", "village",
+                    // CMP-261126-1558: 確認通知の下書き
+                    "confirmabledraft");
 
     /** 設定専用の retry 対象か判定する。 */
     public boolean supports(String domainName) {
@@ -216,6 +220,7 @@ public class GdprSettingsPurgeRetryService {
                 case "advertising" -> userAdPreferencePurgeEventListener.retryPurge(userId);
                 case "property" -> propertyWorkHistoryViewPurgeEventListener.retryPurge(userId);
                 case "village" -> villagePersonalSettingsPurgeEventListener.retryPurge(userId);
+                case "confirmabledraft" -> confirmableNotificationDraftPurgeEventListener.retryPurge(userId);
                 default -> throw new IllegalStateException("到達不能: " + domainName);
             };
         } catch (Exception ex) {

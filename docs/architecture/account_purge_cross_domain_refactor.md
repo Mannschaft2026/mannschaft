@@ -893,6 +893,7 @@ commit して戻った後にだけ SUCCESS を保存する。対象0件でも SU
 | `coin_toss_results` | `user_id` | 保持 | 参加・出欠・回答・投票・担当の共同記録（他メンバーの集計・業務根拠） |
 | `committee_invitations` | `invitee_user_id` | 保持 | 業務・契約・申請の記録（相手方・運営が参照する） |
 | `committee_members` | `user_id` | 保持 | membership・参加の共有契約（既決の除外対象。RolePurge が権限を除去） |
+| `confirmable_notification_drafts` | `user_id` | 強消去 | CMP-261126-1558（2026-11-26 御裁可済）。確認通知の作成フォームの本人の下書き（未送信の本文を含む）。退会30日後の強匿名化で所有列一括DELETE。notification.confirmable ドメイン `ConfirmableNotificationDraftPurgeEventListener`（購読・完了記録・再試行の配線済み） |
 | `confirmable_notification_recipients` | `user_id` | 保持 | 発信側が参照する既読・確認状況（共同業務の記録） |
 | `contact_invite_tokens` | `user_id` | 要裁可 | 外部連携・購読トークン（本人以外に用途がないが既存弱側の対象外） |
 | `contact_request_blocks` | `user_id` | 強消去 | CMP-260822-1243 第1陣の本人設定38親表（上表）。各domainの強消去リスナー |

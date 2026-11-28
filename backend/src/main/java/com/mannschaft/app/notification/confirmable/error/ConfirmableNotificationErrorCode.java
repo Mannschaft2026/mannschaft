@@ -64,7 +64,21 @@ public enum ConfirmableNotificationErrorCode implements ErrorCode {
     CREDIT_INSUFFICIENT("CONFIRMABLE_NOTIFICATION_CREDIT_INSUFFICIENT", "通知クレジットが不足しています", Severity.WARN),
 
     /** 確認期限（deadlineAt）が受け付けの時点で既に過去。AC-52: 400 */
-    DEADLINE_IN_PAST("CONFIRMABLE_NOTIFICATION_DEADLINE_IN_PAST", "確認期限は現在時刻より後を指定してください", Severity.WARN);
+    DEADLINE_IN_PAST("CONFIRMABLE_NOTIFICATION_DEADLINE_IN_PAST", "確認期限は現在時刻より後を指定してください", Severity.WARN),
+
+    // -------------------------------------------------------------------------
+    // CMP-261126-1558: 確認通知の下書き（DB 保存・複数件）
+    // -------------------------------------------------------------------------
+
+    /** 下書きが見つからない（他人・他スコープも同じ扱い。存在を推測させない）: 404 */
+    DRAFT_NOT_FOUND("CONFIRMABLE_NOTIFICATION_DRAFT_NOT_FOUND", "下書きが見つかりません", Severity.WARN),
+
+    /** スコープ×作成者ごとの下書きが上限（10件）に達している: 409 */
+    DRAFT_LIMIT_EXCEEDED("CONFIRMABLE_NOTIFICATION_DRAFT_LIMIT_EXCEEDED", "下書きは10件まで保存できます", Severity.WARN),
+
+    /** baseVersion が保存済みの version と一致しない: 409 */
+    DRAFT_VERSION_CONFLICT("CONFIRMABLE_NOTIFICATION_DRAFT_VERSION_CONFLICT",
+            "下書きが他の画面で更新されています。最新の内容を読み込んでください", Severity.WARN);
 
     private final String code;
     private final String message;

@@ -244,9 +244,10 @@ public void withdrawUser(Long userId) {
 | AccountPurgedEvent | `com.mannschaft.app.advertising.campaign.event.UserAdPreferencePurgeEventListener` | advertising | `user_ad_preferences`を所有列で一括物理削除し、所有TXのcommit後に完了記録（CMP-260822-1243 第2陣） |
 | AccountPurgedEvent | `com.mannschaft.app.property.event.PropertyWorkHistoryViewPurgeEventListener` | property | `property_work_history_views`を所有列で一括物理削除し、所有TXのcommit後に完了記録（CMP-260822-1243 第2陣） |
 | AccountPurgedEvent | `com.mannschaft.app.village.event.VillagePersonalSettingsPurgeEventListener` | village | `user_village_nicknames`、`user_village_pins`を所有列で一括物理削除し、所有TXのcommit後に完了記録（休眠中の弱側を強側で補う。CMP-260822-1243 第2陣） |
+| AccountPurgedEvent | `com.mannschaft.app.notification.confirmable.event.ConfirmableNotificationDraftPurgeEventListener` | confirmabledraft | `confirmable_notification_drafts`（確認通知の作成フォームの下書き）を所有列で一括物理削除し、所有TXのcommit後に完了記録（CMP-261126-1558） |
 <!-- GDPR_EVENT_LISTENER_LEDGER_END -->
 
-実装同期時点の件数は `UserAnonymizedEvent` 18クラス、`AccountPurgedEvent` 40クラス、両方を購読する11クラス、ユニーク47クラスである。件数は説明用であり、番人は固定件数ではなく購読者の集合そのものを照合する。
+実装同期時点の件数は `UserAnonymizedEvent` 18クラス、`AccountPurgedEvent` 41クラス、両方を購読する11クラス、ユニーク48クラスである。件数は説明用であり、番人は固定件数ではなく購読者の集合そのものを照合する。
 
 この番人が保証するのは、**既に実装された2イベントの購読者と本台帳のドリフトが無いこと**である。新しい個人データ表にリスナー自体を実装し忘れた場合、既存リスナー内の対象表だけを変更した場合、または実装と台帳を同時に誤って削除した場合までは検出できない。「全個人データ表の削除経路が存在すること」の保証には、`@PersonalData`・削除方式・CASCADE・外部リソースを含む別の宣言的マニフェストが必要になる。
 

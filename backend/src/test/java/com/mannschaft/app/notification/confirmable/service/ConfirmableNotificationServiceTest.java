@@ -11,6 +11,14 @@ import com.mannschaft.app.notification.confirmable.entity.UnconfirmedVisibility;
 import com.mannschaft.app.notification.confirmable.event.ConfirmableNotificationCreatedEvent;
 import com.mannschaft.app.notification.confirmable.repository.ConfirmableNotificationRecipientRepository;
 import com.mannschaft.app.notification.confirmable.repository.ConfirmableNotificationRepository;
+import com.mannschaft.app.notification.confirmable.repository.ConfirmableNotificationDraftRepository;
+import com.mannschaft.app.notification.confirmable.repository.ConfirmableNotificationTargetRepository;
+import com.mannschaft.app.notification.confirmable.dto.ConfirmableNotificationCreateRequest;
+import com.mannschaft.app.notification.confirmable.dto.ConfirmableRecipientPreviewResponse;
+import com.mannschaft.app.notification.confirmable.entity.ConfirmableNotificationDraftEntity;
+import com.mannschaft.app.notification.fanout.NotificationFanoutJobService;
+import com.mannschaft.app.common.BusinessException;
+import org.springframework.test.util.ReflectionTestUtils;
 import com.mannschaft.app.notification.credit.service.NotificationCreditService;
 import com.mannschaft.app.notification.service.NotificationHelper;
 import org.junit.jupiter.api.DisplayName;
@@ -27,6 +35,7 @@ import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -36,6 +45,8 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * {@link ConfirmableNotificationService} の単体テスト。
@@ -78,6 +89,28 @@ class ConfirmableNotificationServiceTest {
 
     @Mock
     private ConfirmableNotificationQueryService queryService;
+
+    // CMP-261126-1558（AC5）: sendAsync 経路の協調者と下書きリポジトリ
+    @Mock
+    private ConfirmableNotificationTargetRepository targetRepository;
+
+    @Mock
+    private ConfirmableTargetAuthorizationValidator targetAuthorizationValidator;
+
+    @Mock
+    private ConfirmableTargetSelectionValidator targetSelectionValidator;
+
+    @Mock
+    private ConfirmableRecipientGroupService recipientGroupService;
+
+    @Mock
+    private ConfirmableRecipientPreviewService recipientPreviewService;
+
+    @Mock
+    private NotificationFanoutJobService fanoutJobService;
+
+    @Mock
+    private ConfirmableNotificationDraftRepository draftRepository;
 
     @InjectMocks
     private ConfirmableNotificationService notificationService;
@@ -382,6 +415,90 @@ class ConfirmableNotificationServiceTest {
 
             // then: AC-9 — 同期 send は組織スコープでも課金しない。現状は consume(10, 2, CONFIRMABLE) が呼ばれるため red
             verify(notificationCreditService, never()).consume(any(), anyInt(), any());
+        }
+    }
+
+    // ========================================
+    // CMP-261126-1558 AC5: draftId 付き sendAsync の下書き削除
+    // ========================================
+
+    @Nested
+    @DisplayName("AC5: sendAsync 成功時の下書き削除（CMP-261126-1558）")
+    class SendAsyncDeletesDraft {
+
+        private final UUID draftId = UUID.fromString("0190c0de-0000-7000-8000-0000000000d1");
+
+        private ConfirmableNotificationCreateRequest request(UUID draft) {
+            ConfirmableNotificationCreateRequest request = new ConfirmableNotificationCreateRequest();
+            ReflectionTestUtils.setField(request, "title", "下書きからの送信");
+            ReflectionTestUtils.setField(request, "draftId", draft);
+            return request;
+        }
+
+        private void stubSuccessfulSend(long estimatedRecipients) {
+            given(targetSelectionValidator.resolve(any(), any(), any()))
+                    .willReturn(new ConfirmableTargetSelectionValidator.Resolution(null, null));
+            given(recipientPreviewService.preview(any(), any(), any(), any()))
+                    .willReturn(ConfirmableRecipientPreviewResponse.builder()
+                            .estimatedRecipientCount(estimatedRecipients).build());
+            given(settingsService.getOrCreate(ScopeType.TEAM, SCOPE_ID)).willReturn(createSettings(null, null));
+            given(userRepository.findById(USER_ID_1)).willReturn(Optional.empty());
+            given(notificationRepository.save(any(ConfirmableNotificationEntity.class)))
+                    .willAnswer(invocation -> invocation.getArgument(0));
+            given(targetRepository.saveAll(any())).willAnswer(invocation -> invocation.getArgument(0));
+        }
+
+        @Test
+        @DisplayName("draftId 付きで sendAsync が成功すると、本人・同スコープの条件でその下書きを削除する")
+        void success_deletesOwnDraft() {
+            stubSuccessfulSend(3);
+
+            notificationService.sendAsync(ScopeType.TEAM, SCOPE_ID, request(draftId), USER_ID_1);
+
+            verify(draftRepository).deleteByIdAndScopeTypeAndScopeIdAndUserId(
+                    draftId, ScopeType.TEAM, SCOPE_ID, USER_ID_1);
+        }
+
+        @Test
+        @DisplayName("draftId を省略した sendAsync は下書きに触れない（従来どおり）")
+        void noDraftId_doesNotTouchDrafts() {
+            stubSuccessfulSend(3);
+
+            notificationService.sendAsync(ScopeType.TEAM, SCOPE_ID, request(null), USER_ID_1);
+
+            verifyNoInteractions(draftRepository);
+        }
+
+        @Test
+        @DisplayName("他人の draftId を渡しても、その下書きは削除しない（削除は送信者本人・送信スコープで絞る）")
+        void othersDraftId_isNotDeleted() {
+            stubSuccessfulSend(3);
+            ConfirmableNotificationDraftEntity othersDraft = ConfirmableNotificationDraftEntity.builder()
+                    .scopeType(ScopeType.TEAM).scopeId(SCOPE_ID).userId(USER_ID_2).title("他人の下書き").build();
+            othersDraft.setId(draftId);
+            given(draftRepository.findById(draftId)).willReturn(Optional.of(othersDraft));
+
+            notificationService.sendAsync(ScopeType.TEAM, SCOPE_ID, request(draftId), USER_ID_1);
+
+            verify(draftRepository).deleteByIdAndScopeTypeAndScopeIdAndUserId(
+                    draftId, ScopeType.TEAM, SCOPE_ID, USER_ID_1);
+            verify(draftRepository, never()).deleteByIdAndScopeTypeAndScopeIdAndUserId(
+                    eq(draftId), any(), any(), eq(USER_ID_2));
+            verify(draftRepository, never()).deleteById(any());
+            verify(draftRepository, never()).delete(any());
+            verify(draftRepository, never()).deleteByUserId(any());
+        }
+
+        @Test
+        @DisplayName("送信が失敗（RECIPIENTS_EMPTY）したら下書きを削除しない")
+        void failure_keepsDraft() {
+            stubSuccessfulSend(0);
+
+            assertThatThrownBy(() -> notificationService.sendAsync(
+                    ScopeType.TEAM, SCOPE_ID, request(draftId), USER_ID_1))
+                    .isInstanceOf(BusinessException.class);
+
+            verifyNoInteractions(draftRepository);
         }
     }
 }

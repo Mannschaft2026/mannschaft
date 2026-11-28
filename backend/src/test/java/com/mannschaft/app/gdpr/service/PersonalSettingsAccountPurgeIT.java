@@ -86,13 +86,17 @@ class PersonalSettingsAccountPurgeIT extends AbstractMySqlIntegrationTest {
             "user_ad_preferences", "property_work_history_views", "user_village_pins",
             "user_village_nicknames",
             // CMP-260827-1808（御裁可済）: 入村の USER 単位直列化ロック行
-            "village_user_admission_locks")).toList();
+            "village_user_admission_locks",
+            // CMP-261126-1558（御裁可済）: 確認通知の作成フォームの下書き
+            "confirmable_notification_drafts")).toList();
     private static final List<String> SETTING_DOMAINS = List.of(
             "actionmemo", "pointcard", "timeline", "search", "dashboard", "scopefolder", "schedule", "quickmemo",
             "auth", "notification", "filesharing", "contact", "user", "appearance", "navsettings", "gamification",
             "reflection", "timetable.personal", "cms", "chat", "knowledgebase", "favorite", "membership", "weather",
             "inbox", "timetable.notes", "seal", "visibility",
-            "shift", "parking", "advertising", "property", "village");
+            "shift", "parking", "advertising", "property", "village",
+            // CMP-261126-1558: 確認通知の下書き
+            "confirmabledraft");
     private static final List<String> EXISTING_DOMAINS = List.of(
             "role", "team", "payment", "chart", "proxy", "errorreport", "resume", "billing", "ranch", "diagnosis",
             "effortrecord");
@@ -100,7 +104,9 @@ class PersonalSettingsAccountPurgeIT extends AbstractMySqlIntegrationTest {
             TABLES.stream().filter(table -> !table.equals("dashboard_scope_tab_order")),
             Stream.of("user_action_memo_settings", "action_memo_tags", "point_card_user_settings",
                     "point_card_groups", "timeline_bookmarks", "search_saved_queries",
-                    "timetable_slot_user_note_fields", "seal_scope_defaults")).toList();
+                    "timetable_slot_user_note_fields", "seal_scope_defaults",
+                    // CMP-261126-1558: 下書きは退会受付では消さず、30日後の強消去で消す
+                    "confirmable_notification_drafts")).toList();
 
     @Autowired private TransactionTemplate transactionTemplate;
     @Autowired private UserService userService;
@@ -869,6 +875,14 @@ class PersonalSettingsAccountPurgeIT extends AbstractMySqlIntegrationTest {
                     binaryUuid() + "," + owner + ",'cmp1243_" + owner + "',NOW(),0,NOW(),NOW()");
             insert("village_user_admission_locks", "id,user_id,locked_at",
                     binaryUuid() + "," + owner + ",NOW()");
+            // CMP-261126-1558: 確認通知の下書き（同じ利用者の複数件・複数スコープ）
+            insert("confirmable_notification_drafts", "id,scope_type,scope_id,user_id,title,body,priority,"
+                            + "audience_mode,version,created_at,updated_at",
+                    binaryUuid() + ",'TEAM',123," + owner + ",'本人の下書き','本文','NORMAL','DEFAULT',0,NOW(),NOW()");
+            insert("confirmable_notification_drafts", "id,scope_type,scope_id,user_id,title,priority,"
+                            + "audience_mode,selected_targets,version,created_at,updated_at",
+                    binaryUuid() + ",'ORGANIZATION',123," + owner
+                            + ",'','URGENT','TARGETS','[{\"type\":\"TEAM\",\"id\":123}]',0,NOW(),NOW()");
             List<Long> folders = scopeFolderIds(owner);
             for (Long folder : folders) {
                 insert("my_scope_folder_items", "folder_id,scope_id,sort_order,assigned_via,created_at",

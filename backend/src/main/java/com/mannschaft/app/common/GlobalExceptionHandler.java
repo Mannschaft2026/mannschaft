@@ -2645,6 +2645,10 @@ public class GlobalExceptionHandler {
             Map.entry("CONFIRMABLE_NOTIFICATION_GROUP_NAME_DUPLICATE", HttpStatus.CONFLICT),
             // NC_002（NotificationCreditErrorCode.CREDIT_INSUFFICIENT）と同じ 402 課金ゲートに統一する。
             Map.entry("CONFIRMABLE_NOTIFICATION_CREDIT_INSUFFICIENT", HttpStatus.PAYMENT_REQUIRED),
+            // CMP-261126-1558: 確認通知の下書き。他人・他スコープも不在と同じ 404（存在秘匿）、上限・版競合は 409。
+            Map.entry("CONFIRMABLE_NOTIFICATION_DRAFT_NOT_FOUND", HttpStatus.NOT_FOUND),
+            Map.entry("CONFIRMABLE_NOTIFICATION_DRAFT_LIMIT_EXCEEDED", HttpStatus.CONFLICT),
+            Map.entry("CONFIRMABLE_NOTIFICATION_DRAFT_VERSION_CONFLICT", HttpStatus.CONFLICT),
             // CMP-261113-1507: F02.7 マイルストーンロック（専用ハンドラ handleMilestoneLocked と同じ 423）。
             Map.entry("MILESTONE_LOCKED", HttpStatus.LOCKED),
             // CMP-261113-1507: 早期拒否フィルタの ErrorCode 化（フィルタが書くステータスと一致させる）。
