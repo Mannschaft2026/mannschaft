@@ -36,6 +36,7 @@
     },
     "detail": {
       "members": "Members",
+      "members_load_failed": "Failed to load the member list.",
       "invite": "Invite members",
       "distributions": "Distribution History",
       "activate": "Activate",

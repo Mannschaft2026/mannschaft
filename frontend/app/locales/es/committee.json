@@ -36,6 +36,7 @@
     },
     "detail": {
       "members": "Miembros",
+      "members_load_failed": "No se pudo cargar la lista de miembros.",
       "invite": "Invitar miembros",
       "distributions": "Historial de distribución",
       "activate": "Activar",

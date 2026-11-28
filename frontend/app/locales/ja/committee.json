@@ -36,6 +36,7 @@
     },
     "detail": {
       "members": "メンバー",
+      "members_load_failed": "メンバー一覧を取得できませんでした。",
       "invite": "メンバーを招集する",
       "distributions": "伝達履歴",
       "activate": "活動を開始する",

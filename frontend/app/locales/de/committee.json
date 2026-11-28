@@ -36,6 +36,7 @@
     },
     "detail": {
       "members": "Mitglieder",
+      "members_load_failed": "Die Mitgliederliste konnte nicht geladen werden.",
       "invite": "Mitglieder einladen",
       "distributions": "Verteilungshistorie",
       "activate": "Aktivieren",

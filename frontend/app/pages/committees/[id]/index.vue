@@ -19,6 +19,10 @@ const invitations = ref<CommitteeInvitation[]>([])
 const loading = ref(true)
 /** 取得失敗は「委員会なし」ではない。何も描画しない空白へフォールバックせずエラー状態を出す。 */
 const loadFailed = ref(false)
+/** メンバー一覧だけの取得失敗（詳細は表示を維持する）。 */
+const membersLoadFailed = ref(false)
+/** メンバー一覧取得の失敗内容（403 かどうかで再試行ボタンの要否を決める）。 */
+const membersError = ref<unknown>(undefined)
 const transitioning = ref(false)
 const showInviteDialog = ref(false)
 const inviting = ref(false)
@@ -44,30 +48,92 @@ function statusSeverity(status: CommitteeDetail['status']): string {
   }
 }
 
-async function loadData() {
-  loading.value = true
-  loadFailed.value = false
-  try {
-    const [committeeRes, membersRes] = await Promise.all([
-      committeeApi.getCommittee(committeeId),
-      committeeApi.listMembers(committeeId),
-    ])
-    committee.value = committeeRes.data
-    members.value = membersRes.data
+/** 古い応答による上書き防止用の世代番号（最新の呼び出しの応答だけを反映する）。 */
+let membersSeq = 0
+let dataSeq = 0
 
-    if (isChair.value || isChairOrVice.value) {
+function isForbidden(err: unknown): boolean {
+  const e = err as { statusCode?: number; status?: number } | null
+  return e?.statusCode === 403 || e?.status === 403
+}
+
+/**
+ * 現役所属（myRole あり）の利用者だけがメンバー一覧を取得できる。失敗は詳細全体に波及させない。
+ * 403 は途中退会・役職変更で所属が変わった可能性があるため、詳細を取り直して myRole を再判定する
+ * （null になればメンバー節ごと閉じる。再試行しても 403 のままのため再試行ボタンは出さない）。
+ */
+async function loadMembers() {
+  const seq = ++membersSeq
+  membersLoadFailed.value = false
+  membersError.value = undefined
+  try {
+    const membersRes = await committeeApi.listMembers(committeeId)
+    if (seq !== membersSeq) return
+    members.value = membersRes.data
+  } catch (err) {
+    if (seq !== membersSeq) return
+    // 0件表示に偽装せず、メンバー節専用のエラー状態にする
+    members.value = []
+    membersLoadFailed.value = true
+    membersError.value = err
+    if (isForbidden(err)) {
       try {
-        const invRes = await invitationApi.listInvitations(committeeId)
-        invitations.value = invRes.data
-      } catch {
-        invitations.value = []
+        const committeeRes = await committeeApi.getCommittee(committeeId)
+        if (seq !== membersSeq) return
+        committee.value = committeeRes.data
+        if (!committee.value?.myRole) {
+          membersLoadFailed.value = false
+          membersError.value = undefined
+          return
+        }
+      } catch (refreshErr) {
+        if (seq !== membersSeq) return
+        handleApiError(refreshErr, 'loadCommittee')
       }
     }
+    handleApiError(err, 'loadCommitteeMembers')
+  }
+}
+
+async function loadData() {
+  const seq = ++dataSeq
+  loading.value = true
+  loadFailed.value = false
+  membersLoadFailed.value = false
+  membersError.value = undefined
+  try {
+    // 詳細を先に取得する。メンバー一覧は所属者限定のため、所属判定（myRole）後にだけ呼ぶ
+    const committeeRes = await committeeApi.getCommittee(committeeId)
+    if (seq !== dataSeq) return
+    committee.value = committeeRes.data
   } catch (err) {
+    if (seq !== dataSeq) return
     handleApiError(err, 'loadCommittee')
     loadFailed.value = true
-  } finally {
     loading.value = false
+    return
+  }
+
+  try {
+    if (committee.value?.myRole) {
+      await loadMembers()
+      if (seq !== dataSeq) return
+      if (isChairOrVice.value) {
+        try {
+          const invRes = await invitationApi.listInvitations(committeeId)
+          if (seq !== dataSeq) return
+          invitations.value = invRes.data
+        } catch {
+          invitations.value = []
+        }
+      }
+    } else {
+      membersSeq++
+      members.value = []
+      invitations.value = []
+    }
+  } finally {
+    if (seq === dataSeq) loading.value = false
   }
 }
 
@@ -269,13 +335,13 @@ onMounted(async () => {
         </SectionCard>
       </div>
 
-      <!-- メンバー一覧 -->
-      <div>
-        <SectionCard>
+      <!-- メンバー一覧（委員会の現役所属者のみ。非所属は節ごと出さない） -->
+      <div v-if="committee.myRole">
+        <SectionCard data-testid="committee-detail-members">
           <template #header>
             <div class="flex items-center justify-between">
               <h3 class="font-semibold text-gray-800">
-                {{ $t('committee.detail.members') }}（{{ members.length }}）
+                {{ $t('committee.detail.members') }}<template v-if="!membersLoadFailed">（{{ members.length }}）</template>
               </h3>
               <Button
                 v-if="isChair"
@@ -286,7 +352,14 @@ onMounted(async () => {
               />
             </div>
           </template>
-          <div class="divide-y">
+          <DashboardErrorState
+            v-if="membersLoadFailed"
+            testid="committee-detail-members-error"
+            :error="membersError"
+            :message="$t('committee.detail.members_load_failed')"
+            @retry="loadMembers"
+          />
+          <div v-else class="divide-y">
             <div
               v-for="member in members"
               :key="member.userId"

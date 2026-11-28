@@ -36,6 +36,7 @@
     },
     "detail": {
       "members": "成员",
+      "members_load_failed": "无法加载成员列表。",
       "invite": "邀请成员",
       "distributions": "传达记录",
       "activate": "开始活动",
