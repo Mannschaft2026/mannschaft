@@ -95,19 +95,23 @@ async function runCompletionWorkflow(action, { ancestor = oldCompleted, head = o
           return { data: { merge_base_commit: { sha: invalidAncestor ? 'not-a-sha' : 'c'.repeat(40) } } };
         },
         getContent: async ({ path, ref }) => {
-          if (missingAncestor && ref === 'c'.repeat(40)) throw Object.assign(new Error('missing'), { status: 404 });
-          // 台帳の新配置（docs/task-list/）の有無をディレクトリ単位で確かめる（CMP-261124-1222）。旧配置なので 404。
-          if (path === 'docs/task-list' && ref in refs) throw Object.assign(new Error('Not Found'), { status: 404 });
-          if (path !== 'docs/task-list.md' || !(ref in refs)) throw new Error(`Unexpected data read: ${path}@${ref}`);
-          return { data: { type: 'file', encoding: 'base64', content: Buffer.from(refs[ref]).toString('base64') } };
+          // 台帳は GraphQL（Tree entries 一括）で読む（CMP-261124-1222 ④）。Contents API で台帳を読んだら失敗にする。
+          throw new Error(`Unexpected data read: ${path}@${ref}`);
         },
       },
+    },
+    // 台帳の取得（1参照1回）。旧配置なので docs/task-list/ は無い（dir: null）。共通祖先の索引が無い場合は index: null。
+    graphql: async (query, { commit }) => {
+      if (!(commit in refs)) throw new Error(`Unexpected ledger read: ${commit}`);
+      const index = missingAncestor && commit === 'c'.repeat(40) ? null
+        : { __typename: 'Blob', oid: 'oid-' + commit, text: refs[commit], isTruncated: false, isBinary: false, byteSize: Buffer.byteLength(refs[commit]) };
+      return { repository: { commit: { __typename: 'Commit', oid: commit }, index, dir: null } };
     },
   };
   const context = { eventName: 'pull_request_target', repo: { owner: 'owner', repo: 'repo' }, payload: {
     action, pull_request: { number: 1957, changed_files: changedFiles, created_at: '2026-11-15T00:00:00Z', base: { sha: 'a'.repeat(40), ref: 'main' }, head: { sha: 'b'.repeat(40) } },
   } };
-  const core = { info() {}, notice() {}, error() {}, setFailed(message) { throw new Error(message); } };
+  const core = { info() {}, notice() {}, warning() {}, error() {}, setFailed(message) { throw new Error(message); } };
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
   await new AsyncFunction('require', 'github', 'context', 'core', script)(createRequire(import.meta.url), github, context, core);
   assert.deepEqual(calls, [`${'a'.repeat(40)}...${'b'.repeat(40)}`]);
