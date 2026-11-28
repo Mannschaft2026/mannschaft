@@ -26,7 +26,7 @@ const faqIds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         </NuxtLink>
         <p class="text-sm text-surface-500">
           {{ t('landing.v2.cta.pricing_prompt') }}
-          <NuxtLink to="/product" class="font-medium text-primary hover:underline">
+          <NuxtLink to="/pricing" class="font-medium text-primary hover:underline">
             {{ t('landing.v2.cta.pricing_link') }}
           </NuxtLink>
         </p>

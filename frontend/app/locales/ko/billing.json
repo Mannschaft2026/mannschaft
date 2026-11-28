@@ -503,6 +503,25 @@
       "loadOptionsFailed": "상품 키와 세금 코드 선택지를 불러오지 못했습니다",
       "errorInvalidTaxRate": "세율은 0~100% 범위에서 소수점 둘째 자리까지 입력하세요",
       "taxCodeEnabled": "사용"
+    },
+    "pricing": {
+      "title": "요금제",
+      "description": "Mannschaft 요금제입니다. 월 요금은 세금 포함으로 표시되며 언제든지 해지할 수 있습니다.",
+      "heading": "요금제",
+      "scopeLabel": "대상",
+      "scopeUser": "개인",
+      "scopeTeam": "팀",
+      "scopeOrg": "조직",
+      "quoteRequired": "로그인 후 해당 팀/조직의 확정 견적이 표시됩니다",
+      "comingSoon": "준비 중",
+      "free": "무료",
+      "taxIncluded": "세금 포함",
+      "taxBreakdown": "(세금 제외 {excl} + {taxName} {tax}, 세율 {rate}%)",
+      "loadError": "요금을 불러오지 못했습니다",
+      "retry": "다시 시도",
+      "addonsHeading": "개별로 추가할 수 있는 기능(애드온)",
+      "register": "무료로 시작하기",
+      "login": "로그인"
     }
   }
 }

@@ -12,6 +12,11 @@ import type { components } from '~/types/generated'
 
 // === 生成型（真実のソース = openapi-typescript）===
 export type BillingPlanCatalogResponse = components['schemas']['BillingPlanCatalogResponse']
+export type PublicBillingCatalogResponse = components['schemas']['PublicBillingCatalogResponse']
+export type PublicBillingPlan = components['schemas']['PublicPlan']
+export type PublicBillingAddon = components['schemas']['PublicAddon']
+export type PublicBillingPriceBand = components['schemas']['PublicPriceBand']
+export type PublicBillingMoney = components['schemas']['PublicMoney']
 export type BillingPlanItem = components['schemas']['BillingPlanItem']
 export type BillingFeatureItem = components['schemas']['BillingFeatureItem']
 export type BillingPriceBand = components['schemas']['BillingPriceBand']
@@ -201,6 +206,15 @@ export function useBillingApi() {
   /** プランカタログ（enabled のプラン・機能を sort_order 昇順）。 */
   async function getPlanCatalog() {
     return api<{ data: BillingPlanCatalogResponse }>('/api/v1/billing/plans')
+  }
+
+  /**
+   * 公開価格カタログ（認証不要・/pricing 用。設計書 05_billing_center.md §公開価格）。
+   * TEAM/ORG は確定額を返さず quoteRequired=true になる。
+   */
+  async function getPublicPlans(scopeKind: BillingScopeKind) {
+    const query = new URLSearchParams({ scopeKind })
+    return api<{ data: PublicBillingCatalogResponse }>(`/api/v1/public/billing/plans?${query.toString()}`)
   }
 
   /** 単一機能の判定（FE の表示出し分け専用。BE ゲートが正）。 */
@@ -548,6 +562,7 @@ export function useBillingApi() {
 
   return {
     getPlanCatalog,
+    getPublicPlans,
     checkEntitlement,
     getMyEntitlements,
     getTeamEntitlements,

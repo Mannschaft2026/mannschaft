@@ -503,6 +503,25 @@
       "loadOptionsFailed": "Could not load the product key and tax code options",
       "errorInvalidTaxRate": "Enter a tax rate between 0 and 100 percent with at most 2 decimal places",
       "taxCodeEnabled": "Enabled"
+    },
+    "pricing": {
+      "title": "Pricing",
+      "description": "Mannschaft pricing. Monthly prices are shown tax included, and you can cancel any time.",
+      "heading": "Pricing",
+      "scopeLabel": "Applies to",
+      "scopeUser": "Individual",
+      "scopeTeam": "Team",
+      "scopeOrg": "Organization",
+      "quoteRequired": "A confirmed quote for your team or organization is shown after you log in",
+      "comingSoon": "Coming soon",
+      "free": "Free",
+      "taxIncluded": "Tax included",
+      "taxBreakdown": "(excl. tax {excl} + {taxName} {tax}, rate {rate}%)",
+      "loadError": "Failed to load pricing",
+      "retry": "Retry",
+      "addonsHeading": "Optional features (add-ons)",
+      "register": "Get started for free",
+      "login": "Log in"
     }
   }
 }
