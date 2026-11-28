@@ -15,7 +15,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * <ul>
  *   <li>{@link ScopeSlugIdConverter}（{@code String→Long}）: 単一スコープ（{@code /teams/{id}} または
  *       {@code /organizations/{id}}）を持つ 118 本のコントローラ用。変換先が {@code Long} で共通のため
- *       1 本に統合し、URI の直前セグメントでスコープを推定する（従来どおり・据え置き）。</li>
+ *       1 本に統合し、引数名が {@code organizationId} なら常に組織、それ以外は URI の直前セグメントで
+ *       スコープを推定する（クエリ organizationId の TEAM 誤解決＝越境を根治。CMP-261125-2124）。</li>
  *   <li>{@link OrgScopeIdConverter}（{@code String→}{@link OrgScopeId}） / {@link TeamScopeIdConverter}
  *       （{@code String→}{@link TeamScopeId}）: ネスト二重スコープ
  *       {@code /organizations/{orgId}/teams/{teamId}} を持つコントローラ用（課題 #12・案A）。

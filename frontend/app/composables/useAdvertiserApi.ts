@@ -85,10 +85,33 @@ function creativesBasePath(scopeType: ScopeType, scopeId: string, campaignId: nu
 export function useAdvertiserApi() {
   const api = useApi()
   const { resolveOrganizationNumericId } = useOrganizationNumericId()
+  const numericIdBySlug = new Map<string, Promise<string>>()
 
   // ─── 広告主向け API ───
 
-  async function register(organizationId: string, body: RegisterAdvertiserRequest) {
+  /**
+   * 組織スコープのクエリ organizationId に載せる値（数値 ID）を返す。
+   * 既に数値ならそのまま、slug なら組織詳細 API の numericId へ解決する（slug を BE の Long へ流さない）。
+   */
+  async function organizationQueryId(organizationIdOrSlug: string): Promise<string> {
+    if (/^\d+$/.test(organizationIdOrSlug)) return organizationIdOrSlug
+    // 同一 slug の解決は 1 回だけ（ページ内の複数 API 呼び出しで組織詳細 API を重複して引かない）。失敗は保持しない
+    let pending = numericIdBySlug.get(organizationIdOrSlug)
+    if (!pending) {
+      pending = resolveOrganizationNumericId(organizationIdOrSlug)
+      numericIdBySlug.set(organizationIdOrSlug, pending)
+      pending.catch(() => numericIdBySlug.delete(organizationIdOrSlug))
+    }
+    return await pending
+  }
+
+  /** スコープ種別に応じたクエリ用 ID（TEAM はパス変数側で渡すためそのまま、ORGANIZATION は数値 ID）。 */
+  async function scopeQueryId(scopeType: ScopeType, scopeId: string): Promise<string> {
+    return scopeType === 'ORGANIZATION' ? await organizationQueryId(scopeId) : scopeId
+  }
+
+  async function register(organizationIdOrSlug: string, body: RegisterAdvertiserRequest) {
+    const organizationId = await organizationQueryId(organizationIdOrSlug)
     return api<{ data: AdvertiserAccountResponse }>('/api/v1/advertiser/register', {
       method: 'POST',
       params: { organizationId },
@@ -105,21 +128,21 @@ export function useAdvertiserApi() {
 
   async function getAccount(scopeType: ScopeType, scopeId: string) {
     return api<{ data: AdvertiserAccountResponse }>(billingBasePath(scopeType, scopeId, 'account'), {
-      params: billingParams(scopeType, scopeId),
+      params: billingParams(scopeType, await scopeQueryId(scopeType, scopeId)),
     })
   }
 
   async function updateAccount(scopeType: ScopeType, scopeId: string, body: UpdateAdvertiserAccountRequest) {
     return api<{ data: AdvertiserAccountResponse }>(billingBasePath(scopeType, scopeId, 'account'), {
       method: 'PATCH',
-      params: billingParams(scopeType, scopeId),
+      params: billingParams(scopeType, await scopeQueryId(scopeType, scopeId)),
       body,
     })
   }
 
   async function getOverview(scopeType: ScopeType, scopeId: string) {
     return api<{ data: AdvertiserOverviewResponse }>(billingBasePath(scopeType, scopeId, 'overview'), {
-      params: billingParams(scopeType, scopeId),
+      params: billingParams(scopeType, await scopeQueryId(scopeType, scopeId)),
     })
   }
 
@@ -144,28 +167,28 @@ export function useAdvertiserApi() {
 
   // Performance
   async function getCampaignPerformance(scopeType: ScopeType, scopeId: string, campaignId: number, from: string, to: string) {
-    const queryScopeId = scopeType === 'ORGANIZATION' ? await resolveOrganizationNumericId(scopeId) : scopeId
+    const queryScopeId = await scopeQueryId(scopeType, scopeId)
     return api<{ data: CampaignPerformanceResponse }>(billingBasePath(scopeType, scopeId, `campaigns/${campaignId}/performance`), {
       params: billingParams(scopeType, queryScopeId, { from, to }),
     })
   }
 
   async function getCreativeComparison(scopeType: ScopeType, scopeId: string, campaignId: number, from: string, to: string) {
-    const queryScopeId = scopeType === 'ORGANIZATION' ? await resolveOrganizationNumericId(scopeId) : scopeId
+    const queryScopeId = await scopeQueryId(scopeType, scopeId)
     return api<{ data: CreativeComparisonResponse }>(billingBasePath(scopeType, scopeId, `campaigns/${campaignId}/creatives`), {
       params: billingParams(scopeType, queryScopeId, { from, to }),
     })
   }
 
   async function getBreakdown(scopeType: ScopeType, scopeId: string, campaignId: number, from: string, to: string, breakdownBy?: string) {
-    const queryScopeId = scopeType === 'ORGANIZATION' ? await resolveOrganizationNumericId(scopeId) : scopeId
+    const queryScopeId = await scopeQueryId(scopeType, scopeId)
     return api<{ data: BreakdownResponse }>(billingBasePath(scopeType, scopeId, `campaigns/${campaignId}/breakdown`), {
       params: billingParams(scopeType, queryScopeId, { from, to, breakdownBy }),
     })
   }
 
   async function exportCampaignCsv(scopeType: ScopeType, scopeId: string, campaignId: number, from: string, to: string) {
-    const queryScopeId = scopeType === 'ORGANIZATION' ? await resolveOrganizationNumericId(scopeId) : scopeId
+    const queryScopeId = await scopeQueryId(scopeType, scopeId)
     return api(billingBasePath(scopeType, scopeId, `campaigns/${campaignId}/export`), {
       params: billingParams(scopeType, queryScopeId, { from, to }),
       responseType: 'blob' as const,
@@ -175,19 +198,19 @@ export function useAdvertiserApi() {
   // Invoices
   async function getInvoices(scopeType: ScopeType, scopeId: string, params?: { status?: InvoiceStatus; page?: number; size?: number }) {
     return api<{ data: InvoiceSummaryResponse[]; meta: { total: number; page: number; size: number; totalPages: number } }>(billingBasePath(scopeType, scopeId, 'invoices'), {
-      params: billingParams(scopeType, scopeId, params),
+      params: billingParams(scopeType, await scopeQueryId(scopeType, scopeId), params),
     })
   }
 
   async function getInvoiceDetail(scopeType: ScopeType, scopeId: string, invoiceId: number) {
     return api<{ data: InvoiceDetailResponse }>(billingBasePath(scopeType, scopeId, `invoices/${invoiceId}`), {
-      params: billingParams(scopeType, scopeId),
+      params: billingParams(scopeType, await scopeQueryId(scopeType, scopeId)),
     })
   }
 
   async function downloadInvoicePdf(scopeType: ScopeType, scopeId: string, invoiceId: number) {
     return api(billingBasePath(scopeType, scopeId, `invoices/${invoiceId}/pdf`), {
-      params: billingParams(scopeType, scopeId),
+      params: billingParams(scopeType, await scopeQueryId(scopeType, scopeId)),
       responseType: 'blob' as const,
     }) as Promise<Blob>
   }
@@ -195,14 +218,14 @@ export function useAdvertiserApi() {
   // Report Schedules
   async function getReportSchedules(scopeType: ScopeType, scopeId: string) {
     return api<{ data: ReportScheduleResponse[] }>(billingBasePath(scopeType, scopeId, 'report-schedules'), {
-      params: billingParams(scopeType, scopeId),
+      params: billingParams(scopeType, await scopeQueryId(scopeType, scopeId)),
     })
   }
 
   async function createReportSchedule(scopeType: ScopeType, scopeId: string, body: CreateReportScheduleRequest) {
     return api<{ data: ReportScheduleResponse }>(billingBasePath(scopeType, scopeId, 'report-schedules'), {
       method: 'POST',
-      params: billingParams(scopeType, scopeId),
+      params: billingParams(scopeType, await scopeQueryId(scopeType, scopeId)),
       body,
     })
   }
@@ -210,7 +233,7 @@ export function useAdvertiserApi() {
   async function deleteReportSchedule(scopeType: ScopeType, scopeId: string, id: number) {
     return api(billingBasePath(scopeType, scopeId, `report-schedules/${id}`), {
       method: 'DELETE',
-      params: billingParams(scopeType, scopeId),
+      params: billingParams(scopeType, await scopeQueryId(scopeType, scopeId)),
     })
   }
 
@@ -218,14 +241,14 @@ export function useAdvertiserApi() {
   async function createCreditLimitRequest(scopeType: ScopeType, scopeId: string, body: CreateCreditLimitRequest) {
     return api<{ data: CreditLimitRequestResponse }>(billingBasePath(scopeType, scopeId, 'credit-limit-requests'), {
       method: 'POST',
-      params: billingParams(scopeType, scopeId),
+      params: billingParams(scopeType, await scopeQueryId(scopeType, scopeId)),
       body,
     })
   }
 
   async function getCreditLimitRequests(scopeType: ScopeType, scopeId: string) {
     return api<{ data: CreditLimitRequestResponse[] }>(billingBasePath(scopeType, scopeId, 'credit-limit-requests'), {
-      params: billingParams(scopeType, scopeId),
+      params: billingParams(scopeType, await scopeQueryId(scopeType, scopeId)),
     })
   }
 
