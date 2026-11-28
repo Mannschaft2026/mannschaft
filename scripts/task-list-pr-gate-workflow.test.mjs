@@ -414,13 +414,12 @@ test('AC-6 / P2-4（PR 側・人・互換期間）: 月別ファイルの直接�
   assert.ok(infos.some((m) => m.includes('someone') && m.includes('mannschaft-ledger-bot[bot] でない')), infos.join('\n'));
 });
 
-test('AC-6（PR 側・人）: 人の正しい畳み込みは互換期間は緑、作者が bot でない旨の notice を出す', async () => {
+test('AC-6（PR 側・人）: 人の畳み込み（等式は正しいが作者が bot でない申告の削除）は赤', async () => {
   const n = chName(T, '20261127T010000Z');
   const base = ledgerFiles([A0], { [n]: chUpd(A0, B0, T) });
   const head = ledgerFiles([B0]);
-  const { failed, infos } = await runGate({ files: base, refs: { head }, prFiles: docsOnly(n, 'docs/task-list/2026-11.md') });
-  assert.deepEqual(failed, []);
-  assert.ok(infos.some((m) => m.includes('mannschaft-ledger-bot[bot] でない')), infos.join('\n'));
+  const { failed } = await runGate({ files: base, refs: { head }, prFiles: docsOnly(n, 'docs/task-list/2026-11.md') });
+  assert.ok(failed.some((m) => /change-deleted/.test(m) && m.includes('mannschaft-ledger-bot[bot]')), failed.join('\n'));
 });
 
 test('AC-6a: main だけで add・update・畳み込みが進んだ、台帳を触らない古い PR は緑', async () => {
@@ -480,3 +479,30 @@ test('AC-10: 最新 PR の作者（user）を取得ステップの出力に含�
   const { outputs } = await runGate({ files: ledgerFiles([R('CMP-261201-0000', 'P4 実装中')]) });
   assert.deepEqual(JSON.parse(outputs.pull).user, { login: 'someone', type: 'User' });
 });
+
+test('検分 P1: 古い枝が最新 base の行から作った完了 update 申告は、仮想 head で完了遷移を拾い証拠 JSON 無しで赤', async () => {
+  const done = R(T, '完了', '[証拠](../evidence/' + T + '.json)');
+  const n = chName(T, '20261127T100000Z');
+  const ancestor = ledgerFiles([A0]);
+  const base = ledgerFiles([B0]);
+  const head = ledgerFiles([A0], { [n]: chUpd(B0, done, T) });
+  await assert.rejects(runGate({ files: base, refs: { head, ancestor }, prFiles: docsOnly(n) }), /証拠JSONが空または不正/);
+});
+
+test('検分 P1: 月別の直接編集による完了遷移も従来どおり証拠 JSON 無しで赤', async () => {
+  const done = R(T, '完了', '[証拠](../evidence/' + T + '.json)');
+  await assert.rejects(runGate({ files: ledgerFiles([A0]), refs: { head: ledgerFiles([done]) }, prFiles: docsOnly('docs/task-list/2026-11.md') }), /証拠JSONが空または不正/);
+});
+
+for (const [label, extra] of [
+  ['.md 以外（changes/readme.txt）', { [CH + 'readme.txt']: 'x' }],
+  ['不正な名前', { [CH + 'bad-name.md']: 'x' }],
+  ['ネスト', { [chName(T, '20261127T010000Z') + '/x.md']: 'x' }],
+]) {
+  test('検分 P2: reader の問題（' + label + '）は赤', async () => {
+    const base = ledgerFiles([A0]);
+    const head = ledgerFiles([A0], extra);
+    const { failed } = await runGate({ files: base, refs: { head }, prFiles: docsOnly(...Object.keys(extra)) });
+    assert.ok(failed.length > 0, label + ' で緑になった');
+  });
+}

@@ -190,7 +190,12 @@ jobs:
               trustedValidator = await import(pathToFileURL(validatorPath).href);
               const evidencePathPattern = /^docs\/evidence\/CMP-(?:\d{6}-\d{4}|\d{3})\.json$/;
               const changedEvidencePaths = [...new Set(files.flatMap(file => [file.filename, file.previous_filename]).filter(filePath => evidencePathPattern.test(filePath)))];
-              const selectedEvidencePaths = trustedValidator.selectEvidencePaths(baseTaskList, headTaskList, changedEvidencePaths, { ancestorTaskList });
+              // 生の PR head（月別の直接編集による完了遷移）と仮想 head（最新 base＋PR が追加した申告。古い枝が最新 base の行から作った申告も適用）の両方で選ぶ。
+              const virtualHeadTaskList = ledgerChange.virtualHead;
+              const selectedEvidencePaths = [...new Set([
+                ...trustedValidator.selectEvidencePaths(baseTaskList, headTaskList, changedEvidencePaths, { ancestorTaskList }),
+                ...trustedValidator.selectEvidencePaths(baseTaskList, virtualHeadTaskList, changedEvidencePaths),
+              ])];
               const evidenceByPath = {};
               const evidenceChanged = new Set(changedEvidencePaths.filter(filePath => selectedEvidencePaths.includes(filePath)));
               const evidenceDeleted = new Set(files.flatMap(file => file.status === 'removed' ? [file.filename] : file.previous_filename ? [file.previous_filename] : []).filter(filePath => selectedEvidencePaths.includes(filePath)));
@@ -259,6 +264,15 @@ jobs:
               trustedValidator.validateCompletionChanges(input.baseTaskList, input.headTaskList, input.evidenceByPath, {
                 repository: input.repository,
                 ancestorTaskList: input.ancestorTaskList,
+                fileExists: filePath => input.existingFiles.includes(filePath),
+                evidenceChanged: new Set(input.evidenceChanged),
+                evidenceDeleted: new Set(input.evidenceDeleted),
+                implementations: implementationsByPr,
+                runs: runsById,
+              });
+              // 仮想 head でも同じく検証する（PR が追加した申告による完了遷移を必ず拾う。最新 base との差なので分岐点は使わない）。
+              trustedValidator.validateCompletionChanges(input.baseTaskList, virtualHeadTaskList, input.evidenceByPath, {
+                repository: input.repository,
                 fileExists: filePath => input.existingFiles.includes(filePath),
                 evidenceChanged: new Set(input.evidenceChanged),
                 evidenceDeleted: new Set(input.evidenceDeleted),

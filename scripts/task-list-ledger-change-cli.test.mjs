@@ -226,3 +226,17 @@ test('入口: node scripts/task-list-ledger.mjs add / update / effective --json 
     assert.equal(json.changes.applied.length, 2);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('検分 P2: rebase の結果が適用されない（3件 fork になる）なら書かず、元の内容を保って失敗する', async () => {
+  const B = row(T, 'P2 実装中（main 側）');
+  const name = CHANGES_DIR + '/' + T + '--20261127T000000Z--000001.md';
+  const orphan = '<!-- ledger-change v1 op=update id=' + T + ' base=' + sha(A) + ' -->\n' + row(T, 'P1 自分') + '\n';
+  const root = makeRoot({ ...BASE, 'docs/task-list/2026-11.md': M11.replace(A, B), [name]: orphan,
+    [CHANGES_DIR + '/' + T + '--20261127T000000Z--000002.md']: '<!-- ledger-change v1 op=update id=' + T + ' base=' + sha(B) + ' -->\n' + row(T, 'P3 x') + '\n',
+    [CHANGES_DIR + '/' + T + '--20261127T000000Z--000003.md']: '<!-- ledger-change v1 op=update id=' + T + ' base=' + sha(B) + ' -->\n' + row(T, 'P4 y') + '\n' });
+  try {
+    const r = await run(root, ['rebase', join(root, name)]);
+    assert.equal(r.code, 1);
+    assert.equal(readFileSync(join(root, name), 'utf8'), orphan, '元の内容を保つ');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

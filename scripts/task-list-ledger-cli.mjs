@@ -432,7 +432,13 @@ export function planRebaseChange(ledger, path, content) {
   if (current == null) throw new Error(entry.id + ' は実効台帳に無い。update の対象が無い');
   const base = changeRowHash(current);
   const next = changeContent('update', entry.id, base, entry.line);
-  checkedChange(path, next);
+  const candidate = checkedChange(path, next);
+  // 書く前に、取り直した申告が他の申告と合わせて実効台帳に適用されることを確かめる（fork 等で適用されないなら書かない）
+  const trial = applyChanges(ledger.rawFiles ?? ledger.files, ledger.layout, [...others, candidate]);
+  if (!trial.applied.includes(path)) {
+    const problems = trial.problems.filter((p) => (p.paths ?? [p.path]).includes(path)).map((p) => p.message);
+    throw new Error('base を取り直しても実効台帳に適用されない（書き換えない）: ' + (problems.join(' / ') || '原因不明'));
+  }
   return {
     changed: true,
     content: next,
@@ -450,17 +456,23 @@ async function readRootLedger(root) {
 }
 
 /** 申告を書き、読む側で適用できることを確かめる（適用されなければ消して失敗）。 */
-async function writeChange(root, plan) {
+async function writeChange(root, plan, ledger) {
+  // 書く前に、作る申告が他の申告と合わせて実効台帳に適用されることを確かめる（fork 等で適用されないなら作らない）
+  const trial = applyChanges(ledger.rawFiles ?? ledger.files, ledger.layout, [...(ledger.changes?.entries ?? []), parseChangeFile(plan.path, plan.content)]);
+  if (!trial.applied.includes(plan.path)) {
+    const problems = trial.problems.filter((p) => (p.paths ?? [p.path]).includes(plan.path)).map((p) => p.message);
+    throw new Error('作る申告が実効台帳に適用されない（作らない）: ' + (problems.join(' / ') || '原因不明'));
+  }
   const full = join(root, ...plan.path.split('/'));
   mkdirSync(join(root, ...CHANGES_DIR.split('/')), { recursive: true });
   writeFileSync(full, plan.content, { flag: 'wx' });
-  const ledger = await readRootLedger(root);
-  if (!ledger.changes.applied.includes(plan.path)) {
-    const problems = ledger.changes.problems.filter((p) => (p.paths ?? [p.path]).includes(plan.path)).map((p) => p.message);
+  const written = await readRootLedger(root);
+  if (!written.changes.applied.includes(plan.path)) {
+    const problems = written.changes.problems.filter((p) => (p.paths ?? [p.path]).includes(plan.path)).map((p) => p.message);
     rmSync(full, { force: true });
     throw new Error('作った申告が実効台帳に適用されない（消した）: ' + (problems.join(' / ') || '原因不明'));
   }
-  return ledger;
+  return written;
 }
 
 /** CLI。終了コードを返す。 */
@@ -509,8 +521,9 @@ export async function main(argv, { out = console.log, err = console.error, root 
     }
     if (cmd === 'add') {
       if (rest.length !== 1) throw new Error('使い方: add "<7列行>"');
-      const plan = planAddChange(await readRootLedger(root), rest[0], { now: now(), rand: rand?.() });
-      await writeChange(root, plan);
+      const ledger = await readRootLedger(root);
+      const plan = planAddChange(ledger, rest[0], { now: now(), rand: rand?.() });
+      await writeChange(root, plan, ledger);
       out('申告を作った: ' + plan.path + '（add ' + plan.id + '）');
       return 0;
     }
@@ -524,9 +537,10 @@ export async function main(argv, { out = console.log, err = console.error, root 
         if (eq <= 0) throw new Error('--set は <列名>=<値>: ' + kv);
         sets.push([kv.slice(0, eq), kv.slice(eq + 1)]);
       }
-      const plan = planUpdateChange(await readRootLedger(root), id, sets, { now: now(), rand: rand?.() });
+      const ledger = await readRootLedger(root);
+      const plan = planUpdateChange(ledger, id, sets, { now: now(), rand: rand?.() });
       for (const w of plan.warnings) err('警告: ' + w);
-      await writeChange(root, plan);
+      await writeChange(root, plan, ledger);
       out('申告を作った: ' + plan.path + '（update ' + plan.id + '）');
       out('  変更前: ' + plan.before);
       out('  変更後: ' + plan.after);
@@ -537,11 +551,21 @@ export async function main(argv, { out = console.log, err = console.error, root 
       const path = CHANGES_DIR + '/' + basename(rest[0]);
       const full = join(root, ...path.split('/'));
       if (!existsSync(full)) throw new Error('申告は ' + CHANGES_DIR + '/ に置くこと: ' + rest[0]);
-      const plan = planRebaseChange(await readRootLedger(root), path, readFileSync(full, 'utf8'));
+      const original = readFileSync(full, 'utf8');
+      const plan = planRebaseChange(await readRootLedger(root), path, original);
       if (plan.changed) {
         writeFileSync(full, plan.content);
-        const ledger = await readRootLedger(root);
-        if (!ledger.changes.applied.includes(path)) throw new Error('取り直した申告が実効台帳に適用されない: ' + ledger.changes.problems.filter((p) => (p.paths ?? [p.path]).includes(path)).map((p) => p.message).join(' / '));
+        let ledger;
+        try {
+          ledger = await readRootLedger(root);
+        } catch (error) {
+          writeFileSync(full, original);
+          throw error;
+        }
+        if (!ledger.changes.applied.includes(path)) {
+          writeFileSync(full, original); // 書き込み後の検証に失敗したら元の内容に戻す
+          throw new Error('取り直した申告が実効台帳に適用されない（元に戻した）: ' + ledger.changes.problems.filter((p) => (p.paths ?? [p.path]).includes(path)).map((p) => p.message).join(' / '));
+        }
       }
       for (const m of plan.message) out(m);
       return 0;

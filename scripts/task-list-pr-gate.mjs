@@ -13,7 +13,7 @@
 // - 月別ファイルを変える PR の作者が台帳 bot（mannschaft-ledger-bot[bot]）かの判定（段3で赤の条件に使う。今は警告文に含めるだけ）。
 // PR head のコードは実行しない（本モジュールは信頼 base の checkout から読む）。依存パッケージなし。
 
-import { LEDGER_DIR, LEDGER_INDEX_PATH, CHANGES_DIR, CHANGES_DIR_NAME, readLedger } from './task-list-ledger.mjs';
+import { LEDGER_DIR, LEDGER_INDEX_PATH, CHANGES_DIR, CHANGES_DIR_NAME, applyChanges, extractRows, readLedger } from './task-list-ledger.mjs';
 import { checkVirtualHead } from './task-list-structure-check.mjs';
 
 /** 台帳の畳み込み bot（GitHub App）の PR 作者 login。 */
@@ -141,27 +141,54 @@ export function changedMonthFiles(mergeBase, head) {
   return [...new Set([...before.keys(), ...after.keys()])].filter((p) => before.get(p) !== after.get(p)).sort();
 }
 
+/** reader が報告する申告の問題のうち、連鎖（fork・孤児・重複）以外＝申告ディレクトリの中身そのものの不正。 */
+const CHAIN_KINDS = new Set(['fork', 'orphan', 'duplicate']);
+
+/**
+ * 仮想 head（最新 base の月別＋base の申告＋PR が追加した申告）の実効台帳。完了証拠の選定・検証に使う（古い枝が
+ * 最新 base の行から作った申告は PR head 単体では孤児で未適用になるため、仮想 head で完了遷移を拾う）。
+ */
+export function virtualHeadLedger({ mergeBase, base, head }) {
+  const mbPaths = new Set((mergeBase.changes?.entries ?? []).map((e) => e.path));
+  const basePaths = new Set((base.changes?.entries ?? []).map((e) => e.path));
+  const added = (head.changes?.entries ?? []).filter((e) => !mbPaths.has(e.path) && !basePaths.has(e.path));
+  const applied = applyChanges(base.rawFiles ?? base.files, base.layout, [...(base.changes?.entries ?? []), ...added]);
+  const rows = applied.files.flatMap((f) => (f.content == null ? [] : extractRows(f.content, f.path)));
+  return { layout: base.layout, files: applied.files, rawFiles: base.rawFiles ?? base.files, rows, missing: [], changes: { entries: [...(base.changes?.entries ?? []), ...added], applied: applied.applied, problems: applied.problems } };
+}
+
 /**
  * PR の台帳変更（申告・月別ファイル）を判定する。引数は readLedger の結果（分岐点・base・head）と最新の PR（user を使う）。
- * @returns {{ violations: string[], notices: string[], fold: boolean, monthFilesChanged: string[], botAuthor: boolean, addedChanges: string[], removedChanges: string[] }}
+ * - 申告の削除は「等式が成り立つ（正しい畳み込み）」かつ「作者が台帳 bot」のときだけ許す。それ以外は赤（change-deleted）。
+ * - reader が報告した申告ディレクトリの不正（.md 以外・不正名・ネスト・サイズ・形式・ID 不一致等）は赤。
+ * @returns {{ violations: string[], notices: string[], fold: boolean, monthFilesChanged: string[], botAuthor: boolean, addedChanges: string[], removedChanges: string[], virtualHead: object }}
  */
 export function evaluateLedgerChanges({ mergeBase, base, head, pull }) {
   const result = checkVirtualHead({ mergeBase, base, head });
   const monthFilesChanged = changedMonthFiles(mergeBase, head);
   const botAuthor = isLedgerBotAuthor(pull);
   const author = pull?.user?.login ?? '(不明)';
+  const violations = result.violations.map((v) => v.message);
+  for (const p of head.changes?.problems ?? []) {
+    if (CHAIN_KINDS.has(p.kind)) continue; // 連鎖は仮想マージ（checkVirtualHead）で判定する
+    if (!violations.includes(p.message)) violations.push(p.message);
+  }
+  if (result.fold && !botAuthor) {
+    violations.push(result.removedChanges.join(', ') + ': 申告の削除（change-deleted）: 申告を消してよいのは ' + LEDGER_BOT_LOGIN + ' の畳み込みだけ（作者 ' + author + '）。月別ファイルへの反映と申告の削除は台帳 bot に任せること。');
+  }
   const notices = result.warnings.map((w) => w.message);
   if (monthFilesChanged.length && !botAuthor) {
     notices.push('月別ファイルを変える PR の作者 ' + author + ' は ' + LEDGER_BOT_LOGIN + ' でない（変更: ' + monthFilesChanged.join(', ')
       + '）。互換期間のため警告のみ。段3から月別ファイルの変更は台帳 bot の畳み込みに限る（行の追加・更新は node scripts/task-list-ledger.mjs add / update で申告を作る）。');
   }
   return {
-    violations: result.violations.map((v) => v.message),
+    violations,
     notices,
-    fold: result.fold,
+    fold: result.fold && botAuthor,
     monthFilesChanged,
     botAuthor,
     addedChanges: result.addedChanges,
     removedChanges: result.removedChanges,
+    virtualHead: virtualHeadLedger({ mergeBase, base, head }),
   };
 }
