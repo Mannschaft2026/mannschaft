@@ -85,8 +85,8 @@ public class ActivityResultService {
      */
     public Page<ActivityResultEntity> listActivities(Long userId, ActivityScopeType scopeType, Long scopeId,
                                                       Long templateId, Pageable pageable) {
-        // スコープメンバーシップ検証: 非メンバーは403
-        scopeAccessGuard.checkMembership(userId, scopeType, scopeId);
+        // スコープの中身を読めること: 非メンバー・非公開チームの MEMBER 未満は403（CMP-261124-0159 F00 §20.3）
+        scopeAccessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
 
         com.mannschaft.app.common.visibility.ScopeKey scope =
                 new com.mannschaft.app.common.visibility.ScopeKey(scopeType.name(), scopeId);
@@ -255,8 +255,8 @@ public class ActivityResultService {
      */
     public ActivityResultEntity getActivity(Long id, Long userId) {
         ActivityResultEntity entity = findActivityOrThrow(id);
-        // スコープメンバーシップ検証
-        scopeAccessGuard.checkMembership(userId, entity.getScopeType(), entity.getScopeId());
+        // スコープの中身を読めること（非公開チームでは MEMBER 以上。CMP-261124-0159 F00 §20.3）
+        scopeAccessGuard.checkScopeContentAccess(userId, entity.getScopeType(), entity.getScopeId());
         // AC-10: DRAFT（下書き）は作成者本人（または管理者以上）のみ閲覧可。
         // それ以外の会員には「存在しない」ものとして扱う（ACTIVITY_NOT_FOUND で漏洩防止）。
         if (entity.getStatus() == com.mannschaft.app.activity.ActivityStatus.DRAFT
@@ -347,8 +347,8 @@ public class ActivityResultService {
     @Transactional
     public ActivityResultEntity createActivity(Long userId, ActivityScopeType scopeType,
                                                 Long scopeId, CreateActivityRequest request) {
-        // スコープメンバーシップ検証: 非メンバーは403
-        scopeAccessGuard.checkMembership(userId, scopeType, scopeId);
+        // 中身を返さない書き込み（応答は作成した記録だけ）: 非メンバーは403（CMP-261124-0159 F00 §20.5.1）
+        scopeAccessGuard.checkMembershipForWrite(userId, scopeType, scopeId);
         // テンプレート存在チェック
         templateService.findTemplateOrThrow(request.getTemplateId());
         // 従来経路（createActivity）は作成即公開（status=PUBLISHED, Entity の @Builder.Default）
@@ -408,8 +408,8 @@ public class ActivityResultService {
     @Transactional
     public ActivityResultEntity createDraftActivity(Long userId, ActivityScopeType scopeType,
                                                     Long scopeId, CreateDraftActivityRequest request) {
-        // スコープメンバーシップ検証: 非メンバーは403
-        scopeAccessGuard.checkMembership(userId, scopeType, scopeId);
+        // 中身を返さない書き込み（応答は作成した下書きだけ）: 非メンバーは403（CMP-261124-0159 F00 §20.5.1）
+        scopeAccessGuard.checkMembershipForWrite(userId, scopeType, scopeId);
         // テンプレートは任意。指定された場合のみ存在チェック。
         if (request.getTemplateId() != null) {
             templateService.findTemplateOrThrow(request.getTemplateId());
@@ -552,8 +552,9 @@ public class ActivityResultService {
     @Transactional
     public ActivityResultEntity duplicateActivity(Long id, Long userId, DuplicateActivityRequest request) {
         ActivityResultEntity original = findActivityOrThrow(id);
-        // スコープメンバーシップ検証: 非メンバーは403（他スコープ会員による複製=IDOR を封じる）
-        scopeAccessGuard.checkMembership(userId, original.getScopeType(), original.getScopeId());
+        // 中身を返す書き込み（複製は元記録の本文・項目値・参加者を写して返す）なので門を通す（CMP-261124-0159 F00 §20.5.1）。
+        // 非メンバー・非公開チームの MEMBER 未満は403（他スコープ会員による複製=IDOR も封じる）
+        scopeAccessGuard.checkScopeContentAccess(userId, original.getScopeType(), original.getScopeId());
 
         String title = request != null && request.getTitle() != null
                 ? request.getTitle() : original.getTitle();
@@ -600,8 +601,8 @@ public class ActivityResultService {
     @Transactional
     public List<ActivityParticipantResponse> addParticipants(Long activityId, Long userId, AddParticipantsRequest request) {
         ActivityResultEntity activity = findActivityOrThrow(activityId);
-        // スコープメンバーシップ検証: 非メンバーは403
-        scopeAccessGuard.checkMembership(userId, activity.getScopeType(), activity.getScopeId());
+        // 中身を返す書き込み（応答に参加者一覧を含む）なので門を通す（CMP-261124-0159 F00 §20.5.1）
+        scopeAccessGuard.checkScopeContentAccess(userId, activity.getScopeType(), activity.getScopeId());
         entityManager.lock(activity, jakarta.persistence.LockModeType.OPTIMISTIC_FORCE_INCREMENT);
 
         for (Long participantUserId : request.getUserIds()) {
@@ -634,8 +635,8 @@ public class ActivityResultService {
     @Transactional
     public List<ActivityParticipantResponse> removeParticipants(Long activityId, Long userId, RemoveParticipantsRequest request) {
         ActivityResultEntity activity = findActivityOrThrow(activityId);
-        // スコープメンバーシップ検証: 非メンバーは403
-        scopeAccessGuard.checkMembership(userId, activity.getScopeType(), activity.getScopeId());
+        // 中身を返す書き込み（応答に参加者一覧を含む）なので門を通す（CMP-261124-0159 F00 §20.5.1）
+        scopeAccessGuard.checkScopeContentAccess(userId, activity.getScopeType(), activity.getScopeId());
         entityManager.lock(activity, jakarta.persistence.LockModeType.OPTIMISTIC_FORCE_INCREMENT);
         participantRepository.deleteByActivityResultIdAndUserIdIn(activityId, request.getUserIds());
         log.info("参加者削除: activityId={}, count={}", activityId, request.getUserIds().size());

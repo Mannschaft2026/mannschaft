@@ -570,10 +570,11 @@ class ActivityAutomaticScheduleIntegrationTest extends AbstractMySqlIntegrationT
             for (String key : List.of("byMonth", "byTemplate", "topParticipants")) {
                 assertThat(stats.path(key).size()).as(key).isZero();
             }
+            // CMP-261124-0159 AC-0159-81: CSV は管理者限定になったため、一般所属者は 403 で題名を 1 件も受け取らない
             var csv = mvc.perform(get("/api/v1/activities/export").with(user(Long.toString(MEMBER)))
                     .param("scope_type", "TEAM").param("scope_id", teamId.toString()))
-                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-            assertThat(csv.replace("\uFEFF", "").lines().toList()).containsExactly("日付,タイトル,参加者数,作成者");
+                    .andExpect(status().isForbidden()).andReturn().getResponse().getContentAsString();
+            assertThat(csv).doesNotContain("秘匿実績CSV題名");
             tx.executeWithoutResult(t -> {
                 em.createNativeQuery("UPDATE activity_results SET status='PUBLISHED',visibility='PUBLIC',is_planned=FALSE WHERE id=:id")
                         .setParameter("id", id).executeUpdate();
@@ -592,8 +593,8 @@ class ActivityAutomaticScheduleIntegrationTest extends AbstractMySqlIntegrationT
             }
             var hiddenCsv = mvc.perform(get("/api/v1/activities/export").with(user(Long.toString(MEMBER)))
                     .param("scope_type", "TEAM").param("scope_id", teamId.toString()))
-                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-            assertThat(hiddenCsv.replace("\uFEFF", "").lines().toList()).containsExactly("日付,タイトル,参加者数,作成者");
+                    .andExpect(status().isForbidden()).andReturn().getResponse().getContentAsString();
+            assertThat(hiddenCsv).doesNotContain("秘匿実績CSV題名");
             Long manualId = tx.execute(t -> {
                 var manual = activities.saveAndFlush(com.mannschaft.app.activity.entity.ActivityResultEntity.builder()
                         .scopeType(ActivityScopeType.TEAM).scopeId(teamId).templateId(templateId)
@@ -618,9 +619,8 @@ class ActivityAutomaticScheduleIntegrationTest extends AbstractMySqlIntegrationT
             assertThat(visibleStats.path("topParticipants").get(0).path("participationCount").asLong()).isEqualTo(1);
             var visibleCsv = mvc.perform(get("/api/v1/activities/export").with(user(Long.toString(MEMBER)))
                     .param("scope_type", "TEAM").param("scope_id", teamId.toString()))
-                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-            assertThat(visibleCsv.replace("\uFEFF", "").lines().toList()).containsExactly("日付,タイトル,参加者数,作成者",
-                    "2026-10-15,閲覧可能な手動実績CSV題名,1," + AUTHOR);
+                    .andExpect(status().isForbidden()).andReturn().getResponse().getContentAsString();
+            assertThat(visibleCsv).doesNotContain("閲覧可能な手動実績CSV題名").doesNotContain("秘匿実績CSV題名");
         } finally {
             tx.executeWithoutResult(t -> {
                 em.createNativeQuery("UPDATE activity_results SET template_id=NULL WHERE scope_type='TEAM' AND scope_id=:scope")

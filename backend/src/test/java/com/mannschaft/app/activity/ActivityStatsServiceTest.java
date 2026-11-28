@@ -64,12 +64,42 @@ class ActivityStatsServiceTest {
         @Test
         @DisplayName("異常系: フィールド不在でACTIVITY_002例外")
         void フィールド統計_フィールド不在_例外() {
+            given(templateRepository.findById(10L)).willReturn(Optional.of(template(ActivityScopeType.TEAM, 1L)));
             given(fieldRepository.findByTemplateIdAndFieldKey(10L, "valid_key")).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> service.getFieldStats(ActivityScopeType.TEAM, 1L, 10L, "valid_key", null))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("ACTIVITY_002"));
+        }
+
+        @Test
+        @DisplayName("AC-0159-80: 他スコープのテンプレートは不在と同じ ACTIVITY_002 で、フィールド定義を読まない")
+        void フィールド統計_他スコープのテンプレート_不在と同一() {
+            given(templateRepository.findById(10L)).willReturn(Optional.of(template(ActivityScopeType.TEAM, 2L)));
+
+            assertThatThrownBy(() -> service.getFieldStats(ActivityScopeType.TEAM, 1L, 10L, "valid_key", null))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("ACTIVITY_002"));
+            org.mockito.Mockito.verifyNoInteractions(fieldRepository);
+        }
+
+        @Test
+        @DisplayName("AC-0159-80: 存在しないテンプレートも ACTIVITY_002 で、フィールド定義を読まない")
+        void フィールド統計_不在のテンプレート() {
+            given(templateRepository.findById(10L)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.getFieldStats(ActivityScopeType.TEAM, 1L, 10L, "valid_key", null))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("ACTIVITY_002"));
+            org.mockito.Mockito.verifyNoInteractions(fieldRepository);
+        }
+
+        private com.mannschaft.app.activity.entity.ActivityTemplateEntity template(ActivityScopeType type, Long scopeId) {
+            return com.mannschaft.app.activity.entity.ActivityTemplateEntity.builder().scopeType(type).scopeId(scopeId)
+                    .name("型").createdBy(1L).build();
         }
     }
 }

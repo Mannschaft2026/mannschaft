@@ -51,7 +51,8 @@ public class AutomaticActivityListService {
     public Set<Long> actualIds(Long userId, ActivityScopeType type, Long scopeId) {
         var references = results.findAutomaticReferences(type, scopeId);
         if (references.isEmpty()) return Set.of();
-        boolean member = userId != null && access.isMember(userId, type, scopeId);
+        // 統計/CSV の auto 行。編集者特権はスコープの中身を読める在籍者に限る（CMP-261124-0159 F00 §20.3）
+        boolean member = userId != null && access.canAccessScopeContent(userId, type, scopeId);
         boolean admin = member && access.isAdminOrAbove(userId, type, scopeId);
         var scope = new ScopeKey(type.name(), scopeId);
         var roles = memberships.snapshotForUser(userId, Set.of(scope), Set.of(scope));
@@ -71,7 +72,7 @@ public class AutomaticActivityListService {
     public java.util.List<ActivityRecordResponse> linkedMetadata(com.mannschaft.app.schedule.dto.ScheduleActivitySource source,
                                                                 Long userId) {
         var type = ActivityScopeType.valueOf(source.scopeType());
-        if (!access.isMember(userId, type, source.scopeId())) return java.util.List.of();
+        if (!access.canAccessScopeContent(userId, type, source.scopeId())) return java.util.List.of();
         boolean admin = access.isAdminOrAbove(userId, type, source.scopeId());
         var values = ActivityScheduleValues.from(source);
         return results.findAllByScheduleIdOrderByIdAsc(source.id()).stream()
@@ -87,7 +88,7 @@ public class AutomaticActivityListService {
 
     public Page<ActivityRecordResponse> list(Long userId, ActivityScopeType scopeType, Long scopeId,
                                              Long templateId, Pageable pageable) {
-        access.checkMembership(userId, scopeType, scopeId);
+        access.checkScopeContentAccess(userId, scopeType, scopeId);
         var scope = new ScopeKey(scopeType.name(), scopeId);
         var roles = memberships.snapshotForUser(userId, Set.of(scope), Set.of(scope));
         var levels = ActivityVisibilityMapper.toFunctional(memberships.resolveVisibleLevels(scope, roles));

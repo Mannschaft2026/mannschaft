@@ -64,7 +64,7 @@ class ActivityCommentServiceTest {
         void 一覧_他スコープ_403() {
             given(resultRepository.findById(ACTIVITY_ID)).willReturn(Optional.of(teamActivity()));
             willThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .given(scopeAccessGuard).checkMembership(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
+                    .given(scopeAccessGuard).checkScopeContentAccess(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
 
             assertThatThrownBy(() -> service.listComments(ACTIVITY_ID, USER_ID))
                     .isInstanceOf(BusinessException.class)
@@ -83,7 +83,7 @@ class ActivityCommentServiceTest {
 
             List<ActivityCommentResponse> result = service.listComments(ACTIVITY_ID, USER_ID);
             assertThat(result).isNotNull();
-            verify(scopeAccessGuard).checkMembership(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
+            verify(scopeAccessGuard).checkScopeContentAccess(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
         }
     }
 
@@ -104,7 +104,7 @@ class ActivityCommentServiceTest {
 
             ActivityCommentResponse result = service.createComment(ACTIVITY_ID, USER_ID, request);
             assertThat(result).isNotNull();
-            verify(scopeAccessGuard).checkMembership(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
+            verify(scopeAccessGuard).checkMembershipForWrite(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
         }
 
         // AC-1: 他スコープ会員は投稿不可
@@ -113,7 +113,7 @@ class ActivityCommentServiceTest {
         void 作成_他スコープ_403() {
             given(resultRepository.findById(ACTIVITY_ID)).willReturn(Optional.of(teamActivity()));
             willThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .given(scopeAccessGuard).checkMembership(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
+                    .given(scopeAccessGuard).checkMembershipForWrite(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
 
             assertThatThrownBy(() -> service.createComment(ACTIVITY_ID, USER_ID, new CreateCommentRequest("x")))
                     .isInstanceOf(BusinessException.class)

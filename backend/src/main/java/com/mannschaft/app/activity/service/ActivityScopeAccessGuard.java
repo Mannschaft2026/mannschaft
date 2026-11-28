@@ -4,6 +4,7 @@ import com.mannschaft.app.activity.ActivityScopeType;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -28,12 +29,20 @@ import org.springframework.stereotype.Component;
  * </ul>
  *
  * <p>認可違反は共通 403（{@link CommonErrorCode#COMMON_002}）を用いる（activity 専用の認可エラーは作らない）。</p>
+ *
+ * <h2>読み取りと書き込みの書き分け（CMP-261124-0159・F00 §20.3 / §20.5.1）</h2>
+ * <p>中身を返す読み取り（一覧・詳細・コメント・統計など）と中身を返す書き込み（複製・参加者の追加/削除）は
+ * 共通の門 {@link ScopeContentAccessGate} の {@link #checkScopeContentAccess} / {@link #canAccessScopeContent} を、
+ * 中身を返さない書き込み（作成・コメント投稿など）は {@link #checkMembershipForWrite} を使う。
+ * 非公開チーム（{@code MEMBERS_AND_ABOVE}）の中身はそのチームの ADMIN / DEPUTY_ADMIN / MEMBER にだけ見せ、
+ * サポーター・ゲスト・部外者には部外者と同一の 403（COMMON_002）を返す。</p>
  */
 @Component
 @RequiredArgsConstructor
 public class ActivityScopeAccessGuard {
 
     private final AccessControlService accessControlService;
+    private final ScopeContentAccessGate scopeContentAccessGate;
 
     /**
      * 当該スコープが {@link AccessControlService} のロール／メンバーシップ基盤で
@@ -64,19 +73,42 @@ public class ActivityScopeAccessGuard {
     }
 
     /**
-     * スコープ所属メンバーであることを検証する（参照系・作成系）。
+     * スコープの中身を読めることを検証する（参照系・中身を返す書き込み）。共通の門
+     * {@link ScopeContentAccessGate#checkScopeContentAccess} に委譲する（非公開チームでは MEMBER 以上）。
+     *
+     * @throws BusinessException 非メンバー・非公開チームの MEMBER 未満、または解決対象外スコープ（COMMON_002）
+     */
+    public void checkScopeContentAccess(Long userId, ActivityScopeType scopeType, Long scopeId) {
+        requireRoleManagedScope(scopeType);
+        scopeContentAccessGate.checkScopeContentAccess(userId, scopeId, scopeType.name());
+    }
+
+    /**
+     * {@link #checkScopeContentAccess} の真偽版（例外を投げない）。同期対象・auto 記録を秘匿して除外する判定に使う。
+     * 解決対象外スコープでは {@code false}（fail-closed）。
+     */
+    public boolean canAccessScopeContent(Long userId, ActivityScopeType scopeType, Long scopeId) {
+        return isRoleManagedScope(scopeType)
+                && scopeContentAccessGate.canAccessScopeContent(userId, scopeId, scopeType.name());
+    }
+
+    /**
+     * 中身を返さない書き込み（作成・コメント投稿など）の在籍確認。判定は {@code checkMembership} と同一
+     * （{@link ScopeContentAccessGate#checkMembershipForWrite}。非公開チームにサポーター・ゲストが在籍しない不変条件に依拠する）。
      *
      * @throws BusinessException 非メンバー、または解決対象外スコープ（COMMON_002）
      */
-    public void checkMembership(Long userId, ActivityScopeType scopeType, Long scopeId) {
+    public void checkMembershipForWrite(Long userId, ActivityScopeType scopeType, Long scopeId) {
         requireRoleManagedScope(scopeType);
-        accessControlService.checkMembership(userId, scopeId, scopeType.name());
+        scopeContentAccessGate.checkMembershipForWrite(userId, scopeId, scopeType.name());
     }
 
-    /** 同期対象を秘匿して除外するための非例外判定。通常writerのassert認可は変更しない。 */
+    /**
+     * {@link #canAccessScopeContent} の別名。common の {@code AutomaticActivityActualPolicy}（auto 実績の読み取り段取り。
+     * 担当 PR 未割当のため PR-Z で棚卸し）だけが呼ぶ。activity パッケージ内では使わない（判定は親チーム上限込み）。
+     */
     public boolean isMember(Long userId, ActivityScopeType scopeType, Long scopeId) {
-        return isRoleManagedScope(scopeType)
-                && accessControlService.isMember(userId, scopeId, scopeType.name());
+        return canAccessScopeContent(userId, scopeType, scopeId);
     }
 
     /** auto actualの所属要件をF00のSYSTEM_ADMIN短絡より前で適用するために使う。 */

@@ -39,7 +39,7 @@ public class ActivityCommentService {
      */
     public List<ActivityCommentResponse> listComments(Long activityId, Long userId) {
         ActivityResultEntity activity = findActivityOrThrow(activityId);
-        checkScopeMembership(userId, activity);
+        checkScopeContentAccess(userId, activity);
         return activityMapper.toCommentResponseList(
                 commentRepository.findByActivityResultIdOrderByCreatedAtAsc(activityId));
     }
@@ -52,7 +52,8 @@ public class ActivityCommentService {
     @Transactional
     public ActivityCommentResponse createComment(Long activityId, Long userId, CreateCommentRequest request) {
         ActivityResultEntity activity = findActivityOrThrow(activityId);
-        checkScopeMembership(userId, activity);
+        // 中身を返さない書き込み（応答は投稿した本人のコメントだけ）。CMP-261124-0159 F00 §20.5.1
+        scopeAccessGuard.checkMembershipForWrite(userId, activity.getScopeType(), activity.getScopeId());
         ActivityCommentEntity entity = ActivityCommentEntity.builder()
                 .activityResultId(activityId)
                 .userId(userId)
@@ -113,11 +114,11 @@ public class ActivityCommentService {
     }
 
     /**
-     * 活動記録のスコープ会員であることを検証する。
+     * 活動記録のスコープの中身を読めることを検証する（非公開チームでは MEMBER 以上。CMP-261124-0159 F00 §20.3）。
      *
      * <p>判定はスコープ種別を網羅的にディスパッチする {@link ActivityScopeAccessGuard} に委譲する。</p>
      */
-    private void checkScopeMembership(Long userId, ActivityResultEntity activity) {
-        scopeAccessGuard.checkMembership(userId, activity.getScopeType(), activity.getScopeId());
+    private void checkScopeContentAccess(Long userId, ActivityResultEntity activity) {
+        scopeAccessGuard.checkScopeContentAccess(userId, activity.getScopeType(), activity.getScopeId());
     }
 }

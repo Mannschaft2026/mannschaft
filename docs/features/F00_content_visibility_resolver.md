@@ -3252,7 +3252,7 @@ Resolver を通らない読み取り経路（スコープ単位の一覧・集�
 
 | パッケージ | 呼び出し数 | クラス（呼び出し数） | 分類 | 理由・備考 |
 |---|---|---|---|---|
-| `activity` | 21 | ActivityStatsController(1)、ActivityCommentService(1)、ActivityDetailService(2)、ActivityResultService(7)、ActivityScheduleSyncService(2)、ActivityScopeAccessGuard(4)、ActivityTemplateService(1)、AutomaticActivityListService(3) | 門 | 一覧・詳細・コメント・統計（F06.4 §15）。書き込みは書き込み用 |
+| `activity` | 21 | ActivityStatsController(1)、ActivityCommentService(1)、ActivityDetailService(2)、ActivityResultService(7)、ActivityScheduleSyncService(2)、ActivityScopeAccessGuard(4)、ActivityTemplateService(1)、AutomaticActivityListService(3) | 門 | 一覧・詳細・コメント・統計（F06.4 §15）。書き込みは書き込み用。**実装済み（PR-A1a）**: `ActivityScopeAccessGuard` を門の名前（`checkScopeContentAccess`／`canAccessScopeContent`／`checkMembershipForWrite`）に置き換え、読み取り（一覧・詳細・コメント一覧・テンプレート一覧/詳細・予定連携の auto 読み取り・同期プレビュー・統計/CSV）と中身を返す書き込み（複製・参加者の追加/削除。応答に元記録の中身・参加者一覧を含む）は門、中身を返さない書き込み（作成・下書き作成・コメント投稿・予定からの下書き作成・削除前参照）は書き込み用。`isMember` は common の `AutomaticActivityActualPolicy`（PR-Z で棚卸し）のためだけに `canAccessScopeContent` の別名として残す |
 | `admin` | 1 | FeedbackService(1) | 対象外 | プラットフォーム運営のフィードバック。チームの中身を返さない |
 | `analytics` | 2 | PageViewScopeType(1)、PageViewAnalyticsAccessGuard(1) | 門 | チームのアクセス解析（管理者向け読み取り） |
 | `auth` | 2 | PendingInviteService(2) | 対象外（入口表） | PendingInviteService は入口。F01.2 03 の入口表で TEAM_073 |
