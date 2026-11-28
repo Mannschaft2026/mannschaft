@@ -156,6 +156,20 @@ public class MfaEmailTwoFactorService {
         return mfaEmailOtpService.send(MfaEmailOtpPurpose.REAUTH, MfaEmailOtpKeys.subjectOf(userId), userId, null);
     }
 
+    /**
+     * 本人確認用メールOTP を、2FA 未有効の利用者にも送る（パスキー登録・削除前の再認証。CMP-261021-1338 B5）。
+     *
+     * <p>送信先は認証ユーザー本人の登録アドレスに固定する。呼び出し側（{@code Auth2faService}）が
+     * 手段が EMAIL_OTP の利用者に限って呼ぶこと。</p>
+     *
+     * @param userId 認証済みユーザー ID
+     * @return マスク済みアドレス・有効期限・再送待ち秒数
+     */
+    @Transactional
+    public MfaEmailSendResponse sendReauthWithoutTwoFactor(Long userId) {
+        return mfaEmailOtpService.send(MfaEmailOtpPurpose.REAUTH, MfaEmailOtpKeys.subjectOf(userId), userId, null);
+    }
+
     private Optional<TwoFactorAuthEntity> findEnabled(Long userId) {
         return twoFactorAuthRepository.findByUserId(userId)
                 .filter(tfa -> Boolean.TRUE.equals(tfa.getIsEnabled()));

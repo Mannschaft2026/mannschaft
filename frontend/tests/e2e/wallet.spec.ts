@@ -563,4 +563,38 @@ test.describe('F18 ポイントカードウォレット', () => {
     await page.keyboard.press('Escape')
     await page.waitForURL(/\/wallet\/groups\/group-\d+$/, { timeout: 10_000 })
   })
+
+  test('UV 必須: 提示モードの再認証は用途 POINTCARD_PRESENT で UV を要求し、UV 不可端末では専用文言を出す', async ({ page }) => {
+    const state = newState()
+    state.settings = { isEnabled: true, termsAcceptedAt: nowIso(), termsVersion: '1', requireBiometricOnShow: true }
+    const now = nowIso()
+    state.groups.push({ id: 'group-1', name: '検証グループ', emoji: null, displayOrder: 0, cardIds: [], createdAt: now, updatedAt: now })
+    await setupWalletMocks(page, state)
+
+    // 再認証開始の本文（用途）を観測する
+    let beginBody: { purpose?: string } = {}
+    await page.route('**/api/v1/auth/webauthn/reauthenticate-begin', async (route) => {
+      beginBody = JSON.parse(route.request().postData() ?? '{}') as { purpose?: string }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: wrap({ challenge: btoa('mock-challenge'), rpId: 'localhost', allowCredentials: [btoa('cred')], userId: 1, timeout: 60000 }),
+      })
+    })
+    // UV を満たせない端末: userVerification='required' の get が ConstraintError で拒否される
+    await page.addInitScript(() => {
+      navigator.credentials.get = async (options?: CredentialRequestOptions) => {
+        if (options?.publicKey?.userVerification !== 'required') throw new Error('userVerification=required で要求されること')
+        throw new DOMException('UV を満たす認証器がありません', 'ConstraintError')
+      }
+    })
+
+    await page.goto('/wallet/groups/group-1/show')
+    await waitForHydration(page)
+
+    await expect(
+      page.getByText('この端末では生体認証または画面ロック（PIN）による本人確認ができないため、提示モードを開けません。'),
+    ).toBeVisible({ timeout: 10_000 })
+    expect(beginBody.purpose).toBe('POINTCARD_PRESENT')
+  })
 })

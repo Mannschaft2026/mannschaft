@@ -234,7 +234,8 @@
       "biometric_required": "提示モードの開始には認証が必要です",
       "biometric_failed": "認証に失敗しました",
       "no_cards": "このグループにカードがありません",
-      "load_failed": "グループの読み込みに失敗しました"
+      "load_failed": "グループの読み込みに失敗しました",
+      "uv_unavailable": "この端末では生体認証または画面ロック（PIN）による本人確認ができないため、提示モードを開けません。"
     },
     "admin": {
       "page_title": "ポイントカード管理",

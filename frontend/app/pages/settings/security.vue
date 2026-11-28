@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { AuthSessionResponse, WebAuthnCredentialResponse } from '~/types/auth'
 import { useWebAuthnRegister } from '~/composables/useWebAuthnRegister'
+import { ERROR_REAUTH_REQUIRED, usePasskeyManageReauth } from '~/composables/usePasskeyManageReauth'
+import type { PasskeyManageOutcome } from '~/composables/usePasskeyManageReauth'
+import { parseApiError } from '~/utils/apiError'
 
 definePageMeta({
   middleware: 'auth',
@@ -31,7 +34,9 @@ const renameTarget = ref<WebAuthnCredentialResponse | null>(null)
 const newDeviceName = ref('')
 
 // WebAuthn register
-const { registerPasskey, isRegistering: isRegisteringPasskey, error: registerError } = useWebAuthnRegister()
+const { registerPasskey, isRegistering: isRegisteringPasskey, error: registerError, errorCode: registerErrorCode } = useWebAuthnRegister()
+// パスキー登録・削除の前の再認証（5分以内に実行。AUTH_087 なら再認証からやり直す）
+const passkeyReauth = usePasskeyManageReauth()
 const registerDialog = ref(false)
 const newPasskeyName = ref('')
 
@@ -41,6 +46,8 @@ const showHelp = ref(false)
 const { t } = useI18n()
 
 onMounted(async () => {
+  // 再認証手段を先読みする（ボタン押下から認証ダイアログまでの通信を減らす。iOS/Safari のユーザー操作期限対策）
+  void passkeyReauth.prefetchMethod()
   await loadData()
 })
 
@@ -85,12 +92,19 @@ async function handleRevokeAllSessions() {
 
 // === WebAuthn ===
 async function handleDeleteCredential(id: number) {
-  try {
-    await deleteWebAuthnCredential(id)
+  const outcome = await passkeyReauth.runWithReauth(async (): Promise<PasskeyManageOutcome> => {
+    try {
+      await deleteWebAuthnCredential(id)
+      return 'done'
+    } catch (e) {
+      return parseApiError(e).code === ERROR_REAUTH_REQUIRED ? 'reauth_required' : 'failed'
+    }
+  })
+  if (outcome === 'done') {
     credentials.value = credentials.value.filter((c) => c.id !== id)
-    notification.success('セキュリティキーを削除しました')
-  } catch {
-    notification.error('セキュリティキーの削除に失敗しました')
+    notification.success(t('settings.security.toast.delete_key_success'))
+  } else if (outcome === 'failed') {
+    notification.error(t('settings.security.toast.delete_key_error'))
   }
 }
 
@@ -115,13 +129,20 @@ async function handleRenameCredential() {
   }
 }
 
+// 登録ボタン押下: 本人確認を先に済ませてからデバイス名ダイアログを開く（モーダル on モーダルを避ける）
+async function startPasskeyRegister() {
+  if (!(await passkeyReauth.ensureReauthenticated())) return
+  registerDialog.value = true
+}
+
 async function handlePasskeyRegister() {
   const deviceName = newPasskeyName.value.trim() || undefined
-  const success = await registerPasskey(deviceName)
-  if (success) {
+  if (await registerPasskey(deviceName)) {
     registerDialog.value = false
     newPasskeyName.value = ''
     notification.success(t('settings.security.webauthn.register_success'))
+    // 登録でパスキーの有無が変わると再認証手段も変わる。次の操作に備えて取り直す
+    void passkeyReauth.prefetchMethod()
     // 資格情報一覧を再取得
     try {
       const credRes = await getWebAuthnCredentials()
@@ -129,8 +150,14 @@ async function handlePasskeyRegister() {
     } catch {
       // 再取得失敗は非致命的。次回リロード時に反映される。
     }
+  } else if (registerErrorCode.value === ERROR_REAUTH_REQUIRED) {
+    // 再認証が期限切れ（5分）等。デバイス名ダイアログを閉じ、「本人確認をやり直す」ボタンの押下を起点に
+    // 本人確認をやり直す（自動では認証ダイアログを出さない。入力した名前は残す）。
+    // 認証器側だけに作られたパスキーが残りうるため、その案内も添える。
+    registerDialog.value = false
+    if (await passkeyReauth.reauthenticateAfterExpiry(true)) registerDialog.value = true
   } else if (registerError.value) {
-    notification.error(t('settings.security.webauthn.register_error'))
+    notification.error(t(registerError.value))
   }
 }
 </script>
@@ -140,6 +167,25 @@ async function handlePasskeyRegister() {
     <PageHeader title="セキュリティ" help @help="showHelp = true" />
 
     <SecurityHelpDialog v-model:visible="showHelp" />
+
+    <SettingsPasskeyReauthRetryDialog
+      :visible="passkeyReauth.retryVisible.value"
+      :leftover-note="passkeyReauth.retryLeftoverNote.value"
+      @retry="passkeyReauth.confirmRetry"
+      @update:visible="passkeyReauth.onRetryVisibleChange"
+    />
+
+    <SettingsPasskeyReauthDialog
+      :visible="passkeyReauth.dialogVisible.value"
+      :method="passkeyReauth.dialogMethod.value"
+      :busy="passkeyReauth.busy.value"
+      :error-message="passkeyReauth.errorMessage.value"
+      :reauth-email="passkeyReauth.reauthEmail.value"
+      :two-fa-method="passkeyReauth.twoFaMethod.value"
+      @submit="passkeyReauth.submit"
+      @send-email="passkeyReauth.sendEmail"
+      @update:visible="passkeyReauth.onDialogVisibleChange"
+    />
 
     <PageLoading v-if="loading" />
 
@@ -159,6 +205,7 @@ async function handlePasskeyRegister() {
         @delete-credential="handleDeleteCredential"
         @open-rename-dialog="openRenameDialog"
         @rename-credential="handleRenameCredential"
+        @passkey-register-start="startPasskeyRegister"
         @passkey-register="handlePasskeyRegister"
         @update:rename-dialog="renameDialog = $event"
         @update:new-device-name="newDeviceName = $event"

@@ -3,8 +3,15 @@ package com.mannschaft.app.auth.service;
 import com.mannschaft.app.auth.AuthErrorCode;
 import com.mannschaft.app.auth.MfaEmailOtpPurpose;
 import com.mannschaft.app.auth.MfaVerificationMethod;
+import com.mannschaft.app.auth.PasskeyManageReauthMethod;
+import com.mannschaft.app.auth.ReauthPurpose;
 import com.mannschaft.app.auth.TwoFactorMethod;
 import com.mannschaft.app.auth.event.LoginFailedEvent;
+import com.mannschaft.app.auth.event.ReauthenticationFailedEvent;
+import com.mannschaft.app.auth.event.ReauthenticationSucceededEvent;
+import com.mannschaft.app.auth.dto.PasskeyManageReauthRequest;
+import com.mannschaft.app.auth.dto.WebAuthnReauthenticateCompleteResponse;
+import com.mannschaft.app.auth.repository.WebAuthnCredentialRepository;
 import com.mannschaft.app.auth.event.MfaBackupCodeUsedEvent;
 import com.mannschaft.app.auth.event.MfaVerificationFailedEvent;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -54,6 +61,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -85,6 +93,10 @@ public class Auth2faService {
     private final MfaEmailOtpService mfaEmailOtpService;
     private final MfaFailureAuditRecorder mfaFailureAuditRecorder;
     private final MfaEmailTwoFactorService mfaEmailTwoFactorService;
+    /** パスキー保有判定（CMP-261021-1338 再認証手段の自動選択）。 */
+    private final WebAuthnCredentialRepository webAuthnCredentialRepository;
+    /** パスワード／メールOTP 経路の再認証成功時に再認証済みフラグを立てる（CMP-261021-1338）。 */
+    private final AuthWebAuthnService authWebAuthnService;
     /** 2FA 完了後のセッション発行（共通発行器。同パッケージの package-private 入口を使う）。 */
     private final AuthService authService;
     /** LocalDateTime 列（revoked_at / used_at）と突き合わせる現在時刻の源（壁時計。datetime_policy_utc_instant_vs_wallclock.md）。 */
@@ -106,6 +118,8 @@ public class Auth2faService {
     private static final String MFA_DISABLE_RATE_KEY_PREFIX = "mannschaft:auth:mfa_disable_attempt:";
     /** バックアップコード再生成の試行回数（AC-44: パスワード総当たり対策として無効化と同じ上限）。 */
     private static final String MFA_REGENERATE_RATE_KEY_PREFIX = "mannschaft:auth:mfa_regenerate_attempt:";
+    /** パスキー登録・削除前の再認証の試行回数（B6: 5 回/15 分）。 */
+    private static final String PASSKEY_MANAGE_REAUTH_RATE_KEY_PREFIX = "mannschaft:auth:passkey_manage_reauth_attempt:";
     private static final int REAUTH_RATE_LIMIT = 5;
     private static final Duration REAUTH_RATE_WINDOW = Duration.ofMinutes(15);
     private static final int BACKUP_CODE_COUNT = 8;
@@ -605,6 +619,136 @@ public class Auth2faService {
         twoFactorAuthRepository.save(twoFactorAuth);
         eventPublisher.publish(new MfaBackupCodesRegeneratedEvent(userId));
         return ApiResponse.of(new BackupCodesResponse(plainCodes));
+    }
+
+    // ─────────────────────────────────────────────
+    // CMP-261021-1338 パスキー登録・削除前の再認証（パスワード／2FA 要素／メールOTP 経路）
+    // ─────────────────────────────────────────────
+
+    /**
+     * パスキー登録・削除前の再認証手段を利用者の状態から選ぶ（B5）。
+     * パスキー保有→PASSKEY／パスワードあり＋2FA 有効→PASSWORD_AND_SECOND_FACTOR／パスワードのみ→PASSWORD／
+     * パスワード無し（SNS）＋2FA 有効→SECOND_FACTOR（2FA 要素のみ）／パスワード無し＋2FA 無し→EMAIL_OTP。どの利用者にも必ず 1 つの手段が決まり、確認なしで通る経路は無い。
+     *
+     * @param userId 認証済みユーザー ID
+     * @return 再認証手段
+     */
+    public PasskeyManageReauthMethod resolvePasskeyManageReauthMethod(Long userId) {
+        if (!webAuthnCredentialRepository.findByUserId(userId).isEmpty()) {
+            return PasskeyManageReauthMethod.PASSKEY;
+        }
+        UserEntity user = findUserOrThrow(userId);
+        boolean twoFactorEnabled = twoFactorAuthRepository.findByUserId(userId)
+                .filter(tfa -> Boolean.TRUE.equals(tfa.getIsEnabled()))
+                .isPresent();
+        if (!hasPassword(user)) {
+            // SNS ログインのみ: 2FA 有効なら 2FA 要素のみ必須（メールOTP だけで 2FA を飛ばさせない）
+            return twoFactorEnabled
+                    ? PasskeyManageReauthMethod.SECOND_FACTOR
+                    : PasskeyManageReauthMethod.EMAIL_OTP;
+        }
+        return twoFactorEnabled
+                ? PasskeyManageReauthMethod.PASSWORD_AND_SECOND_FACTOR
+                : PasskeyManageReauthMethod.PASSWORD;
+    }
+
+    /**
+     * パスキー登録・削除前の再認証用に、本人確認用メールOTP を送る（手段が EMAIL_OTP の利用者向け。2FA 未設定でも送れる）。
+     * パスワード＋メール 2FA の利用者は既存の {@link #sendReauthEmailOtp} を使う。
+     *
+     * @param userId 認証済みユーザー ID
+     * @return マスク済みアドレス・有効期限・再送待ち秒数
+     */
+    @Transactional
+    public ApiResponse<MfaEmailSendResponse> sendPasskeyManageReauthEmailOtp(Long userId) {
+        if (resolvePasskeyManageReauthMethod(userId) != PasskeyManageReauthMethod.EMAIL_OTP) {
+            throw new BusinessException(AuthErrorCode.AUTH_080);
+        }
+        return ApiResponse.of(mfaEmailTwoFactorService.sendReauthWithoutTwoFactor(userId));
+    }
+
+    /**
+     * パスキー登録・削除前の再認証（パスワード／2FA 要素／メールOTP 経路。B5〜B7）。
+     *
+     * <p>5 回/15 分のレート制限を照合より先に掛け（成功・失敗を問わず計上。Valkey のため失敗 TX のロールバックでも戻らない）、
+     * 失敗は AUTH_080。成功時は {@code AuthWebAuthnService#markReauthenticated(userId, sessionHash, PASSKEY_MANAGE)}
+     * でフラグを立てる。パスキー保有者はこの経路を使えない（パスキー再認証が必須）。何も提示しなければ必ず拒否する。
+     * 成功・失敗は監査イベントで記録する（失敗は AFTER_COMPLETION のリスナーが受けるため、ロールバックでも残る）。</p>
+     *
+     * @param userId      認証済みユーザー ID
+     * @param sessionHash 再認証したセッション（特定できなければ AUTH_087）
+     * @param req         本人確認（パスワード・要素・メールOTP）
+     * @return 期限 (verifiedUntil) のみを含むレスポンス
+     */
+    @Transactional
+    public ApiResponse<WebAuthnReauthenticateCompleteResponse> reauthenticateForPasskeyManage(
+            Long userId, String sessionHash, PasskeyManageReauthRequest req) {
+        if (sessionHash == null || sessionHash.isBlank()) {
+            eventPublisher.publish(new ReauthenticationFailedEvent(userId, ReauthPurpose.PASSKEY_MANAGE, null));
+            throw new BusinessException(AuthErrorCode.AUTH_087);
+        }
+        try {
+            authTokenService.checkRateLimit(PASSKEY_MANAGE_REAUTH_RATE_KEY_PREFIX + userId,
+                    REAUTH_RATE_LIMIT, REAUTH_RATE_WINDOW);
+        } catch (BusinessException e) {
+            // レート制限超過（AUTH_044）も失敗として監査に残す（総当たりの検知）
+            eventPublisher.publish(new ReauthenticationFailedEvent(userId, ReauthPurpose.PASSKEY_MANAGE, null));
+            throw e;
+        }
+
+        PasskeyManageReauthMethod method = resolvePasskeyManageReauthMethod(userId);
+        if (!verifyPasskeyManageReauth(userId, method, req)) {
+            eventPublisher.publish(new ReauthenticationFailedEvent(userId, ReauthPurpose.PASSKEY_MANAGE, method));
+            throw new BusinessException(AuthErrorCode.AUTH_080);
+        }
+
+        authWebAuthnService.markReauthenticated(userId, sessionHash, ReauthPurpose.PASSKEY_MANAGE);
+        eventPublisher.publish(new ReauthenticationSucceededEvent(userId, ReauthPurpose.PASSKEY_MANAGE, method));
+        OffsetDateTime verifiedUntil = OffsetDateTime.ofInstant(wallClock.instant(), wallClock.getZone())
+                .plusMinutes(AuthWebAuthnService.REAUTH_VERIFIED_TTL_MINUTES);
+        return ApiResponse.of(new WebAuthnReauthenticateCompleteResponse(verifiedUntil));
+    }
+
+    /** 手段ごとの本人確認。提示されたものはすべて正しくなければならず、未提示は不一致。 */
+    private boolean verifyPasskeyManageReauth(Long userId, PasskeyManageReauthMethod method,
+                                              PasskeyManageReauthRequest req) {
+        if (req == null) {
+            return false;
+        }
+        return switch (method) {
+            // パスキー保有者はパスキー再認証（UV 必須）しか使えない。パスワード等では通さない
+            case PASSKEY -> false;
+            case PASSWORD -> passwordMatches(findUserOrThrow(userId), req.getCurrentPassword());
+            case PASSWORD_AND_SECOND_FACTOR -> {
+                if (!passwordMatches(findUserOrThrow(userId), req.getCurrentPassword())) {
+                    yield false;
+                }
+                // 意図どおりの仕様（マスター決定の範囲内）: パスワード + 2FA 要素の組では、2FA 方式が TOTP の利用者でも
+                // 本人確認メールOTP（EMAIL）を 2 要素目として受ける。2FA 無効化（disableTwoFactor）の正規形と同じ扱いで、
+                // パスワードも同時に要求するため TOTP 利用者がメールOTPだけで通る抜け道にはならない
+                // （メールOTP 単独を要素とする SECOND_FACTOR とはここが違う）。
+                // 2FA 行を行ロック付きで取り、TOTP の使用済み印・バックアップコード消費を並行から守る
+                TwoFactorAuthEntity twoFactorAuth = twoFactorAuthRepository.findByUserIdForUpdate(userId)
+                        .filter(tfa -> Boolean.TRUE.equals(tfa.getIsEnabled()))
+                        .orElse(null);
+                yield twoFactorAuth != null
+                        && verifyReauthFactor(twoFactorAuth, userId, req.getMethod(), req.getCode());
+            }
+            case SECOND_FACTOR -> {
+                TwoFactorAuthEntity twoFactorAuth = twoFactorAuthRepository.findByUserIdForUpdate(userId)
+                        .filter(tfa -> Boolean.TRUE.equals(tfa.getIsEnabled()))
+                        .orElse(null);
+                // メールOTP は 2FA 方式が EMAIL のときだけ要素として数える（TOTP 利用者がメールOTPだけで通る抜け道を塞ぐ）
+                yield twoFactorAuth != null
+                        && !(req.getMethod() == MfaVerificationMethod.EMAIL
+                                && twoFactorAuth.getMethod() != TwoFactorMethod.EMAIL)
+                        && verifyReauthFactor(twoFactorAuth, userId, req.getMethod(), req.getCode());
+            }
+            case EMAIL_OTP -> req.getMethod() == MfaVerificationMethod.EMAIL
+                    && req.getCode() != null && !req.getCode().isBlank()
+                    && mfaEmailOtpService.verifyAndConsume(
+                            MfaEmailOtpPurpose.REAUTH, MfaEmailOtpKeys.subjectOf(userId), req.getCode());
+        };
     }
 
     /**

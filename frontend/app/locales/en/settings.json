@@ -198,7 +198,21 @@
         "register_confirm": "Register",
         "register_cancel": "Cancel",
         "register_success": "Passkey registered successfully",
-        "register_error": "Failed to register passkey"
+        "register_error": "Failed to register passkey",
+        "reauth": {
+          "title": "Verify your identity",
+          "description": "Before registering or deleting a passkey, we need to verify your identity.",
+          "password_label": "Current password",
+          "otp_label": "Verification code (6 digits)",
+          "submit": "Verify",
+          "failed": "Verification failed. Please check what you entered.",
+          "expired": "Your verification has expired. Please verify again.",
+          "passkey_failed": "Could not verify you with your passkey.",
+          "uv_unavailable": "This device cannot verify you with biometrics or a screen lock, so passkeys cannot be registered or deleted.",
+          "retry_button": "Verify again",
+          "leftover_passkey": "A passkey left on your authenticator can be removed from your device's settings."
+        },
+        "register_unsupported": "This browser does not support passkeys"
       },
       "session": {
         "device_label": "{browser} on {os}",

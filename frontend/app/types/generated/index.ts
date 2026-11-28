@@ -24766,6 +24766,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/webauthn/reauthenticate-factor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** パスキー登録・削除前の再認証（パスワード／2FA／メールOTP） */
+        post: operations["reauthenticateByFactor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/webauthn/reauthenticate-email-otp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** パスキー登録・削除前の再認証用メールOTP送信 */
+        post: operations["sendReauthenticateEmailOtp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/webauthn/reauthenticate-complete": {
         parameters: {
             query?: never;
@@ -24775,7 +24809,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** WebAuthn 再認証完了（提示モード追加保護用） */
+        /** WebAuthn 再認証完了 */
         post: operations["completeReauthenticate"];
         delete?: never;
         options?: never;
@@ -24792,7 +24826,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** WebAuthn 再認証開始（提示モード追加保護用） */
+        /** WebAuthn 再認証開始（用途: POINTCARD_PRESENT / PASSKEY_MANAGE） */
         post: operations["beginReauthenticate"];
         delete?: never;
         options?: never;
@@ -47352,6 +47386,23 @@ export interface paths {
          * @description FE ゲート補助（BE が正）。呼び出し元のスコープ可読性を検証してから isEntitled を返す。
          */
         get: operations["check_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/webauthn/reauthenticate-method": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** パスキー登録・削除前の再認証手段取得 */
+        get: operations["getReauthenticateMethod"];
         put?: never;
         post?: never;
         delete?: never;
@@ -71656,6 +71707,29 @@ export interface components {
             /** Format: int64 */
             userId?: number;
         };
+        PasskeyManageReauthRequest: {
+            code?: string;
+            currentPassword?: string;
+            /** @enum {string} */
+            method?: "TOTP" | "BACKUP_CODE" | "EMAIL";
+        };
+        ApiResponseWebAuthnReauthenticateCompleteResponse: {
+            data?: components["schemas"]["WebAuthnReauthenticateCompleteResponse"];
+        };
+        WebAuthnReauthenticateCompleteResponse: {
+            /** Format: date-time */
+            verifiedUntil?: string;
+        };
+        ApiResponseMfaEmailSendResponse: {
+            data?: components["schemas"]["MfaEmailSendResponse"];
+        };
+        MfaEmailSendResponse: {
+            /** Format: int64 */
+            expiresInSeconds?: number;
+            maskedEmail?: string;
+            /** Format: int64 */
+            resendAfterSeconds?: number;
+        };
         WebAuthnReauthenticateCompleteRequest: {
             authenticatorData?: string;
             clientDataJson?: string;
@@ -71664,12 +71738,12 @@ export interface components {
             signCount?: number;
             signature?: string;
         };
-        ApiResponseWebAuthnReauthenticateCompleteResponse: {
-            data?: components["schemas"]["WebAuthnReauthenticateCompleteResponse"];
-        };
-        WebAuthnReauthenticateCompleteResponse: {
-            /** Format: date-time */
-            verifiedUntil?: string;
+        WebAuthnReauthenticateBeginRequest: {
+            /**
+             * @description 再認証の用途（POINTCARD_PRESENT=ポイントカード提示モード / PASSKEY_MANAGE=パスキーの登録・削除）
+             * @enum {string}
+             */
+            purpose: "POINTCARD_PRESENT" | "PASSKEY_MANAGE";
         };
         ApiResponseWebAuthnReauthenticateBeginResponse: {
             data?: components["schemas"]["WebAuthnReauthenticateBeginResponse"];
@@ -71791,16 +71865,6 @@ export interface components {
         };
         ConfirmMfaRecoveryRequest: {
             token?: string;
-        };
-        ApiResponseMfaEmailSendResponse: {
-            data?: components["schemas"]["MfaEmailSendResponse"];
-        };
-        MfaEmailSendResponse: {
-            /** Format: int64 */
-            expiresInSeconds?: number;
-            maskedEmail?: string;
-            /** Format: int64 */
-            resendAfterSeconds?: number;
         };
         MfaEmailSendRequest: {
             mfaSessionToken?: string;
@@ -86494,6 +86558,16 @@ export interface components {
              * @example true
              */
             purchasable?: boolean;
+        };
+        ApiResponsePasskeyManageReauthMethodResponse: {
+            data?: components["schemas"]["PasskeyManageReauthMethodResponse"];
+        };
+        PasskeyManageReauthMethodResponse: {
+            /**
+             * @description 再認証手段（PASSKEY / PASSWORD / PASSWORD_AND_SECOND_FACTOR / SECOND_FACTOR / EMAIL_OTP）
+             * @enum {string}
+             */
+            method?: "PASSKEY" | "PASSWORD" | "PASSWORD_AND_SECOND_FACTOR" | "SECOND_FACTOR" | "EMAIL_OTP";
         };
         ApiResponseListWebAuthnCredentialResponse: {
             data?: components["schemas"]["WebAuthnCredentialResponse"][];
@@ -140478,6 +140552,50 @@ export interface operations {
             };
         };
     };
+    reauthenticateByFactor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyManageReauthRequest"];
+            };
+        };
+        responses: {
+            /** @description 再認証成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseWebAuthnReauthenticateCompleteResponse"];
+                };
+            };
+        };
+    };
+    sendReauthenticateEmailOtp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 送信成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMfaEmailSendResponse"];
+                };
+            };
+        };
+    };
     completeReauthenticate: {
         parameters: {
             query?: never;
@@ -140509,7 +140627,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebAuthnReauthenticateBeginRequest"];
+            };
+        };
         responses: {
             /** @description チャレンジ生成成功 */
             200: {
@@ -176557,6 +176679,26 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseBillingEntitlementCheckResponse"];
+                };
+            };
+        };
+    };
+    getReauthenticateMethod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 取得成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePasskeyManageReauthMethodResponse"];
                 };
             };
         };

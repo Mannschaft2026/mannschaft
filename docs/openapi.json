@@ -89985,12 +89985,64 @@
         }
       }
     },
+    "/api/v1/auth/webauthn/reauthenticate-factor": {
+      "post": {
+        "tags": [
+          "WebAuthn"
+        ],
+        "summary": "パスキー登録・削除前の再認証（パスワード／2FA／メールOTP）",
+        "operationId": "reauthenticateByFactor",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyManageReauthRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "再認証成功",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseWebAuthnReauthenticateCompleteResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/webauthn/reauthenticate-email-otp": {
+      "post": {
+        "tags": [
+          "WebAuthn"
+        ],
+        "summary": "パスキー登録・削除前の再認証用メールOTP送信",
+        "operationId": "sendReauthenticateEmailOtp",
+        "responses": {
+          "200": {
+            "description": "送信成功",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseMfaEmailSendResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/webauthn/reauthenticate-complete": {
       "post": {
         "tags": [
           "WebAuthn"
         ],
-        "summary": "WebAuthn 再認証完了（提示モード追加保護用）",
+        "summary": "WebAuthn 再認証完了",
         "operationId": "completeReauthenticate",
         "requestBody": {
           "content": {
@@ -90021,8 +90073,18 @@
         "tags": [
           "WebAuthn"
         ],
-        "summary": "WebAuthn 再認証開始（提示モード追加保護用）",
+        "summary": "WebAuthn 再認証開始（用途: POINTCARD_PRESENT / PASSKEY_MANAGE）",
         "operationId": "beginReauthenticate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebAuthnReauthenticateBeginRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "チャレンジ生成成功",
@@ -151425,6 +151487,27 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResponseBillingEntitlementCheckResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/webauthn/reauthenticate-method": {
+      "get": {
+        "tags": [
+          "WebAuthn"
+        ],
+        "summary": "パスキー登録・削除前の再認証手段取得",
+        "operationId": "getReauthenticateMethod",
+        "responses": {
+          "200": {
+            "description": "取得成功",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponsePasskeyManageReauthMethodResponse"
                 }
               }
             }
@@ -216243,6 +216326,66 @@
           }
         }
       },
+      "PasskeyManageReauthRequest": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "currentPassword": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "TOTP",
+              "BACKUP_CODE",
+              "EMAIL"
+            ]
+          }
+        }
+      },
+      "ApiResponseWebAuthnReauthenticateCompleteResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/WebAuthnReauthenticateCompleteResponse"
+          }
+        }
+      },
+      "WebAuthnReauthenticateCompleteResponse": {
+        "type": "object",
+        "properties": {
+          "verifiedUntil": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ApiResponseMfaEmailSendResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/MfaEmailSendResponse"
+          }
+        }
+      },
+      "MfaEmailSendResponse": {
+        "type": "object",
+        "properties": {
+          "expiresInSeconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maskedEmail": {
+            "type": "string"
+          },
+          "resendAfterSeconds": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "WebAuthnReauthenticateCompleteRequest": {
         "type": "object",
         "properties": {
@@ -216268,22 +216411,21 @@
           }
         }
       },
-      "ApiResponseWebAuthnReauthenticateCompleteResponse": {
+      "WebAuthnReauthenticateBeginRequest": {
         "type": "object",
         "properties": {
-          "data": {
-            "$ref": "#/components/schemas/WebAuthnReauthenticateCompleteResponse"
-          }
-        }
-      },
-      "WebAuthnReauthenticateCompleteResponse": {
-        "type": "object",
-        "properties": {
-          "verifiedUntil": {
+          "purpose": {
             "type": "string",
-            "format": "date-time"
+            "description": "再認証の用途（POINTCARD_PRESENT\u003dポイントカード提示モード / PASSKEY_MANAGE\u003dパスキーの登録・削除）",
+            "enum": [
+              "POINTCARD_PRESENT",
+              "PASSKEY_MANAGE"
+            ]
           }
-        }
+        },
+        "required": [
+          "purpose"
+        ]
       },
       "ApiResponseWebAuthnReauthenticateBeginResponse": {
         "type": "object",
@@ -216646,30 +216788,6 @@
         "properties": {
           "token": {
             "type": "string"
-          }
-        }
-      },
-      "ApiResponseMfaEmailSendResponse": {
-        "type": "object",
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/MfaEmailSendResponse"
-          }
-        }
-      },
-      "MfaEmailSendResponse": {
-        "type": "object",
-        "properties": {
-          "expiresInSeconds": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "maskedEmail": {
-            "type": "string"
-          },
-          "resendAfterSeconds": {
-            "type": "integer",
-            "format": "int64"
           }
         }
       },
@@ -255642,6 +255760,30 @@
             "type": "boolean",
             "description": "購入手段があるか（アドオン/有料プラン掲載）",
             "example": true
+          }
+        }
+      },
+      "ApiResponsePasskeyManageReauthMethodResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PasskeyManageReauthMethodResponse"
+          }
+        }
+      },
+      "PasskeyManageReauthMethodResponse": {
+        "type": "object",
+        "properties": {
+          "method": {
+            "type": "string",
+            "description": "再認証手段（PASSKEY / PASSWORD / PASSWORD_AND_SECOND_FACTOR / SECOND_FACTOR / EMAIL_OTP）",
+            "enum": [
+              "PASSKEY",
+              "PASSWORD",
+              "PASSWORD_AND_SECOND_FACTOR",
+              "SECOND_FACTOR",
+              "EMAIL_OTP"
+            ]
           }
         }
       },

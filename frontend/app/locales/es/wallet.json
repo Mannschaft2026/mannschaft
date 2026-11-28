@@ -234,7 +234,8 @@
       "biometric_required": "Se requiere autenticación para iniciar el modo de presentación",
       "biometric_failed": "Autenticación fallida",
       "no_cards": "Este grupo no tiene tarjetas",
-      "load_failed": "Error al cargar el grupo"
+      "load_failed": "Error al cargar el grupo",
+      "uv_unavailable": "Este dispositivo no puede verificar tu identidad con biometría ni con bloqueo de pantalla (PIN), por lo que no se puede abrir el modo de presentación."
     },
     "admin": {
       "page_title": "Gestión de tarjetas de puntos",

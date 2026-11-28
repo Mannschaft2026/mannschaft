@@ -82,7 +82,9 @@ const {
   isRegisteringPasskey,
   registerDialog,
   newPasskeyName,
+  startPasskeyRegister,
   handlePasskeyRegister,
+  passkeyReauth,
 } = useAccountSecurity()
 
 const {
@@ -219,7 +221,28 @@ onMounted(async () => {
         @delete-credential="handleDeleteCredential"
         @open-rename-dialog="openRenameDialog"
         @rename-credential="handleRenameCredential"
+        @passkey-register-start="startPasskeyRegister"
         @passkey-register="handlePasskeyRegister"
+      />
+
+      <SettingsPasskeyReauthRetryDialog
+        :visible="passkeyReauth.retryVisible.value"
+        :leftover-note="passkeyReauth.retryLeftoverNote.value"
+        @retry="passkeyReauth.confirmRetry"
+        @update:visible="passkeyReauth.onRetryVisibleChange"
+      />
+
+      <!-- パスキー登録・削除の前の本人確認（パスキー保有者は OS の認証ダイアログで済むため出ない） -->
+      <SettingsPasskeyReauthDialog
+        :visible="passkeyReauth.dialogVisible.value"
+        :method="passkeyReauth.dialogMethod.value"
+        :busy="passkeyReauth.busy.value"
+        :error-message="passkeyReauth.errorMessage.value"
+        :reauth-email="passkeyReauth.reauthEmail.value"
+        :two-fa-method="passkeyReauth.twoFaMethod.value"
+        @submit="passkeyReauth.submit"
+        @send-email="passkeyReauth.sendEmail"
+        @update:visible="passkeyReauth.onDialogVisibleChange"
       />
 
       <SettingsLinkedAccountsSection

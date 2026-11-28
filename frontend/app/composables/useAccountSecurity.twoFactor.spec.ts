@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockNuxtImport } from '@nuxt/test-utils/runtime'
-import { describeTwoFactorError, useTwoFactorSettings } from './useAccountSecurity'
+import { useTwoFactorSettings } from './useAccountSecurity'
+import { describeTwoFactorError } from '~/utils/twoFactorError'
 
 const apiMock = vi.fn()
 const notificationMock = { success: vi.fn(), error: vi.fn() }

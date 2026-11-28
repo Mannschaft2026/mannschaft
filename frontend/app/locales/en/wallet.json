@@ -234,7 +234,8 @@
       "biometric_required": "Authentication is required to start presentation mode",
       "biometric_failed": "Authentication failed",
       "no_cards": "This group has no cards",
-      "load_failed": "Failed to load the group"
+      "load_failed": "Failed to load the group",
+      "uv_unavailable": "This device cannot verify you with biometrics or a screen lock (PIN), so presentation mode cannot be opened."
     },
     "admin": {
       "page_title": "Point Card Administration",

@@ -1,5 +1,6 @@
 package com.mannschaft.app.auth.service;
 
+import com.mannschaft.app.auth.ReauthPurpose;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.entity.WebAuthnCredentialEntity;
 import com.mannschaft.app.auth.repository.RefreshTokenRepository;
@@ -103,6 +104,7 @@ class AuthWebAuthnServiceTest {
     private static final String TEST_WEBAUTHN_CREDENTIAL_ID = "credential-id-base64";
     private static final String TEST_PUBLIC_KEY = "public-key-base64";
     private static final String TEST_DEVICE_NAME = "My MacBook";
+    private static final String TEST_SESSION = "s".repeat(64);
 
     private UserEntity createActiveUser() {
         UserEntity user = UserEntity.builder()
@@ -145,11 +147,13 @@ class AuthWebAuthnServiceTest {
         @DisplayName("正常系: チャレンジが生成されレスポンスが返る")
         void beginRegister_正常_チャレンジが返る() {
             // Given
+            given(redisTemplate.hasKey(anyString())).willReturn(Boolean.TRUE);
             given(userRepository.findById(TEST_USER_ID)).willReturn(Optional.of(createActiveUser()));
             given(redisTemplate.opsForValue()).willReturn(valueOperations);
 
             // When
-            ApiResponse<WebAuthnRegisterBeginResponse> response = authWebAuthnService.beginRegister(TEST_USER_ID);
+            ApiResponse<WebAuthnRegisterBeginResponse> response =
+                    authWebAuthnService.beginRegister(TEST_USER_ID, TEST_SESSION);
 
             // Then
             assertThat(response.getData().getChallenge()).isNotNull();
@@ -164,13 +168,41 @@ class AuthWebAuthnServiceTest {
         @DisplayName("異常系: ユーザー不在でAUTH_015例外")
         void beginRegister_ユーザー不在_AUTH015例外() {
             // Given
+            given(redisTemplate.hasKey(anyString())).willReturn(Boolean.TRUE);
             given(userRepository.findById(TEST_USER_ID)).willReturn(Optional.empty());
 
             // When / Then
-            assertThatThrownBy(() -> authWebAuthnService.beginRegister(TEST_USER_ID))
+            assertThatThrownBy(() -> authWebAuthnService.beginRegister(TEST_USER_ID, TEST_SESSION))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("AUTH_015"));
+        }
+
+        @Test
+        @DisplayName("異常系: 再認証済みフラグが無ければ AUTH_087（チャレンジを書かない）")
+        void beginRegister_再認証なし_AUTH087例外() {
+            given(redisTemplate.hasKey(anyString())).willReturn(Boolean.FALSE);
+
+            assertThatThrownBy(() -> authWebAuthnService.beginRegister(TEST_USER_ID, TEST_SESSION))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("AUTH_087"));
+            verify(redisTemplate, never()).opsForValue();
+        }
+
+        @Test
+        @DisplayName("監査: 再認証なしの AUTH_087 は用途付き・手段不明（null）で REAUTH_FAILED を記録する")
+        void beginRegister_再認証なしは手段不明の失敗監査() {
+            given(redisTemplate.hasKey(anyString())).willReturn(Boolean.FALSE);
+
+            assertThatThrownBy(() -> authWebAuthnService.beginRegister(TEST_USER_ID, TEST_SESSION))
+                    .isInstanceOf(BusinessException.class);
+
+            org.mockito.ArgumentCaptor<com.mannschaft.app.auth.event.ReauthenticationFailedEvent> cap =
+                    org.mockito.ArgumentCaptor.forClass(com.mannschaft.app.auth.event.ReauthenticationFailedEvent.class);
+            verify(eventPublisher).publish(cap.capture());
+            assertThat(cap.getValue().getPurpose()).isEqualTo(ReauthPurpose.PASSKEY_MANAGE);
+            assertThat(cap.getValue().getMethod()).isNull();
         }
     }
 
@@ -191,13 +223,30 @@ class AuthWebAuthnServiceTest {
                     TEST_PUBLIC_KEY, TEST_DEVICE_NAME, "aaguid-123");
 
             given(redisTemplate.opsForValue()).willReturn(valueOperations);
-            given(valueOperations.get(anyString())).willReturn(null);
+            // 1 回目（再認証済みフラグ）は取れ、2 回目（チャレンジ）は無い
+            given(valueOperations.getAndDelete(anyString())).willReturn("1", (String) null);
 
             // When / Then
-            assertThatThrownBy(() -> authWebAuthnService.completeRegister(TEST_USER_ID, req))
+            assertThatThrownBy(() -> authWebAuthnService.completeRegister(TEST_USER_ID, TEST_SESSION, req))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("AUTH_027"));
+        }
+
+        @Test
+        @DisplayName("異常系: 再認証済みフラグが無ければ AUTH_087（チャレンジは消費しない）")
+        void completeRegister_再認証なし_AUTH087例外() {
+            WebAuthnRegisterCompleteRequest req = new WebAuthnRegisterCompleteRequest(
+                    TEST_WEBAUTHN_CREDENTIAL_ID, "attestation-obj", "client-data-json",
+                    TEST_PUBLIC_KEY, TEST_DEVICE_NAME, "aaguid-123");
+            given(redisTemplate.opsForValue()).willReturn(valueOperations);
+            given(valueOperations.getAndDelete(anyString())).willReturn((String) null);
+
+            assertThatThrownBy(() -> authWebAuthnService.completeRegister(TEST_USER_ID, TEST_SESSION, req))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("AUTH_087"));
+            verify(valueOperations, times(1)).getAndDelete(anyString());
         }
     }
 
@@ -452,12 +501,31 @@ class AuthWebAuthnServiceTest {
             WebAuthnCredentialEntity credential = createWebAuthnCredential();
             given(webAuthnCredentialRepository.findById(TEST_CREDENTIAL_ID))
                     .willReturn(Optional.of(credential));
+            given(redisTemplate.opsForValue()).willReturn(valueOperations);
+            given(valueOperations.getAndDelete(anyString())).willReturn("1");
 
             // When
-            authWebAuthnService.deleteCredential(TEST_USER_ID, TEST_CREDENTIAL_ID);
+            authWebAuthnService.deleteCredential(TEST_USER_ID, TEST_SESSION, TEST_CREDENTIAL_ID);
 
             // Then
             verify(webAuthnCredentialRepository).delete(credential);
+        }
+
+        @Test
+        @DisplayName("異常系: 再認証済みフラグが無ければ AUTH_087（削除しない）")
+        void deleteCredential_再認証なし_AUTH087例外() {
+            WebAuthnCredentialEntity credential = createWebAuthnCredential();
+            given(webAuthnCredentialRepository.findById(TEST_CREDENTIAL_ID))
+                    .willReturn(Optional.of(credential));
+            given(redisTemplate.opsForValue()).willReturn(valueOperations);
+            given(valueOperations.getAndDelete(anyString())).willReturn((String) null);
+
+            assertThatThrownBy(() -> authWebAuthnService.deleteCredential(
+                    TEST_USER_ID, TEST_SESSION, TEST_CREDENTIAL_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("AUTH_087"));
+            verify(webAuthnCredentialRepository, never()).delete(any());
         }
 
         @Test
@@ -467,7 +535,7 @@ class AuthWebAuthnServiceTest {
             given(webAuthnCredentialRepository.findById(TEST_CREDENTIAL_ID)).willReturn(Optional.empty());
 
             // When / Then
-            assertThatThrownBy(() -> authWebAuthnService.deleteCredential(TEST_USER_ID, TEST_CREDENTIAL_ID))
+            assertThatThrownBy(() -> authWebAuthnService.deleteCredential(TEST_USER_ID, TEST_SESSION, TEST_CREDENTIAL_ID))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("AUTH_024"));
@@ -484,7 +552,7 @@ class AuthWebAuthnServiceTest {
             Long otherUserId = 999L;
 
             // When / Then
-            assertThatThrownBy(() -> authWebAuthnService.deleteCredential(otherUserId, TEST_CREDENTIAL_ID))
+            assertThatThrownBy(() -> authWebAuthnService.deleteCredential(otherUserId, TEST_SESSION, TEST_CREDENTIAL_ID))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("AUTH_024"));
@@ -511,7 +579,7 @@ class AuthWebAuthnServiceTest {
 
             // When
             ApiResponse<WebAuthnReauthenticateBeginResponse> response =
-                    authWebAuthnService.beginReauthenticate(TEST_USER_ID);
+                    authWebAuthnService.beginReauthenticate(TEST_USER_ID, ReauthPurpose.PASSKEY_MANAGE);
 
             // Then
             assertThat(response.getData().getChallenge()).isNotNull().isNotBlank();
@@ -534,7 +602,7 @@ class AuthWebAuthnServiceTest {
         void beginReauthenticate_ユーザー不在_AUTH015() {
             given(userRepository.findById(TEST_USER_ID)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> authWebAuthnService.beginReauthenticate(TEST_USER_ID))
+            assertThatThrownBy(() -> authWebAuthnService.beginReauthenticate(TEST_USER_ID, ReauthPurpose.PASSKEY_MANAGE))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("AUTH_015"));
@@ -546,7 +614,7 @@ class AuthWebAuthnServiceTest {
             given(userRepository.findById(TEST_USER_ID)).willReturn(Optional.of(createActiveUser()));
             given(webAuthnCredentialRepository.findByUserId(TEST_USER_ID)).willReturn(List.of());
 
-            assertThatThrownBy(() -> authWebAuthnService.beginReauthenticate(TEST_USER_ID))
+            assertThatThrownBy(() -> authWebAuthnService.beginReauthenticate(TEST_USER_ID, ReauthPurpose.PASSKEY_MANAGE))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("AUTH_024"));
@@ -562,109 +630,181 @@ class AuthWebAuthnServiceTest {
         void completeReauthenticate_チャレンジ不在_AUTH027() {
             WebAuthnReauthenticateCompleteRequest req = new WebAuthnReauthenticateCompleteRequest(
                     TEST_WEBAUTHN_CREDENTIAL_ID, "auth-data", "client-data", "signature", 6L);
+            given(webAuthnCredentialRepository.findByCredentialId(TEST_WEBAUTHN_CREDENTIAL_ID))
+                    .willReturn(Optional.of(createWebAuthnCredential()));
             given(redisTemplate.opsForValue()).willReturn(valueOperations);
-            given(valueOperations.get(anyString())).willReturn(null);
+            given(valueOperations.getAndDelete(anyString())).willReturn((String) null);
 
-            assertThatThrownBy(() -> authWebAuthnService.completeReauthenticate(TEST_USER_ID, req))
+            assertThatThrownBy(() -> authWebAuthnService.completeReauthenticate(TEST_USER_ID, TEST_SESSION, req))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("AUTH_027"));
         }
 
         @Test
-        @DisplayName("異常系: credential_id 未登録で AUTH_024")
+        @DisplayName("異常系: credential_id 未登録で AUTH_024（チャレンジは消費しない）")
         void completeReauthenticate_credential未登録_AUTH024() {
             WebAuthnReauthenticateCompleteRequest req = new WebAuthnReauthenticateCompleteRequest(
                     "nonexistent-cred-id", "auth-data", "client-data", "signature", 6L);
-            given(redisTemplate.opsForValue()).willReturn(valueOperations);
-            given(valueOperations.get(anyString())).willReturn("stored-challenge");
             given(webAuthnCredentialRepository.findByCredentialId("nonexistent-cred-id"))
                     .willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> authWebAuthnService.completeReauthenticate(TEST_USER_ID, req))
+            assertThatThrownBy(() -> authWebAuthnService.completeReauthenticate(TEST_USER_ID, TEST_SESSION, req))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("AUTH_024"));
+            verify(redisTemplate, never()).opsForValue();
         }
 
         @Test
-        @DisplayName("異常系: 他人 credential 指定で AUTH_024 (IDOR 防止)")
+        @DisplayName("異常系: 他人 credential 指定で AUTH_024 (IDOR 防止・本人のチャレンジは消費しない)")
         void completeReauthenticate_他人credential_AUTH024() {
             WebAuthnReauthenticateCompleteRequest req = new WebAuthnReauthenticateCompleteRequest(
                     TEST_WEBAUTHN_CREDENTIAL_ID, "auth-data", "client-data", "signature", 6L);
             WebAuthnCredentialEntity credential = createWebAuthnCredential(); // userId=TEST_USER_ID
-            given(redisTemplate.opsForValue()).willReturn(valueOperations);
-            given(valueOperations.get(anyString())).willReturn("stored-challenge");
             given(webAuthnCredentialRepository.findByCredentialId(TEST_WEBAUTHN_CREDENTIAL_ID))
                     .willReturn(Optional.of(credential));
 
             // 他人 (otherUserId) として呼ぶ
             Long otherUserId = 999L;
-            assertThatThrownBy(() -> authWebAuthnService.completeReauthenticate(otherUserId, req))
+            assertThatThrownBy(() -> authWebAuthnService.completeReauthenticate(otherUserId, TEST_SESSION, req))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("AUTH_024"));
+            verify(redisTemplate, never()).opsForValue();
+        }
+
+        @Test
+        @DisplayName("異常系: セッションを特定できなければ AUTH_087")
+        void completeReauthenticate_セッション不明_AUTH087() {
+            WebAuthnReauthenticateCompleteRequest req = new WebAuthnReauthenticateCompleteRequest(
+                    TEST_WEBAUTHN_CREDENTIAL_ID, "auth-data", "client-data", "signature", 6L);
+
+            assertThatThrownBy(() -> authWebAuthnService.completeReauthenticate(TEST_USER_ID, null, req))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("AUTH_087"));
         }
     }
 
     @Nested
-    @DisplayName("isReauthenticatedRecently / consumeReauthentication (F18 §9.6)")
+    @DisplayName("consumeReauthentication / markReauthenticated (用途・セッション束縛)")
     class ReauthFlag {
 
         @Test
-        @DisplayName("正常系: フラグキー存在で true、削除後 false")
-        void isReauthenticatedRecently_キー存在で真() {
-            given(redisTemplate.hasKey(anyString())).willReturn(Boolean.TRUE);
-            assertThat(authWebAuthnService.isReauthenticatedRecently(TEST_USER_ID)).isTrue();
-        }
+        @DisplayName("正常系: フラグキーに用途・ユーザー・セッションを含め getAndDelete で消費する")
+        void consumeReauthentication_用途とセッションに束縛された原子消費() {
+            given(redisTemplate.opsForValue()).willReturn(valueOperations);
+            given(valueOperations.getAndDelete(anyString())).willReturn("1");
 
-        @Test
-        @DisplayName("正常系: キー不在で false")
-        void isReauthenticatedRecently_キー不在で偽() {
-            given(redisTemplate.hasKey(anyString())).willReturn(Boolean.FALSE);
-            assertThat(authWebAuthnService.isReauthenticatedRecently(TEST_USER_ID)).isFalse();
-        }
-
-        @Test
-        @DisplayName("正常系: null userId は false")
-        void isReauthenticatedRecently_nullUserId_偽() {
-            assertThat(authWebAuthnService.isReauthenticatedRecently(null)).isFalse();
-        }
-
-        @Test
-        @DisplayName("正常系: consumeReauthentication で reauth_verified キーを削除")
-        void consumeReauthentication_キー削除() {
-            authWebAuthnService.consumeReauthentication(TEST_USER_ID);
+            assertThat(authWebAuthnService.consumeReauthentication(
+                    TEST_USER_ID, TEST_SESSION, ReauthPurpose.POINTCARD_PRESENT)).isTrue();
 
             org.mockito.ArgumentCaptor<String> keyCaptor =
                     org.mockito.ArgumentCaptor.forClass(String.class);
-            verify(redisTemplate).delete(keyCaptor.capture());
+            verify(valueOperations).getAndDelete(keyCaptor.capture());
             assertThat(keyCaptor.getValue())
                     .startsWith("mannschaft:auth:webauthn_reauth_verified:")
-                    .contains(String.valueOf(TEST_USER_ID));
-        }
-
-        @Test
-        @DisplayName("正常系: null userId なら何もしない")
-        void consumeReauthentication_nullUserId_noop() {
-            authWebAuthnService.consumeReauthentication(null);
+                    .contains("POINTCARD_PRESENT", String.valueOf(TEST_USER_ID), TEST_SESSION);
             verify(redisTemplate, never()).delete(anyString());
         }
 
         @Test
-        @DisplayName("正常系: 一連の流れ — フラグ書き込み→isReauth=true→consume→false")
-        void reauthFlow_書き込み消費の流れ() {
-            // 1. consume 前の状態: キー存在
-            given(redisTemplate.hasKey(anyString())).willReturn(Boolean.TRUE);
-            assertThat(authWebAuthnService.isReauthenticatedRecently(TEST_USER_ID)).isTrue();
+        @DisplayName("異常系: フラグ不在なら false")
+        void consumeReauthentication_不在は偽() {
+            given(redisTemplate.opsForValue()).willReturn(valueOperations);
+            given(valueOperations.getAndDelete(anyString())).willReturn((String) null);
 
-            // 2. consume
-            authWebAuthnService.consumeReauthentication(TEST_USER_ID);
-            verify(redisTemplate).delete(anyString());
+            assertThat(authWebAuthnService.consumeReauthentication(
+                    TEST_USER_ID, TEST_SESSION, ReauthPurpose.PASSKEY_MANAGE)).isFalse();
+        }
 
-            // 3. consume 後の状態: キー不在
-            given(redisTemplate.hasKey(anyString())).willReturn(Boolean.FALSE);
-            assertThat(authWebAuthnService.isReauthenticatedRecently(TEST_USER_ID)).isFalse();
+        @Test
+        @DisplayName("異常系: userId / セッション / 用途 が特定できなければ Valkey に触れず false")
+        void consumeReauthentication_特定不能は偽() {
+            assertThat(authWebAuthnService.consumeReauthentication(
+                    null, TEST_SESSION, ReauthPurpose.PASSKEY_MANAGE)).isFalse();
+            assertThat(authWebAuthnService.consumeReauthentication(
+                    TEST_USER_ID, null, ReauthPurpose.PASSKEY_MANAGE)).isFalse();
+            assertThat(authWebAuthnService.consumeReauthentication(
+                    TEST_USER_ID, " ", ReauthPurpose.PASSKEY_MANAGE)).isFalse();
+            assertThat(authWebAuthnService.consumeReauthentication(
+                    TEST_USER_ID, TEST_SESSION, null)).isFalse();
+            verify(redisTemplate, never()).opsForValue();
+        }
+
+        @Test
+        @DisplayName("異常系: セッションを特定できなければフラグを立てず AUTH_087")
+        void markReauthenticated_セッション不明_AUTH087() {
+            assertThatThrownBy(() -> authWebAuthnService.markReauthenticated(
+                    TEST_USER_ID, null, ReauthPurpose.PASSKEY_MANAGE))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("AUTH_087"));
+            verify(redisTemplate, never()).opsForValue();
+        }
+
+        @Test
+        @DisplayName("TX 外ならフラグをその場で書く")
+        void markReauthenticated_TX外はその場で書込() {
+            given(redisTemplate.opsForValue()).willReturn(valueOperations);
+
+            authWebAuthnService.markReauthenticated(TEST_USER_ID, TEST_SESSION, ReauthPurpose.PASSKEY_MANAGE);
+
+            verify(valueOperations).set(anyString(), eq("1"), anyLong(), any(java.util.concurrent.TimeUnit.class));
+        }
+
+        @Test
+        @DisplayName("TX 内なら DB コミット後に書く（コミット前は書かず、ロールバックでは書かない）")
+        void markReauthenticated_TX内はコミット後に書込() {
+            org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+            try {
+                authWebAuthnService.markReauthenticated(TEST_USER_ID, TEST_SESSION, ReauthPurpose.PASSKEY_MANAGE);
+                verify(redisTemplate, never()).opsForValue();
+
+                // ロールバック: afterCommit は呼ばれない
+                var syncs = org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations();
+                assertThat(syncs).hasSize(1);
+                syncs.forEach(sync -> sync.afterCompletion(
+                        org.springframework.transaction.support.TransactionSynchronization.STATUS_ROLLED_BACK));
+                verify(redisTemplate, never()).opsForValue();
+
+                // コミット: afterCommit で書く
+                given(redisTemplate.opsForValue()).willReturn(valueOperations);
+                syncs.forEach(org.springframework.transaction.support.TransactionSynchronization::afterCommit);
+                verify(valueOperations).set(anyString(), eq("1"), anyLong(), any(java.util.concurrent.TimeUnit.class));
+            } finally {
+                org.springframework.transaction.support.TransactionSynchronizationManager.clear();
+            }
+        }
+
+        @Test
+        @DisplayName("監査: 再認証のセッションを特定できない完了要求も REAUTH_FAILED として記録する")
+        void completeReauthenticate_セッション不明は失敗監査() {
+            WebAuthnReauthenticateCompleteRequest req = mock(WebAuthnReauthenticateCompleteRequest.class);
+            assertThatThrownBy(() -> authWebAuthnService.completeReauthenticate(TEST_USER_ID, null, req))
+                    .isInstanceOf(BusinessException.class);
+            verify(eventPublisher).publish(any(com.mannschaft.app.auth.event.ReauthenticationFailedEvent.class));
+        }
+
+        @Test
+        @DisplayName("監査: パスキー削除でフラグを消費できない（AUTH_087）場合も用途付きで REAUTH_FAILED を記録する")
+        void deleteCredential_消費失敗は用途付き失敗監査() {
+            given(redisTemplate.opsForValue()).willReturn(valueOperations);
+            given(valueOperations.getAndDelete(anyString())).willReturn((String) null);
+            given(webAuthnCredentialRepository.findById(5L)).willReturn(java.util.Optional.of(
+                    WebAuthnCredentialEntity.builder().id(5L).userId(TEST_USER_ID).credentialId("c")
+                            .publicKey("p").signCount(0L).build()));
+
+            assertThatThrownBy(() -> authWebAuthnService.deleteCredential(TEST_USER_ID, TEST_SESSION, 5L))
+                    .isInstanceOf(BusinessException.class);
+
+            org.mockito.ArgumentCaptor<com.mannschaft.app.auth.event.ReauthenticationFailedEvent> cap =
+                    org.mockito.ArgumentCaptor.forClass(com.mannschaft.app.auth.event.ReauthenticationFailedEvent.class);
+            verify(eventPublisher).publish(cap.capture());
+            assertThat(cap.getValue().getPurpose()).isEqualTo(ReauthPurpose.PASSKEY_MANAGE);
+            // フラグが無い理由から再認証の手段は分からない（PASSKEY と決め打たない）
+            assertThat(cap.getValue().getMethod()).isNull();
         }
 
         // 補助: WebAuthnReauthenticateCompleteResponse の DTO がコンパイル時依存となっていること

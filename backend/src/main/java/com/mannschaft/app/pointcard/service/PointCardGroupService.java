@@ -1,9 +1,11 @@
 package com.mannschaft.app.pointcard.service;
 
 import com.mannschaft.app.auth.AuditEventType;
+import com.mannschaft.app.auth.ReauthPurpose;
 import com.mannschaft.app.auth.service.AuditLogService;
 import com.mannschaft.app.auth.service.AuthWebAuthnService;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.pointcard.dto.CreateGroupRequest;
 import com.mannschaft.app.pointcard.dto.GroupDetailResponse;
 import com.mannschaft.app.pointcard.dto.GroupItemResponse;
@@ -252,15 +254,15 @@ public class PointCardGroupService {
                 .orElseThrow(() -> new BusinessException(PointCardErrorCode.CARD_NOT_FOUND));
 
         // F18 提示モード追加保護（設計書 §9.6 / POINT_CARD_009）。
-        // require_biometric_on_show=true の場合、WebAuthn 再認証フラグの存在を確認する。
-        // フラグは 5 分 TTL かつ 1 回限りの使用（再生防止）。
+        // require_biometric_on_show=true の場合、提示用途（POINTCARD_PRESENT）の WebAuthn 再認証フラグを
+        // このセッションについて getAndDelete 一発で消費する。5 分 TTL・1 回限り・UV 必須で、
+        // パスキー管理用の再認証では開けない（CMP-261021-1339 A7）。
         PointCardUserSettingsResponse settings = userSettingsService.getOrCreateSettings(userId);
         if (settings.requireBiometricOnShow()) {
-            if (!authWebAuthnService.isReauthenticatedRecently(userId)) {
+            if (!authWebAuthnService.consumeReauthentication(
+                    userId, SecurityUtils.getCurrentSessionHash(), ReauthPurpose.POINTCARD_PRESENT)) {
                 throw new BusinessException(PointCardErrorCode.BIOMETRIC_REQUIRED);
             }
-            // 再生攻撃防止のため使い切り
-            authWebAuthnService.consumeReauthentication(userId);
         }
 
         List<GroupItemResponse> items = loadGroupItems(group);

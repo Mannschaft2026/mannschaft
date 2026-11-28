@@ -1,6 +1,8 @@
 package com.mannschaft.app.pointcard.service;
 
 import com.mannschaft.app.auth.AuditEventType;
+import com.mannschaft.app.auth.ReauthPurpose;
+import com.mannschaft.app.common.util.SessionHashUtil;
 import com.mannschaft.app.auth.service.AuditLogService;
 import com.mannschaft.app.auth.service.AuthWebAuthnService;
 import com.mannschaft.app.common.BusinessException;
@@ -459,52 +461,6 @@ class PointCardGroupServiceTest {
     // ─────────────────────────────────────────────
 
     @Test
-    @DisplayName("startPresentation: require_biometric_on_show=true かつ未認証で POINT_CARD_009 を投擲")
-    void startPresentation_requireBiometric_notVerified_throwsBiometricRequired() {
-        PointCardGroupEntity group = sampleGroup(USER_ID);
-        given(groupRepository.findByIdAndUserId(group.getId(), USER_ID))
-                .willReturn(Optional.of(group));
-        given(userSettingsService.getOrCreateSettings(USER_ID))
-                .willReturn(new PointCardUserSettingsResponse(true, null, "v1.0.0", true));
-        given(authWebAuthnService.isReauthenticatedRecently(USER_ID)).willReturn(false);
-
-        assertThatThrownBy(() -> groupService.startPresentation(group.getId(), USER_ID))
-                .isInstanceOf(BusinessException.class)
-                .extracting(e -> ((BusinessException) e).getErrorCode())
-                .isEqualTo(PointCardErrorCode.BIOMETRIC_REQUIRED);
-
-        // 監査ログは発火しない（提示モードに進めていないため）
-        verify(auditLogService, never()).record(anyString(), any(), any(), any(), any(),
-                any(), any(), any(), any());
-        // consume は呼ばれない
-        verify(authWebAuthnService, never()).consumeReauthentication(any());
-    }
-
-    @Test
-    @DisplayName("startPresentation: require_biometric_on_show=true かつ認証済みなら通過し consume が呼ばれる")
-    void startPresentation_requireBiometric_verified_consumesFlag() {
-        PointCardGroupEntity group = sampleGroup(USER_ID);
-        given(groupRepository.findByIdAndUserId(group.getId(), USER_ID))
-                .willReturn(Optional.of(group));
-        given(userSettingsService.getOrCreateSettings(USER_ID))
-                .willReturn(new PointCardUserSettingsResponse(true, null, "v1.0.0", true));
-        given(authWebAuthnService.isReauthenticatedRecently(USER_ID)).willReturn(true);
-        given(itemRepository.findAllByGroupIdOrderByDisplayOrderAsc(group.getId()))
-                .willReturn(List.of());
-
-        // When
-        GroupDetailResponse res = groupService.startPresentation(group.getId(), USER_ID);
-
-        // Then: 監査ログ発火 + フラグ消費 + 結果取得
-        assertThat(res).isNotNull();
-        verify(authWebAuthnService).consumeReauthentication(USER_ID);
-        verify(auditLogService).record(
-                eq(AuditEventType.POINT_CARD_VIEWED.name()),
-                eq(USER_ID), any(), any(), any(),
-                any(), any(), any(), anyString());
-    }
-
-    @Test
     @DisplayName("startPresentation: require_biometric_on_show=false なら WebAuthn を呼ばない")
     void startPresentation_biometricNotRequired_skipsWebAuthnCheck() {
         PointCardGroupEntity group = sampleGroup(USER_ID);
@@ -517,8 +473,71 @@ class PointCardGroupServiceTest {
 
         groupService.startPresentation(group.getId(), USER_ID);
 
-        verify(authWebAuthnService, never()).isReauthenticatedRecently(any());
-        verify(authWebAuthnService, never()).consumeReauthentication(any());
+        verify(authWebAuthnService, never()).consumeReauthentication(any(), any(), any());
+    }
+
+    // CMP-261021-1339 A7/B3/B4 試練: 提示モードは「提示用途・このセッション」のフラグを getAndDelete 一発で消費する。
+    // 事前の存在確認（isReauthenticatedRecently → consume の非原子 2 手）は廃止し、消費の成否だけで判定する。
+
+    @Test
+    @DisplayName("A7_提示モード開始は提示用途のフラグをセッション付きで原子的に消費する")
+    void A7_提示モード開始は提示用途のフラグをセッション付きで原子的に消費する() {
+        PointCardGroupEntity group = sampleGroup(USER_ID);
+        given(groupRepository.findByIdAndUserId(group.getId(), USER_ID)).willReturn(Optional.of(group));
+        given(userSettingsService.getOrCreateSettings(USER_ID))
+                .willReturn(new PointCardUserSettingsResponse(true, null, "v1.0.0", true));
+        String sessionHash = SessionHashUtil.hash("jti-pointcard");
+        org.mockito.Mockito.lenient().when(authWebAuthnService.consumeReauthentication(
+                USER_ID, sessionHash, ReauthPurpose.POINTCARD_PRESENT)).thenReturn(true);
+        org.mockito.Mockito.lenient().when(itemRepository.findAllByGroupIdOrderByDisplayOrderAsc(group.getId()))
+                .thenReturn(List.of());
+
+        GroupDetailResponse res = withSession("jti-pointcard",
+                () -> groupService.startPresentation(group.getId(), USER_ID));
+
+        assertThat(res).isNotNull();
+        verify(authWebAuthnService).consumeReauthentication(USER_ID, sessionHash, ReauthPurpose.POINTCARD_PRESENT);
+        // F18 回帰: 成功時は POINT_CARD_VIEWED 監査を記録する
+        verify(auditLogService).record(
+                eq(AuditEventType.POINT_CARD_VIEWED.name()),
+                eq(USER_ID), any(), any(), any(),
+                any(), any(), any(), anyString());
+    }
+
+    @Test
+    @DisplayName("A7_提示用途のフラグを消費できなければPOINT_CARD_009（パスキー管理用の再認証では開けない）")
+    void A7_提示用途のフラグを消費できなければ提示モードを開けない() {
+        PointCardGroupEntity group = sampleGroup(USER_ID);
+        given(groupRepository.findByIdAndUserId(group.getId(), USER_ID)).willReturn(Optional.of(group));
+        given(userSettingsService.getOrCreateSettings(USER_ID))
+                .willReturn(new PointCardUserSettingsResponse(true, null, "v1.0.0", true));
+        String sessionHash = SessionHashUtil.hash("jti-pointcard");
+        org.mockito.Mockito.lenient().when(authWebAuthnService.consumeReauthentication(
+                USER_ID, sessionHash, ReauthPurpose.POINTCARD_PRESENT)).thenReturn(false);
+
+        assertThatThrownBy(() -> withSession("jti-pointcard",
+                () -> groupService.startPresentation(group.getId(), USER_ID)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(PointCardErrorCode.BIOMETRIC_REQUIRED);
+        verify(authWebAuthnService).consumeReauthentication(USER_ID, sessionHash, ReauthPurpose.POINTCARD_PRESENT);
+        // F18 回帰: 失敗時は POINT_CARD_VIEWED 監査を出さない
+        verify(auditLogService, never()).record(anyString(), any(), any(), any(), any(),
+                any(), any(), any(), any());
+    }
+
+    /** jti 付きの認証を SecurityContext に置いて処理を実行する（SecurityUtils.getCurrentSessionHash の入力）。 */
+    private static <T> T withSession(String jti, java.util.function.Supplier<T> action) {
+        org.springframework.security.authentication.UsernamePasswordAuthenticationToken auth =
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        USER_ID.toString(), null, List.of());
+        auth.setDetails(java.util.Map.of("jti", jti));
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
+        try {
+            return action.get();
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
     }
 
     // ─────────────────────────────────────────────

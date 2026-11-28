@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { useAuthApi } from './useAuthApi'
 import { b64urlToBuf, bufToB64url } from '~/utils/webauthn'
+import { parseApiError } from '~/utils/apiError'
 
 /**
  * パスキー（WebAuthn）登録フロー composable。
@@ -8,11 +9,17 @@ import { b64urlToBuf, bufToB64url } from '~/utils/webauthn'
  * 1. BE の /register/begin で challenge を取得
  * 2. navigator.credentials.create() で認証器に署名させる
  * 3. BE の /register/complete に送信して登録完了
+ *
+ * 登録は事前に用途 PASSKEY_MANAGE の再認証（5分以内・同一セッション）が必要で、無いと BE が 403 AUTH_087 を返す。
+ * authenticatorSelection.userVerification は 'required'（UV 無しの attestation は BE が拒否する）。
  */
 export function useWebAuthnRegister() {
   const { beginWebAuthnRegister, completeWebAuthnRegister } = useAuthApi()
   const isRegistering = ref(false)
+  /** 直近の失敗を表す i18n キー（表示は呼び出し側が t() で行う）。 */
   const error = ref<string | null>(null)
+  /** 直近の失敗の BE エラーコード（AUTH_087=再認証が必要・期限切れ等）。呼び出し側が再認証へ誘導する。 */
+  const errorCode = ref<string | null>(null)
 
   /**
    * パスキーを登録する。
@@ -20,11 +27,12 @@ export function useWebAuthnRegister() {
    */
   async function registerPasskey(deviceName?: string): Promise<boolean> {
     if (typeof window === 'undefined' || !window.PublicKeyCredential) {
-      error.value = 'WebAuthn非対応ブラウザです'
+      error.value = 'settings.security.webauthn.register_unsupported'
       return false
     }
     isRegistering.value = true
     error.value = null
+    errorCode.value = null
     try {
       // 1. begin → challenge 取得
       const beginRes = await beginWebAuthnRegister()
@@ -48,7 +56,7 @@ export function useWebAuthnRegister() {
           { alg: -257, type: 'public-key' }, // RS256
         ],
         authenticatorSelection: {
-          userVerification: 'preferred',
+          userVerification: 'required',
           residentKey: 'preferred',
         },
         timeout: 60000,
@@ -58,7 +66,7 @@ export function useWebAuthnRegister() {
       // 3. 認証器に credential を作成させる
       const credential = await navigator.credentials.create({ publicKey: publicKeyOptions })
       if (!credential || !(credential instanceof PublicKeyCredential)) {
-        throw new Error('認証器からの応答が無効です')
+        throw new Error('Invalid authenticator response')
       }
 
       const response = credential.response as AuthenticatorAttestationResponse
@@ -80,14 +88,15 @@ export function useWebAuthnRegister() {
         // ユーザーがキャンセルした場合はエラートーストを出さない
         return false
       }
-      error.value = e instanceof Error ? e.message : '登録に失敗しました'
+      errorCode.value = parseApiError(e).code ?? null
+      error.value = 'settings.security.webauthn.register_error'
       return false
     } finally {
       isRegistering.value = false
     }
   }
 
-  return { registerPasskey, isRegistering, error }
+  return { registerPasskey, isRegistering, error, errorCode }
 }
 
 /**

@@ -198,7 +198,21 @@
         "register_confirm": "登録する",
         "register_cancel": "キャンセル",
         "register_success": "パスキーを登録しました",
-        "register_error": "パスキーの登録に失敗しました"
+        "register_error": "パスキーの登録に失敗しました",
+        "reauth": {
+          "title": "本人確認",
+          "description": "パスキーの登録・削除の前に、本人確認を行います。",
+          "password_label": "現在のパスワード",
+          "otp_label": "確認コード（6桁）",
+          "submit": "本人確認する",
+          "failed": "本人確認に失敗しました。入力内容を確認してください。",
+          "expired": "本人確認の有効期限が切れました。もう一度本人確認を行ってください。",
+          "passkey_failed": "パスキーによる本人確認ができませんでした。",
+          "uv_unavailable": "この端末では生体認証または画面ロックによる本人確認ができないため、パスキーの登録・削除はできません。",
+          "retry_button": "本人確認をやり直す",
+          "leftover_passkey": "認証器の側に残ったパスキーは、端末の設定から削除できます。"
+        },
+        "register_unsupported": "このブラウザはパスキーに対応していません"
       },
       "session": {
         "device_label": "{os} の {browser}",

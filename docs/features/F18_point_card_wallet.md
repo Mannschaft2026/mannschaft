@@ -1371,6 +1371,8 @@ app/components/wallet/
 - `require_biometric_on_show=true` の場合、`GET /point-cards/{id}` 呼び出し時に直前の WebAuthn 認証完了を確認（5 分以内）
 - WebAuthn 未完了なら `POINT_CARD_009` を返却し、フロントは再認証画面に誘導
 - グループ提示モードの場合は、提示モード入口で一度だけ WebAuthn 認証
+- 再認証は `reauthenticate-begin` に `purpose=POINTCARD_PRESENT` を渡して開始する。**UV（生体/PIN）必須**で、UV に対応しない端末では提示モードを開けない（CMP-261021-1339 で統一。`PASSKEY_MANAGE` 用の再認証では開けず、逆も不可）
+- 再認証済みフラグはユーザー・セッション・用途に束縛され、`startPresentation` が getAndDelete 一発で 1 回限り消費する（正本: `F01.1_auth.md`「パスキー登録・削除前の再認証」）
 
 ---
 

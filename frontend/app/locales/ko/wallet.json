@@ -234,7 +234,8 @@
       "biometric_required": "제시 모드 시작에는 인증이 필요합니다",
       "biometric_failed": "인증에 실패했습니다",
       "no_cards": "이 그룹에 카드가 없습니다",
-      "load_failed": "그룹 불러오기 실패"
+      "load_failed": "그룹 불러오기 실패",
+      "uv_unavailable": "이 기기에서는 생체 인증 또는 화면 잠금(PIN)으로 본인 확인을 할 수 없어 제시 모드를 열 수 없습니다."
     },
     "admin": {
       "page_title": "포인트카드 관리",

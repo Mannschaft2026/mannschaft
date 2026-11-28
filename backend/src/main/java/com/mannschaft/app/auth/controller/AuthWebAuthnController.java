@@ -1,13 +1,18 @@
 package com.mannschaft.app.auth.controller;
 
+import com.mannschaft.app.auth.service.Auth2faService;
 import com.mannschaft.app.auth.service.AuthWebAuthnService;
 import com.mannschaft.app.auth.service.AuthTokenService;
 import com.mannschaft.app.auth.dto.MessageResponse;
+import com.mannschaft.app.auth.dto.MfaEmailSendResponse;
+import com.mannschaft.app.auth.dto.PasskeyManageReauthMethodResponse;
+import com.mannschaft.app.auth.dto.PasskeyManageReauthRequest;
 import com.mannschaft.app.auth.dto.TokenResponse;
 import com.mannschaft.app.auth.dto.UpdateWebAuthnCredentialRequest;
 import com.mannschaft.app.auth.dto.WebAuthnCredentialResponse;
 import com.mannschaft.app.auth.dto.WebAuthnLoginBeginResponse;
 import com.mannschaft.app.auth.dto.WebAuthnLoginCompleteRequest;
+import com.mannschaft.app.auth.dto.WebAuthnReauthenticateBeginRequest;
 import com.mannschaft.app.auth.dto.WebAuthnReauthenticateBeginResponse;
 import com.mannschaft.app.auth.dto.WebAuthnReauthenticateCompleteRequest;
 import com.mannschaft.app.auth.dto.WebAuthnReauthenticateCompleteResponse;
@@ -55,12 +60,15 @@ public class AuthWebAuthnController {
 
     private final AuthWebAuthnService authWebAuthnService;
     private final AuthTokenService authTokenService;
+    private final Auth2faService auth2faService;
 
     @Value("${mannschaft.cookie.secure:false}")
     private boolean cookieSecure;
 
     /**
      * WebAuthn登録開始。チャレンジを生成して返す。
+     *
+     * <p>再認証（PASSKEY_MANAGE）済みのセッションに限る。未実施・期限切れ・別セッションは 403（AUTH_087）。</p>
      *
      * <p><b>認可方式（{@link com.mannschaft.app.common.security.SelfScopedEndpoint} メソッド付与）</b>:
      * {@code SecurityUtils.getCurrentUserId()} のみでチャレンジ保存キーを解決し、
@@ -77,11 +85,11 @@ public class AuthWebAuthnController {
     public ResponseEntity<ApiResponse<WebAuthnRegisterBeginResponse>> beginRegister() {
 
         Long userId = SecurityUtils.getCurrentUserId();
-        return ResponseEntity.ok(authWebAuthnService.beginRegister(userId));
+        return ResponseEntity.ok(authWebAuthnService.beginRegister(userId, SecurityUtils.getCurrentSessionHash()));
     }
 
     /**
-     * WebAuthn登録完了。
+     * WebAuthn登録完了。再認証済みフラグを 1 回限りで消費する（無ければ 403 AUTH_087）。
      *
      * <p><b>認可方式（{@link com.mannschaft.app.common.security.SelfScopedEndpoint} メソッド付与）</b>:
      * 新規資格情報は {@code SecurityUtils.getCurrentUserId()} 配下のチャレンジキーとの突合でのみ紐付けられ、
@@ -100,7 +108,7 @@ public class AuthWebAuthnController {
 
         Long userId = SecurityUtils.getCurrentUserId();
         return ResponseEntity.status(HttpStatus.CREATED).body(
-                authWebAuthnService.completeRegister(userId, req));
+                authWebAuthnService.completeRegister(userId, SecurityUtils.getCurrentSessionHash(), req));
     }
 
     /**
@@ -185,9 +193,9 @@ public class AuthWebAuthnController {
     }
 
     /**
-     * F18 提示モード追加保護: WebAuthn 再認証開始（設計書 §9.6 / POINT_CARD_009）。
+     * WebAuthn 再認証開始（F18 提示モード追加保護 設計書 §9.6 / パスキー登録・削除 CMP-261021-1338）。
      *
-     * <p>認証済みユーザー本人を対象に再認証用チャレンジを発行する。
+     * <p>認証済みユーザー本人を対象に、用途（{@code purpose}）に束ねた再認証用チャレンジを発行する。
      * AT/RT は発行されない。完了 API がフラグだけを 5 分 TTL で記録する。
      * レート制限は {@link com.mannschaft.app.auth.AuthWebAuthnReauthRateLimitFilter} で 10/分。
      *
@@ -200,18 +208,20 @@ public class AuthWebAuthnController {
             "SecurityUtils.getCurrentUserId() のみでチャレンジ保存先を解決する"
                     + "（AuthWebAuthnController#beginReauthenticate）")
     @PostMapping("/reauthenticate-begin")
-    @Operation(summary = "WebAuthn 再認証開始（提示モード追加保護用）")
+    @Operation(summary = "WebAuthn 再認証開始（用途: POINTCARD_PRESENT / PASSKEY_MANAGE）")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "チャレンジ生成成功")
-    public ResponseEntity<ApiResponse<WebAuthnReauthenticateBeginResponse>> beginReauthenticate() {
+    public ResponseEntity<ApiResponse<WebAuthnReauthenticateBeginResponse>> beginReauthenticate(
+            @Valid @RequestBody WebAuthnReauthenticateBeginRequest req) {
         Long userId = SecurityUtils.getCurrentUserId();
-        return ResponseEntity.ok(authWebAuthnService.beginReauthenticate(userId));
+        return ResponseEntity.ok(authWebAuthnService.beginReauthenticate(userId, req.getPurpose()));
     }
 
     /**
-     * F18 提示モード追加保護: WebAuthn 再認証完了（設計書 §9.6 / POINT_CARD_009）。
+     * WebAuthn 再認証完了。
      *
-     * <p>署名検証 + sign_count 増分検証 + 「再認証済みフラグ」を 5 分 TTL で記録。
-     * <strong>AT/RT は再発行しない</strong>。提示モード開始 API が本フラグを 1 回限りで消費する。
+     * <p>署名検証（UV・UP 必須）+ sign_count 判定 + 「再認証済みフラグ」を 5 分 TTL で記録。
+     * フラグは用途・ユーザー・再認証したセッションに束縛される。
+     * <strong>AT/RT は再発行しない</strong>。提示モード開始 / パスキー登録・削除が本フラグを 1 回限りで消費する。
      *
      * <p><b>認可方式（{@link com.mannschaft.app.common.security.SelfScopedEndpoint} メソッド付与）</b>:
      * {@code SecurityUtils.getCurrentUserId()} のみでチャレンジ・再認証フラグの対象を解決する。</p>
@@ -222,12 +232,70 @@ public class AuthWebAuthnController {
             "SecurityUtils.getCurrentUserId() のみで再認証対象ユーザーを解決する"
                     + "（AuthWebAuthnController#completeReauthenticate）")
     @PostMapping("/reauthenticate-complete")
-    @Operation(summary = "WebAuthn 再認証完了（提示モード追加保護用）")
+    @Operation(summary = "WebAuthn 再認証完了")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "再認証成功")
     public ResponseEntity<ApiResponse<WebAuthnReauthenticateCompleteResponse>> completeReauthenticate(
             @Valid @RequestBody WebAuthnReauthenticateCompleteRequest req) {
         Long userId = SecurityUtils.getCurrentUserId();
-        return ResponseEntity.ok(authWebAuthnService.completeReauthenticate(userId, req));
+        return ResponseEntity.ok(authWebAuthnService.completeReauthenticate(
+                userId, SecurityUtils.getCurrentSessionHash(), req));
+    }
+
+    /**
+     * パスキー登録・削除前の再認証手段を返す（パスキー保有→PASSKEY / パスワードあり→PASSWORD
+     * （2FA 有効なら PASSWORD_AND_SECOND_FACTOR）/ いずれも無し→EMAIL_OTP）。
+     *
+     * <p><b>認可方式（{@link com.mannschaft.app.common.security.SelfScopedEndpoint} メソッド付与）</b>:
+     * {@code SecurityUtils.getCurrentUserId()} のみで対象ユーザーを解決する。</p>
+     */
+    @SelfScopedEndpoint(
+            "SecurityUtils.getCurrentUserId() のみで対象ユーザーを解決する"
+                    + "（AuthWebAuthnController#getReauthenticateMethod）")
+    @GetMapping("/reauthenticate-method")
+    @Operation(summary = "パスキー登録・削除前の再認証手段取得")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")
+    public ResponseEntity<ApiResponse<PasskeyManageReauthMethodResponse>> getReauthenticateMethod() {
+        Long userId = SecurityUtils.getCurrentUserId();
+        return ResponseEntity.ok(ApiResponse.of(
+                new PasskeyManageReauthMethodResponse(auth2faService.resolvePasskeyManageReauthMethod(userId))));
+    }
+
+    /**
+     * パスキー登録・削除前の再認証（パスワード／パスワード＋2FA 要素／メールOTP 経路）。
+     * 成功すると用途 PASSKEY_MANAGE の再認証済みフラグを、このセッションに限り 5 分 TTL で立てる。
+     * 5 回/15 分のレート制限（超過は 429 AUTH_044）、失敗は 400 AUTH_080。パスキー保有者はこの経路を使えない。
+     *
+     * <p><b>認可方式（{@link com.mannschaft.app.common.security.SelfScopedEndpoint} メソッド付与）</b>:
+     * {@code SecurityUtils.getCurrentUserId()} のみで対象ユーザーを解決する。</p>
+     */
+    @SelfScopedEndpoint(
+            "SecurityUtils.getCurrentUserId() のみで再認証対象ユーザーを解決する"
+                    + "（AuthWebAuthnController#reauthenticateByFactor）")
+    @PostMapping("/reauthenticate-factor")
+    @Operation(summary = "パスキー登録・削除前の再認証（パスワード／2FA／メールOTP）")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "再認証成功")
+    public ResponseEntity<ApiResponse<WebAuthnReauthenticateCompleteResponse>> reauthenticateByFactor(
+            @Valid @RequestBody PasskeyManageReauthRequest req) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        return ResponseEntity.ok(auth2faService.reauthenticateForPasskeyManage(
+                userId, SecurityUtils.getCurrentSessionHash(), req));
+    }
+
+    /**
+     * パスキー登録・削除前の再認証用に本人確認用メールOTP を送る（手段が EMAIL_OTP の利用者のみ。それ以外は 400 AUTH_080）。
+     *
+     * <p><b>認可方式（{@link com.mannschaft.app.common.security.SelfScopedEndpoint} メソッド付与）</b>:
+     * {@code SecurityUtils.getCurrentUserId()} のみで送信先（本人の登録アドレス）を解決する。</p>
+     */
+    @SelfScopedEndpoint(
+            "SecurityUtils.getCurrentUserId() のみで送信先（本人の登録アドレス）を解決する"
+                    + "（AuthWebAuthnController#sendReauthenticateEmailOtp）")
+    @PostMapping("/reauthenticate-email-otp")
+    @Operation(summary = "パスキー登録・削除前の再認証用メールOTP送信")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "送信成功")
+    public ResponseEntity<ApiResponse<MfaEmailSendResponse>> sendReauthenticateEmailOtp() {
+        Long userId = SecurityUtils.getCurrentUserId();
+        return ResponseEntity.ok(auth2faService.sendPasskeyManageReauthEmailOtp(userId));
     }
 
     /**
@@ -274,7 +342,7 @@ public class AuthWebAuthnController {
     }
 
     /**
-     * WebAuthn資格情報削除。
+     * WebAuthn資格情報削除。登録と同じ再認証済みフラグを 1 回限りで消費する（無ければ 403 AUTH_087）。
      *
      * <p><b>認可方式（{@link com.mannschaft.app.common.security.AuthorizedInService} メソッド付与）</b>:
      * {@code AuthWebAuthnService#deleteCredential} がパス変数 {@code id} で
@@ -290,7 +358,7 @@ public class AuthWebAuthnController {
     public ResponseEntity<Void> deleteCredential(@PathVariable Long id) {
 
         Long userId = SecurityUtils.getCurrentUserId();
-        authWebAuthnService.deleteCredential(userId, id);
+        authWebAuthnService.deleteCredential(userId, SecurityUtils.getCurrentSessionHash(), id);
         return ResponseEntity.noContent().build();
     }
 }

@@ -265,7 +265,15 @@ public enum AuthErrorCode implements ErrorCode {
     AUTH_085("AUTH_085", "この招待は現在の状態ではこの操作ができません", Severity.WARN),
 
     /** 招待付き登録の保留の参加処理が進行中（5 分経過後に再試行できる）。409 を返す。 */
-    AUTH_086("AUTH_086", "参加処理を進めています。しばらくしてからもう一度お試しください", Severity.WARN);
+    AUTH_086("AUTH_086", "参加処理を進めています。しばらくしてからもう一度お試しください", Severity.WARN),
+
+    // ===== CMP-261021-1339/1338 パスキー再認証 (AUTH_087) =====
+
+    /**
+     * 再認証が必要（再認証していない・5 分の有効期限切れ・別セッション・別用途・使用済み）。403 を返す。
+     * パスキーの登録・削除と F18 提示モードが要求する。
+     */
+    AUTH_087("AUTH_087", "本人確認が必要です。もう一度本人確認を行ってください", Severity.WARN);
 
     private final String code;
     private final String message;

@@ -141,7 +141,43 @@ async function mockSecurityApis(page: import('@playwright/test').Page) {
   })
 }
 
-test.describe('WEBAUTHN-UI-001〜003: パスキー登録UI', () => {
+/**
+ * パスキー登録・削除前の再認証（CMP-261021-1338）の BE 応答をモックする。
+ * 手段は GET /reauthenticate-method で決まる。factorStatus/factorCode で再認証の失敗（AUTH_080 等）を再現できる。
+ */
+async function mockPasskeyManageReauth(
+  page: import('@playwright/test').Page,
+  method: 'PASSKEY' | 'PASSWORD' | 'PASSWORD_AND_SECOND_FACTOR' | 'SECOND_FACTOR' | 'EMAIL_OTP',
+  opts: { factorStatus?: number; factorCode?: string } = {},
+) {
+  await page.route('**/api/v1/auth/webauthn/reauthenticate-method', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { method } }) })
+  })
+  await page.route('**/api/v1/auth/webauthn/reauthenticate-email-otp', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { maskedEmail: 't***@example.com', expiresInSeconds: 600, resendAfterSeconds: 60 } }),
+    })
+  })
+  await page.route('**/api/v1/auth/webauthn/reauthenticate-factor', async (route) => {
+    if (opts.factorStatus && opts.factorStatus >= 400) {
+      await route.fulfill({
+        status: opts.factorStatus,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: opts.factorCode ?? 'AUTH_080', message: 'reauth failed' } }),
+      })
+      return
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { verifiedUntil: '2026-11-25T03:05:00Z' } }),
+    })
+  })
+}
+
+test.describe('WEBAUTHN-UI-001〜005: パスキー登録・削除UI（登録・削除前の本人確認を含む）', () => {
   test('WEBAUTHN-UI-001: パスキー登録ボタンが表示される', async ({ page }) => {
     // WebAuthn 対応ブラウザをシミュレート
     await page.addInitScript(() => {
@@ -216,15 +252,93 @@ test.describe('WEBAUTHN-UI-001〜003: パスキー登録UI', () => {
         body: JSON.stringify({ data: { message: 'OK' } }),
       })
     })
+    // 登録前の再認証（CMP-261021-1338）: 手段はパスワード
+    await mockPasskeyManageReauth(page, 'PASSWORD')
 
     await page.goto('/settings/security')
     await waitForHydration(page)
 
     await page.getByRole('button', { name: /パスキーを登録/i }).click()
+
+    // 本人確認が先。この間デバイス名ダイアログは開かない（モーダル on モーダルにしない）
+    const reauthDialog = page.getByRole('dialog', { name: '本人確認', exact: true })
+    await expect(reauthDialog).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByRole('dialog', { name: /パスキーを登録/ })).toHaveCount(0)
+    await reauthDialog.locator('#passkeyReauthPassword').fill('TestPass2026!')
+    await reauthDialog.getByRole('button', { name: '本人確認する' }).click()
+
+    // 本人確認が済んでからデバイス名ダイアログが開く
+    await expect(reauthDialog).toBeHidden({ timeout: 5_000 })
     await page.getByRole('button', { name: /登録する/i }).click()
 
     // トースト確認
     await expect(page.getByText(/パスキーを登録しました/i)).toBeVisible({ timeout: 10_000 })
+  })
+
+  test('WEBAUTHN-UI-004: 登録の本人確認に失敗するとダイアログ内にエラーが出て、登録は実行されない', async ({ page }) => {
+    await page.addInitScript(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-extraneous-class
+      ;(window as any).PublicKeyCredential = class {}
+    })
+    await mockSecurityApis(page)
+    let registerBegun = false
+    await page.route('**/api/v1/auth/webauthn/register/begin', async (route) => {
+      registerBegun = true
+      await route.fulfill({ status: 403, contentType: 'application/json', body: '{}' })
+    })
+    await mockPasskeyManageReauth(page, 'PASSWORD', { factorStatus: 400, factorCode: 'AUTH_080' })
+
+    await page.goto('/settings/security')
+    await waitForHydration(page)
+    await page.getByRole('button', { name: /パスキーを登録/i }).click()
+
+    const reauthDialog = page.getByRole('dialog', { name: '本人確認', exact: true })
+    await reauthDialog.locator('#passkeyReauthPassword').fill('wrong-password')
+    await reauthDialog.getByRole('button', { name: '本人確認する' }).click()
+
+    await expect(reauthDialog.getByText('本人確認に失敗しました。入力内容を確認してください。')).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByRole('button', { name: /登録する/i }), '本人確認が済むまでデバイス名ダイアログは開かない').toHaveCount(0)
+    expect(registerBegun, '本人確認が済むまで register/begin を呼ばないこと').toBe(false)
+  })
+
+  test('WEBAUTHN-UI-005: 削除ボタンの押下で本人確認（メールOTP手段）を挟んでから削除する', async ({ page }) => {
+    await page.addInitScript(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-extraneous-class
+      ;(window as any).PublicKeyCredential = class {}
+    })
+    await mockSecurityApis(page)
+    // 資格情報を 1 件返す（mockSecurityApis より後に登録 = 後着優先）
+    await page.route('**/api/v1/auth/webauthn/credentials**', async (route) => {
+      if (route.request().method() === 'DELETE') {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { message: 'OK' } }) })
+        return
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: [{ id: 7, credentialId: 'cred-7', deviceName: 'E2E 端末', aaguid: '', lastUsedAt: null, createdAt: '2026-03-01T10:00:00Z' }],
+        }),
+      })
+    })
+    await mockPasskeyManageReauth(page, 'EMAIL_OTP')
+
+    await page.goto('/settings/security')
+    await waitForHydration(page)
+    await page.locator('button:has(.pi-trash)').first().click()
+
+    // SNS ログインのみの利用者: メールOTP を送って 6 桁を入力する
+    const reauthDialog = page.getByRole('dialog', { name: '本人確認', exact: true })
+    await expect(reauthDialog).toBeVisible({ timeout: 5_000 })
+    await expect(reauthDialog.locator('#passkeyReauthPassword'), 'メールOTP 手段ではパスワード欄を出さない').toHaveCount(0)
+    const deleted = page.waitForRequest(
+      (req) => req.method() === 'DELETE' && req.url().includes('/api/v1/auth/webauthn/credentials/7'),
+    )
+    await reauthDialog.locator('[data-testid="passkey-reauth-otp"]').click()
+    await page.keyboard.type('123456')
+    await reauthDialog.getByRole('button', { name: '本人確認する' }).click()
+
+    await deleted
   })
 })
 
