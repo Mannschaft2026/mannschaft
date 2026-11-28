@@ -37,8 +37,14 @@ mockNuxtImport('useRoleAccess', () => () => ({
   roleName: computed(() => roleState.roleName),
   isScopeAdmin: computed(() => roleState.scopeAdmin),
   can: (permission: string) => roleState.permissions.includes(permission),
+  permissions: computed(() => roleState.permissions),
+  roleResolved: computed(() => true),
+  loading: computed(() => false),
+  roleLoadFailed: computed(() => false),
+  isMember: computed(() => true),
   loadPermissions: mocks.loadPermissions,
 }))
+mockNuxtImport('useTeamShiftSettingsApi', () => () => ({ getShiftSettings: vi.fn().mockResolvedValue({ deputyShiftViewEnabled: false, deputyHourlyRateViewEnabled: false }) }))
 mockNuxtImport('useFeatureFlag', () => () => ({ enabled: ref(false) }))
 mockNuxtImport('useAutoAssign', () => () => ({
   runs: ref([]),
@@ -264,16 +270,16 @@ describe('シフトボード: 割当操作の出し分け（CMP-261125-1336）',
     expect(w.findComponent(ShiftBoardMatrix).props('canAssign')).toBe(false)
   })
 
-  it('SYSTEM_ADMIN は（チーム ADMIN と兼任でなければ）既存方針どおり出さない', async () => {
+  it('SYSTEM_ADMIN は（チーム ADMIN と兼任でなければ）出さない', async () => {
     const w = await renderAs('SYSTEM_ADMIN', false)
     expect(w.find('[data-testid="member-pool-aside"]').exists()).toBe(false)
   })
 
-  it('SYSTEM_ADMIN がチーム ADMIN と兼任（isScopeAdmin=true）でも、roleName 等値の既存方針どおり出さない', async () => {
+  it('SYSTEM_ADMIN がチーム ADMIN と兼任（isScopeAdmin=true）なら出す（BE の ShiftManageAccessGate はチーム ADMIN 割当を許す。CMP-261125-2114）', async () => {
     const w = await renderAs('SYSTEM_ADMIN', true, ['MANAGE_SHIFTS'])
-    expect(w.find('[data-testid="member-pool-aside"]').exists()).toBe(false)
-    expect(w.find('[data-testid="auto-assign-button"]').exists()).toBe(false)
-    expect(w.findComponent(ShiftBoardMatrix).props('canAssign')).toBe(false)
+    expect(w.find('[data-testid="member-pool-aside"]').exists()).toBe(true)
+    expect(w.find('[data-testid="auto-assign-button"]').exists()).toBe(true)
+    expect(w.findComponent(ShiftBoardMatrix).props('canAssign')).toBe(true)
   })
 })
 
@@ -328,5 +334,31 @@ describe('シフトボード: 二度押し防止と失敗後の復帰（CMP-2611
     w.findComponent(ShiftBoardMatrix).vm.$emit('removeUser', payload)
     await flushPromises()
     expect(mocks.removeUser).not.toHaveBeenCalled()
+  })
+})
+
+describe('シフトボード: PDF ボタンの出し分け（CMP-261125-2114 D5。BE の ShiftPdfFacade に合わせる）', () => {
+  async function pdfVisible(status: { status: string, publishedAt?: string | null }, canView: boolean): Promise<boolean> {
+    // 管理者の形（canViewShift）はチーム ADMIN、それ以外は一般 MEMBER で表す
+    roleState.roleName = canView ? 'ADMIN' : 'MEMBER'
+    roleState.scopeAdmin = canView
+    mocks.getShiftSchedule.mockResolvedValue({
+      data: { id: 425, teamId: 9, content: { title: '11月シフト' }, status: { publishedAt: null, ...status } },
+    })
+    const w = renderPage()
+    await flushPromises()
+    return w.find('shift-pdf-export-button-stub').exists()
+  }
+
+  it('管理者の形（閲覧可）は未公開でも出す', async () => {
+    expect(await pdfVisible({ status: 'DRAFT' }, true)).toBe(true)
+  })
+
+  it('それ以外の会員は、公開済みなら出す', async () => {
+    expect(await pdfVisible({ status: 'PUBLISHED' }, false)).toBe(true)
+  })
+
+  it('それ以外の会員は、未公開なら出さない（BE は 404 を返す）', async () => {
+    expect(await pdfVisible({ status: 'ADJUSTING' }, false)).toBe(false)
   })
 })

@@ -328,23 +328,32 @@ class ShiftSwapApprovalAssignmentContractIT extends ShiftSwapApprovalTestSupport
     }
 
     @ParameterizedTest(name = "AC15_許可ロール [{index}] {arguments}")
-    @ValueSource(strings = {"ADMIN", "DEPUTY_ADMIN", "SYSTEM_ADMIN"})
-    void AC15_対象チーム管理者とSYSTEMは承認して差替できる(String role) throws Exception {
+    @ValueSource(strings = {"ADMIN", "DEPUTY_ADMIN"})
+    void AC15_対象チーム管理者は承認して差替できる(String role) throws Exception {
         Long slot = slot(List.of(a), ShiftScheduleStatus.PUBLISHED);
         expect(resolve(actors.get(role), accepted(slot, a, b), "APPROVE"), 200, null);
         assertThat(assigned(slot)).containsExactly(b);
     }
 
     @Test
-    void AC15_userRolesだけの管理者も既存の承認許可を維持する() throws Exception {
+    void AC15_チームロールを持たないSYSTEM_ADMINは承認できず部外者と同じ404で担当は変わらない() throws Exception {
+        // CMP-261125-2114: SYSTEM_ADMIN の短絡は廃止（docs/security/03 §3.6）。
+        Long slot = slot(List.of(a), ShiftScheduleStatus.PUBLISHED);
+        denied(actors.get("SYSTEM_ADMIN"), accepted(slot, a, b), "APPROVE", 404, "SHIFT_005");
+        assertThat(assigned(slot)).containsExactly(a);
+    }
+
+    @Test
+    void AC15_在籍の無いuserRolesだけの管理者は承認できず403で担当は変わらない() throws Exception {
+        // CMP-261125-2114: ADMIN でも在籍中でなければシフト管理の権限を持たない（同チーム所属扱いの 403）。
         Long slot = slot(List.of(a), ShiftScheduleStatus.PUBLISHED);
         Long swap = accepted(slot, a, b);
         inTx(() -> {
             em.createNativeQuery("DELETE FROM memberships WHERE user_id=:id").setParameter("id", admin).executeUpdate();
             return null;
         });
-        expect(resolve(admin, swap, "APPROVE"), 200, null);
-        assertThat(assigned(slot)).containsExactly(b);
+        denied(admin, swap, "APPROVE", 403, "COMMON_002");
+        assertThat(assigned(slot)).containsExactly(a);
     }
 
     @ParameterizedTest(name = "AC15_管理者本人交代 [{index}] {arguments}")
@@ -502,6 +511,10 @@ abstract class ShiftSwapApprovalTestSupport extends AbstractMySqlIntegrationTest
                 if (role.contains("ADMIN")) {
                     String name = role.startsWith("OTHER") ? "ADMIN" : role;
                     MembershipTestHelper.insertUserRole(em, id, name, role.equals("SYSTEM_ADMIN") ? null : scope, null);
+                }
+                if (role.equals("DEPUTY_ADMIN")) {
+                    // CMP-261125-2114: 承認・却下は ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけ。
+                    MembershipTestHelper.grantTeamDeputyPermission(em, id, scope, "MANAGE_SHIFTS");
                 }
             }
             a = actors.get("A"); b = actors.get("B"); c = actors.get("C"); d = actors.get("D");

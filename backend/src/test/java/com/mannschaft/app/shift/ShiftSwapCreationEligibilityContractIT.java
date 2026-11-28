@@ -106,10 +106,10 @@ class ShiftSwapCreationEligibilityContractIT extends AbstractMySqlIntegrationTes
             for (String role : List.of("MEMBER", "ADMIN", "DEPUTY_ADMIN", "SYSTEM_ADMIN", "SUPPORTER")) {
                 Long actor = user(role);
                 actors.put(role, actor);
-                if (!role.equals("SYSTEM_ADMIN")) {
-                    MembershipTestHelper.insertMembership(em, actor, ScopeType.TEAM, teamId,
-                            role.equals("SUPPORTER") ? RoleKind.SUPPORTER : RoleKind.MEMBER);
-                }
+                // CMP-261125-2114: SYSTEM_ADMIN を特別扱いしないので、作成資格（業務条件）の検査は
+                // 「チームの在籍メンバーでもある SYSTEM_ADMIN」で行う（在籍が無ければ部外者として 404 で資格検査に届かない）。
+                MembershipTestHelper.insertMembership(em, actor, ScopeType.TEAM, teamId,
+                        role.equals("SUPPORTER") ? RoleKind.SUPPORTER : RoleKind.MEMBER);
                 if (List.of("ADMIN", "DEPUTY_ADMIN", "SYSTEM_ADMIN").contains(role)) {
                     MembershipTestHelper.insertUserRole(em, actor, role,
                             role.equals("SYSTEM_ADMIN") ? null : teamId, null);

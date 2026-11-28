@@ -1,5 +1,7 @@
 package com.mannschaft.app.team.service;
 
+import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.team.dto.TeamShiftSettingsResponse;
 import com.mannschaft.app.team.dto.UpdateTeamShiftSettingsRequest;
 import com.mannschaft.app.team.entity.TeamShiftSettingsEntity;
@@ -15,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -91,9 +94,9 @@ class TeamShiftSettingsServiceTest {
                 .willAnswer(inv -> inv.getArgument(0));
 
         UpdateTeamShiftSettingsRequest request = new UpdateTeamShiftSettingsRequest() {
-            @Override public boolean isReminder48hEnabled() { return false; }
-            @Override public boolean isReminder24hEnabled() { return true; }
-            @Override public boolean isReminder12hEnabled() { return false; }
+            @Override public Boolean getReminder48hEnabled() { return false; }
+            @Override public Boolean getReminder24hEnabled() { return true; }
+            @Override public Boolean getReminder12hEnabled() { return false; }
         };
 
         TeamShiftSettingsResponse response = settingsService.updateSettings(TEAM_ID, request);
@@ -112,9 +115,9 @@ class TeamShiftSettingsServiceTest {
                 .willAnswer(inv -> inv.getArgument(0));
 
         UpdateTeamShiftSettingsRequest request = new UpdateTeamShiftSettingsRequest() {
-            @Override public boolean isReminder48hEnabled() { return true; }
-            @Override public boolean isReminder24hEnabled() { return false; }
-            @Override public boolean isReminder12hEnabled() { return false; }
+            @Override public Boolean getReminder48hEnabled() { return true; }
+            @Override public Boolean getReminder24hEnabled() { return false; }
+            @Override public Boolean getReminder12hEnabled() { return false; }
         };
 
         TeamShiftSettingsResponse response = settingsService.updateSettings(TEAM_ID, request);
@@ -132,9 +135,9 @@ class TeamShiftSettingsServiceTest {
                 .willAnswer(inv -> inv.getArgument(0));
 
         UpdateTeamShiftSettingsRequest request = new UpdateTeamShiftSettingsRequest() {
-            @Override public boolean isReminder48hEnabled() { return false; }
-            @Override public boolean isReminder24hEnabled() { return false; }
-            @Override public boolean isReminder12hEnabled() { return true; }
+            @Override public Boolean getReminder48hEnabled() { return false; }
+            @Override public Boolean getReminder24hEnabled() { return false; }
+            @Override public Boolean getReminder12hEnabled() { return true; }
         };
 
         settingsService.updateSettings(TEAM_ID, request);
@@ -146,6 +149,78 @@ class TeamShiftSettingsServiceTest {
         assertThat(saved.isReminder48hEnabled()).isFalse();
         assertThat(saved.isReminder24hEnabled()).isFalse();
         assertThat(saved.isReminder12hEnabled()).isTrue();
+    }
+
+    @Test
+    @DisplayName("updateSettings: 閲覧切替だけを送ってもリマインド 3 項目は現在値のまま維持される（CMP-261125-2114）")
+    void updateSettings_togglesOnly_keepsReminders() {
+        TeamShiftSettingsEntity entity = TeamShiftSettingsEntity.createDefault(TEAM_ID); // 48h=true, 24h=true, 12h=false
+        given(settingsRepository.findByTeamId(TEAM_ID)).willReturn(Optional.of(entity));
+        given(settingsRepository.save(any(TeamShiftSettingsEntity.class)))
+                .willAnswer(inv -> inv.getArgument(0));
+        UpdateTeamShiftSettingsRequest request = new UpdateTeamShiftSettingsRequest() {
+            @Override public Boolean getDeputyShiftViewEnabled() { return true; }
+        };
+
+        TeamShiftSettingsResponse response = settingsService.updateSettings(TEAM_ID, request);
+
+        assertThat(response.isReminder48hEnabled()).isTrue();
+        assertThat(response.isReminder24hEnabled()).isTrue();
+        assertThat(response.isReminder12hEnabled()).isFalse();
+        assertThat(entity.isDeputyShiftViewEnabled()).isTrue();
+        assertThat(entity.isDeputyHourlyRateViewEnabled()).isFalse();
+    }
+
+    @Test
+    @DisplayName("updateSettings: 省略した項目は変更せず、送った項目だけ反映する（部分更新）")
+    void updateSettings_partialReminders_updatesOnlySentFields() {
+        TeamShiftSettingsEntity entity = TeamShiftSettingsEntity.createDefault(TEAM_ID);
+        given(settingsRepository.findByTeamId(TEAM_ID)).willReturn(Optional.of(entity));
+        given(settingsRepository.save(any(TeamShiftSettingsEntity.class)))
+                .willAnswer(inv -> inv.getArgument(0));
+        UpdateTeamShiftSettingsRequest request = new UpdateTeamShiftSettingsRequest() {
+            @Override public Boolean getReminder12hEnabled() { return true; }
+        };
+
+        settingsService.updateSettings(TEAM_ID, request);
+
+        assertThat(entity.isReminder48hEnabled()).isTrue();
+        assertThat(entity.isReminder24hEnabled()).isTrue();
+        assertThat(entity.isReminder12hEnabled()).isTrue();
+    }
+
+    @Test
+    @DisplayName("updateSettings: 保存後に有効なリマインドが 1 つも無くなる更新は 400（COMMON_001）で、保存しない")
+    void updateSettings_allRemindersOffAfterUpdate_rejected() {
+        TeamShiftSettingsEntity entity = TeamShiftSettingsEntity.createDefault(TEAM_ID);
+        given(settingsRepository.findByTeamId(TEAM_ID)).willReturn(Optional.of(entity));
+        // 現在 48h・24h が有効。両方を false にすると全 OFF になる。
+        UpdateTeamShiftSettingsRequest request = new UpdateTeamShiftSettingsRequest() {
+            @Override public Boolean getReminder48hEnabled() { return false; }
+            @Override public Boolean getReminder24hEnabled() { return false; }
+        };
+
+        assertThatThrownBy(() -> settingsService.updateSettings(TEAM_ID, request))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(CommonErrorCode.COMMON_001));
+        verify(settingsRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("updateSettings: 一部だけを false にしても、保存後に 1 つ以上有効なら成功する")
+    void updateSettings_oneOffButOthersOn_allowed() {
+        TeamShiftSettingsEntity entity = TeamShiftSettingsEntity.createDefault(TEAM_ID);
+        given(settingsRepository.findByTeamId(TEAM_ID)).willReturn(Optional.of(entity));
+        given(settingsRepository.save(any(TeamShiftSettingsEntity.class)))
+                .willAnswer(inv -> inv.getArgument(0));
+        UpdateTeamShiftSettingsRequest request = new UpdateTeamShiftSettingsRequest() {
+            @Override public Boolean getReminder48hEnabled() { return false; }
+        };
+
+        TeamShiftSettingsResponse response = settingsService.updateSettings(TEAM_ID, request);
+
+        assertThat(response.isReminder48hEnabled()).isFalse();
+        assertThat(response.isReminder24hEnabled()).isTrue();
     }
 
     // ========================================================================

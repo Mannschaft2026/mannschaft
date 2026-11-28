@@ -12,8 +12,9 @@ const mocks = vi.hoisted(() => ({
 }))
 mockNuxtImport('useTeamApi', () => () => ({ getAllMembers: mocks.getAllMembers }))
 mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: mocks.handleApiError }))
-mockNuxtImport('useRoleAccess', () => () => ({
-  isAdmin: mocks.isAdmin,
+// 判定本体は useShiftPermission（別 spec で検証済み）。導線は管理操作の権限（canManageShift）を持つ人にだけ出す。
+mockNuxtImport('useShiftPermission', () => () => ({
+  canManageShift: mocks.isAdmin,
   loadPermissions: mocks.loadPermissions,
 }))
 
@@ -47,7 +48,7 @@ describe('ShiftPublishErrorDialog', () => {
     expect(document.querySelector('[data-testid="shift-publish-error-settings-link"]')).not.toBeNull()
   })
 
-  it('ADMIN でなければ設定画面への導線を出さない', async () => {
+  it('シフト管理の権限（ADMIN / MANAGE_SHIFTS 付き副管理者）が無ければ設定画面への導線を出さない', async () => {
     mocks.isAdmin = ref(false) as unknown as { value: boolean }
     await mountSuspended(ShiftPublishErrorDialog, {
       props: {

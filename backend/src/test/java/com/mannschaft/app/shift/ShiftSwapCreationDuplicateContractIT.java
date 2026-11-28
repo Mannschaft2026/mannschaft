@@ -271,13 +271,20 @@ class ShiftSwapCreationDuplicateContractIT extends ShiftSwapApprovalTestSupport 
 
     @Test
     void AC11_許可ロール全員が本人担当でも重複409() throws Exception {
-        for (Long actor : List.of(a, admin, actors.get("DEPUTY_ADMIN"), actors.get("SYSTEM_ADMIN"))) {
+        for (Long actor : List.of(a, admin, actors.get("DEPUTY_ADMIN"))) {
             Long slot = slot(List.of(actor), ShiftScheduleStatus.PUBLISHED);
             swap(slot, actor, b, SwapRequestStatus.PENDING);
             var before = snapshot();
             expect(create(actor, body(slot, false, null, null)), 409, "SHIFT_013");
             assertThat(snapshot()).isEqualTo(before);
         }
+        // CMP-261125-2114: チームロールを持たない SYSTEM_ADMIN は部外者と同じ（重複判定に到達せず 404 SHIFT_002）。
+        Long sysAdmin = actors.get("SYSTEM_ADMIN");
+        Long slot = slot(List.of(a), ShiftScheduleStatus.PUBLISHED);
+        swap(slot, a, b, SwapRequestStatus.PENDING);
+        var before = snapshot();
+        expect(create(sysAdmin, body(slot, false, null, null)), 404, "SHIFT_002");
+        assertThat(snapshot()).isEqualTo(before);
     }
 
     @Test

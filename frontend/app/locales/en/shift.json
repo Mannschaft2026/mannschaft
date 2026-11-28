@@ -229,13 +229,9 @@
       "assignmentMaskedHint": "Assignments are hidden until the shift is published",
       "deleteTitle": "Delete shift slot",
       "deleteConfirmPlain": "Delete this slot?",
-
       "deleteConfirmBoth": "Delete this slot? The {requests} request(s) submitted for it and its {assignments} assignment(s) will also be deleted. This cannot be undone through normal operations.",
-
       "deleteConfirmRequestsOnly": "Delete this slot? The {requests} request(s) submitted for it will also be deleted. This cannot be undone through normal operations.",
-
       "deleteConfirmAssignmentsOnly": "Delete this slot? Its {assignments} assignment(s) will also be deleted. This cannot be undone through normal operations.",
-
       "deleteConfirmUnknown": "Delete this slot? Any requests submitted for it and any assignments will also be deleted. This cannot be undone through normal operations."
     },
     "requests": {
@@ -498,7 +494,13 @@
       "validation": {
         "rateRequired": "Please enter an hourly rate",
         "ratePositive": "Please enter an hourly rate of 1 or more"
-      }
+      },
+      "readOnlyNotice": "You can only view hourly rates. Registering or changing them requires the \"Manage shifts\" permission."
+    },
+    "permission": {
+      "noManagePermission": "You can only view shifts because you do not have the \"Manage shifts\" permission. To create or edit them, ask an administrator to add \"Manage shifts\" to you through a permission group.",
+      "adminNotice": "Deputy administrators cannot manage shifts (view only) unless a permission group grants them \"Manage shifts\". Assign a permission group that includes \"Manage shifts\" to the deputies who need it.",
+      "adminNoticeLink": "Open permission groups"
     }
   },
   "my_shift_guide": {

@@ -1,3 +1,4 @@
+import { computed } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { mountSuspended, mockNuxtImport } from '@nuxt/test-utils/runtime'
@@ -20,6 +21,17 @@ const teamStore = {
   fetchMyTeams: vi.fn(async () => {}),
 }
 
+// 出し分けの判定本体は useShiftPermission（app/composables/useShiftPermission.spec.ts で真理値表を検証済み）。
+// ここでは role が ADMIN / DEPUTY_ADMIN（MANAGE_SHIFTS 付き）のときだけ管理操作ができる利用者として振る舞わせる。
+const canManageRole = () => ['ADMIN', 'DEPUTY_ADMIN'].includes(role)
+mockNuxtImport('useShiftPermission', () => () => ({
+  canManageShift: computed(() => canManageRole()),
+  canViewShift: computed(() => canManageRole()),
+  canViewHourlyRate: computed(() => canManageRole()),
+  isDeputyWithoutManage: computed(() => false),
+  isScopeAdmin: computed(() => role === 'ADMIN'),
+  loadPermissions: async () => ({ ok: true }),
+}))
 mockNuxtImport('useRoute', () => () => ({ params: { id: '91' } }))
 mockNuxtImport('useTeamStore', () => () => teamStore)
 mockNuxtImport('useShiftApi', () => () => ({ getSchedule }))

@@ -1,24 +1,37 @@
 package com.mannschaft.app.team.dto;
 
-import jakarta.validation.constraints.AssertTrue;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 
 /**
  * チームシフト設定更新リクエストDTO。
- * 少なくとも1つのリマインドが有効である必要がある。
+ *
+ * <p>全項目が任意（部分更新）。省略（{@code null}）した項目は<b>変更しない</b>
+ * （閲覧切替だけを送る PATCH が、リマインドを false へ上書きしたり 400 になったりしないため。CMP-261125-2114）。
+ * 「少なくとも1つのリマインドが有効」という制約は、リクエスト単体ではなく<b>保存後の状態</b>に対して
+ * {@code TeamShiftSettingsService#updateSettings} が検証する（400 {@code COMMON_001}）。</p>
  */
 @Getter
 public class UpdateTeamShiftSettingsRequest {
 
-    private boolean reminder48hEnabled;
-    private boolean reminder24hEnabled;
-    private boolean reminder12hEnabled;
+    /** 48 時間前リマインド。省略（null）なら変更しない。 */
+    private Boolean reminder48hEnabled;
+
+    /** 24 時間前リマインド。省略（null）なら変更しない。 */
+    private Boolean reminder24hEnabled;
+
+    /** 12 時間前リマインド。省略（null）なら変更しない。 */
+    private Boolean reminder12hEnabled;
+
+    /** 副管理者へのシフト閲覧許可の切替。省略（null）なら変更しない。 */
+    private Boolean deputyShiftViewEnabled;
 
     /**
-     * カスタムバリデーション: 少なくとも1つのリマインドが有効であること。
+     * 副管理者への時給閲覧許可の切替。省略（null）なら変更しない。
+     * <b>チームの ADMIN だけが変更できる</b>（null 以外を送ると、MANAGE_SHIFTS を持つ DEPUTY_ADMIN でも 403。
+     * 金額の開示範囲を決める設定のため。マスター裁定 2026-11-25）。
      */
-    @AssertTrue(message = "少なくとも1つのリマインドを有効にする必要があります")
-    public boolean isAtLeastOneEnabled() {
-        return reminder48hEnabled || reminder24hEnabled || reminder12hEnabled;
-    }
+    @Schema(description = "副管理者への時給閲覧許可の切替。省略（null）なら変更しない。チームの ADMIN だけが変更できる"
+            + "（null 以外を送ると、MANAGE_SHIFTS を持つ DEPUTY_ADMIN でも 403）")
+    private Boolean deputyHourlyRateViewEnabled;
 }

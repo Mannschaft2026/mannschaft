@@ -22,11 +22,14 @@ import java.util.Optional;
  * <p>チームデフォルト（{@code userId IS NULL}）と個別オーバーライドの両方を
  * 同一テーブル上で管理する。解決順序は「個別レコード → チームデフォルト → 制約なし」。</p>
  *
- * <p>権限モデル:
+ * <p>権限モデル（CMP-261125-2114。ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけが管理者。
+ * DEPUTY_ADMIN というだけでは許可しない。SYSTEM_ADMIN も特別扱いしない）:
  * <ul>
- *   <li>作成・更新・削除: ADMIN または DEPUTY_ADMIN のみ</li>
- *   <li>一覧閲覧（全メンバー）: ADMIN または DEPUTY_ADMIN のみ</li>
- *   <li>個別閲覧: 本人 または ADMIN/DEPUTY_ADMIN（MEMBER は自分の制約のみ閲覧可）</li>
+ *   <li>作成・更新・削除: ADMIN または MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ
+ *       （個別制約の upsert だけは認可と対象の在籍検査を {@link MemberWorkConstraintFacade}（tx の外）が行い、
+ *       本クラスの {@link #upsertConstraint} は認可しない tx 本体）</li>
+ *   <li>一覧閲覧（全メンバー）: ADMIN または MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ</li>
+ *   <li>個別閲覧: 本人 または ADMIN／MANAGE_SHIFTS を持つ DEPUTY_ADMIN（MEMBER は自分の制約のみ閲覧可）</li>
  * </ul>
  * </p>
  */
@@ -41,16 +44,16 @@ public class MemberWorkConstraintService {
     private final MemberWorkConstraintRepository constraintRepository;
     private final ShiftMapper shiftMapper;
     private final AccessControlService accessControlService;
+    private final ShiftManageAccessGate manageGate;
 
     // ========================================
     // 取得系
     // ========================================
 
     /**
-     * チーム内の全勤務制約（デフォルト + 個別）を取得する。ADMIN/DEPUTY_ADMIN のみ。
+     * チーム内の全勤務制約（デフォルト + 個別）を取得する。認可はしない（ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN の判定は MemberWorkConstraintFacade）。
      */
     public List<MemberWorkConstraintResponse> listConstraintsByTeam(Long teamId, Long currentUserId) {
-        requireAdminOrAbove(currentUserId, teamId);
         List<MemberWorkConstraintEntity> entities = constraintRepository.findByTeamId(teamId);
         return shiftMapper.toWorkConstraintResponseList(entities);
     }
@@ -71,8 +74,8 @@ public class MemberWorkConstraintService {
      *                           ({@link ShiftErrorCode#WORK_CONSTRAINT_FORBIDDEN})
      */
     public MemberWorkConstraintResponse getConstraint(Long teamId, Long userId, Long currentUserId) {
-        // 権限チェック: 本人 or ADMIN/DEPUTY_ADMIN
-        if (!userId.equals(currentUserId) && !accessControlService.isAdminOrAbove(currentUserId, teamId, SCOPE_TEAM)) {
+        // 権限チェック: 本人 or ADMIN／MANAGE_SHIFTS を持つ DEPUTY_ADMIN
+        if (!userId.equals(currentUserId) && !manageGate.canManage(currentUserId, teamId)) {
             throw new BusinessException(ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN);
         }
         // 閲覧者自身はチームメンバーである必要がある
@@ -123,15 +126,20 @@ public class MemberWorkConstraintService {
     // ========================================
 
     /**
-     * 個別勤務制約を upsert する。ADMIN/DEPUTY_ADMIN のみ。
+     * 個別勤務制約を upsert する（<b>認可しない tx 本体</b>）。
+     *
+     * <p>認可（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN）と、対象ユーザーがそのチームの在籍者であることの検査は
+     * {@link MemberWorkConstraintFacade}（tx の外）が済ませてから呼ぶ（tx 内から membership・role の Repository へ
+     * 到達させない。D-3T）。Controller は本メソッドを直接呼ばないこと。</p>
      *
      * <p>全項目 NULL のリクエストは拒否（{@link ShiftErrorCode#WORK_CONSTRAINT_ALL_NULL}）。
      * 既存レコードが存在すれば更新、なければ新規作成。</p>
+     *
+     * @param currentUserId 認可済みの操作者（監査ログ用）
      */
     @Transactional
     public MemberWorkConstraintResponse upsertConstraint(
             Long teamId, Long userId, MemberWorkConstraintRequest req, Long currentUserId) {
-        requireAdminOrAbove(currentUserId, teamId);
         validateNotAllNull(req);
 
         MemberWorkConstraintEntity entity = constraintRepository
@@ -158,12 +166,13 @@ public class MemberWorkConstraintService {
                         .build());
 
         entity = constraintRepository.save(entity);
-        log.info("メンバー勤務制約 upsert: teamId={}, userId={}, id={}", teamId, userId, entity.getId());
+        log.info("メンバー勤務制約 upsert: teamId={}, userId={}, id={}, by={}",
+                teamId, userId, entity.getId(), currentUserId);
         return shiftMapper.toWorkConstraintResponse(entity);
     }
 
     /**
-     * チームデフォルトを upsert する。ADMIN/DEPUTY_ADMIN のみ。
+     * チームデフォルトを upsert する。ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ。
      *
      * <p>MySQL の UNIQUE KEY は {@code NULL != NULL} を許容するため、Service 層で
      * 「1チーム1デフォルト」を保証する（{@link MemberWorkConstraintRepository#findTeamDefault}）。</p>
@@ -171,7 +180,6 @@ public class MemberWorkConstraintService {
     @Transactional
     public MemberWorkConstraintResponse upsertTeamDefault(
             Long teamId, MemberWorkConstraintRequest req, Long currentUserId) {
-        requireAdminOrAbove(currentUserId, teamId);
         validateNotAllNull(req);
 
         MemberWorkConstraintEntity entity = constraintRepository.findTeamDefault(teamId)
@@ -206,15 +214,13 @@ public class MemberWorkConstraintService {
     // ========================================
 
     /**
-     * 個別勤務制約を削除する。ADMIN/DEPUTY_ADMIN のみ。
+     * 個別勤務制約を削除する。ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ。
      *
      * @throws BusinessException 制約が存在しない場合
      *                           ({@link ShiftErrorCode#WORK_CONSTRAINT_NOT_FOUND})
      */
     @Transactional
     public void deleteConstraint(Long teamId, Long userId, Long currentUserId) {
-        requireAdminOrAbove(currentUserId, teamId);
-
         MemberWorkConstraintEntity entity = constraintRepository
                 .findByUserIdAndTeamId(userId, teamId)
                 .orElseThrow(() -> new BusinessException(ShiftErrorCode.WORK_CONSTRAINT_NOT_FOUND));
@@ -223,12 +229,10 @@ public class MemberWorkConstraintService {
     }
 
     /**
-     * チームデフォルトを削除する。ADMIN/DEPUTY_ADMIN のみ。
+     * チームデフォルトを削除する。ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ。
      */
     @Transactional
     public void deleteTeamDefault(Long teamId, Long currentUserId) {
-        requireAdminOrAbove(currentUserId, teamId);
-
         MemberWorkConstraintEntity entity = constraintRepository.findTeamDefault(teamId)
                 .orElseThrow(() -> new BusinessException(ShiftErrorCode.WORK_CONSTRAINT_NOT_FOUND));
         constraintRepository.delete(entity);
@@ -238,16 +242,6 @@ public class MemberWorkConstraintService {
     // ========================================
     // ヘルパー（private）
     // ========================================
-
-    /**
-     * ADMIN / DEPUTY_ADMIN であることを要求する。違反時は
-     * {@link ShiftErrorCode#WORK_CONSTRAINT_FORBIDDEN} で 403。
-     */
-    private void requireAdminOrAbove(Long currentUserId, Long teamId) {
-        if (!accessControlService.isAdminOrAbove(currentUserId, teamId, SCOPE_TEAM)) {
-            throw new BusinessException(ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN);
-        }
-    }
 
     /**
      * 全項目 NULL のリクエストを拒否する（DTO レベルの全NULL拒否）。

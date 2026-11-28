@@ -3,7 +3,6 @@ package com.mannschaft.app.shift.service;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
-import com.mannschaft.app.common.ScopeConcealingAccessGate;
 import com.mannschaft.app.shift.ShiftErrorCode;
 import com.mannschaft.app.shift.dto.CreatePositionRequest;
 import com.mannschaft.app.shift.dto.ShiftPositionResponse;
@@ -30,9 +29,9 @@ import java.util.List;
  * 部外者(非メンバー)          403 COMMON_002  403 COMMON_002  404 SHIFT_004    404 SHIFT_004
  * 同チーム SUPPORTER          403 COMMON_002  403 COMMON_002  403 COMMON_002   403 COMMON_002
  * 同チーム一般メンバー        200             403 COMMON_002  403 COMMON_002   403 COMMON_002
- * チーム ADMIN/DEPUTY_ADMIN   200             201             200              204
- * 非メンバーの SYSTEM_ADMIN   200             201             200              204
- * メンバーの SYSTEM_ADMIN     200             201             200              204
+ * ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN  200  201  200  204
+ * MANAGE_SHIFTS 無しの DEPUTY_ADMIN  200  403 COMMON_002  403 COMMON_002  403 COMMON_002（一般メンバーと同じ。閲覧切替でも広がらない）
+ * SYSTEM_ADMIN(チームロール無し) 部外者と同じ（CMP-261125-2114: SYSTEM_ADMIN を特別扱いしない）。一覧 403／作成 403／更新・削除 404
  * user_roles のみの ADMIN     403 COMMON_002(※) 201           200              204
  * 対象不在(position)          (n/a)           (n/a)           404 SHIFT_004    404 SHIFT_004
  * 親だけ不在                  (n/a: ポジションは shift 内に親を持たない)
@@ -50,7 +49,7 @@ public class ShiftPositionFacade {
     private static final String TEAM = "TEAM";
 
     private final ShiftPositionService positionService;
-    private final ScopeConcealingAccessGate accessGate;
+    private final ShiftManageAccessGate manageGate;
     private final AccessControlService accessControlService;
 
     /**
@@ -67,7 +66,7 @@ public class ShiftPositionFacade {
     }
 
     /**
-     * ポジションを作成する（当該チームの ADMIN 以上）。
+     * ポジションを作成する（当該チームの ADMIN／MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
      *
      * @param teamId チームID
      * @param req    作成リクエスト
@@ -81,7 +80,7 @@ public class ShiftPositionFacade {
     }
 
     /**
-     * ポジションを更新する（当該チームの ADMIN 以上）。
+     * ポジションを更新する（当該チームの ADMIN／MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
      *
      * @param positionId ポジションID
      * @param req        更新リクエスト
@@ -90,34 +89,32 @@ public class ShiftPositionFacade {
      */
     public ShiftPositionResponse updatePosition(Long positionId, UpdatePositionRequest req, Long userId) {
         ShiftPositionService.PositionScope scope = positionService.resolvePositionScope(positionId);
-        accessGate.requireAdminOrConceal(userId, scope.teamId(), TEAM, ShiftErrorCode.SHIFT_POSITION_NOT_FOUND);
+        manageGate.requireManageOrConceal(userId, scope.teamId(), ShiftErrorCode.SHIFT_POSITION_NOT_FOUND);
         return positionService.updatePosition(positionId, req);
     }
 
     /**
-     * ポジションを削除する（当該チームの ADMIN 以上）。
+     * ポジションを削除する（当該チームの ADMIN／MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
      *
      * @param positionId ポジションID
      * @param userId     操作者ユーザーID
      */
     public void deletePosition(Long positionId, Long userId) {
         ShiftPositionService.PositionScope scope = positionService.resolvePositionScope(positionId);
-        accessGate.requireAdminOrConceal(userId, scope.teamId(), TEAM, ShiftErrorCode.SHIFT_POSITION_NOT_FOUND);
+        manageGate.requireManageOrConceal(userId, scope.teamId(), ShiftErrorCode.SHIFT_POSITION_NOT_FOUND);
         positionService.deletePosition(positionId);
     }
 
     /**
-     * 管理操作の per-scope 認可（SYSTEM_ADMIN 短絡 or 当該チームの ADMIN/DEPUTY_ADMIN）。
+     * 管理操作の per-scope 認可（当該チームの ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
+     * {@code ?teamId=} 直接指定のため、越境・権限不足とも 403（{@code COMMON_002}）。
      *
      * @param teamId 対象チームID
      * @param userId 操作者ユーザーID
      * @throws BusinessException 権限が無い場合（COMMON_002 / 403）
      */
     private void checkTeamAdminAccess(Long teamId, Long userId) {
-        if (accessControlService.isSystemAdmin(userId)) {
-            return;
-        }
-        accessControlService.checkAdminOrAbove(userId, teamId, TEAM);
+        manageGate.requireManage(userId, teamId);
     }
 
     /**
@@ -128,9 +125,6 @@ public class ShiftPositionFacade {
      * @throws BusinessException メンバーでない場合、または SUPPORTER の場合（COMMON_002 / 403）
      */
     private void checkTeamMemberAccess(Long teamId, Long userId) {
-        if (accessControlService.isSystemAdmin(userId)) {
-            return;
-        }
         if (!accessControlService.isMember(userId, teamId, TEAM)
                 || accessControlService.isSupporter(userId, teamId, TEAM)) {
             throw new BusinessException(CommonErrorCode.COMMON_002);

@@ -397,12 +397,12 @@ class ShiftChangeRequestScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("SYSTEM_ADMINも本人でなければ403（SHIFT_019）で、依頼の status・version は変わらない")
-        void SYSTEM_ADMINも本人でなければ403でDB不変() throws Exception {
+        @DisplayName("チームロールを持たない SYSTEM_ADMIN は部外者と同じ404（SHIFT_030。CMP-261125-2114）で、依頼の status・version は変わらない")
+        void SYSTEM_ADMINは部外者と同じ404でDB不変() throws Exception {
             setAuth(systemAdminId);
             mockMvc.perform(delete("/api/v1/shifts/change-requests/{id}", myRequestId))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.error.code").value("SHIFT_019"));
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("SHIFT_030"));
             em.flush();
             em.clear();
             ShiftChangeRequestEntity after = changeRequestRepository.findById(myRequestId).orElseThrow();
@@ -540,18 +540,19 @@ class ShiftChangeRequestScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-3: user_roles のみの ADMIN は一覧(全件)・審査が許可、取下げは本人以外なので SHIFT_019、作成は所属者として403（404に化けない）")
+        @DisplayName("AC-3（CMP-261125-2114 で改訂）: user_roles のみの ADMIN（在籍なし）は一覧・審査とも所属者として403（404に化けない）、取下げは本人以外なので SHIFT_019、作成も403")
         void AC3_userRolesOnlyAdmin() throws Exception {
             setAuth(userRolesOnlyAdminAId);
             mockMvc.perform(get("/api/v1/shifts/change-requests")
                             .param("scheduleId", scheduleAId.toString()))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.length()").value(2));
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error.code").value("COMMON_002"));
             mockMvc.perform(patch("/api/v1/shifts/change-requests/{id}/review", myRequestId)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(
                                     Map.of("decision", "ACCEPTED", "reviewComment", "x", "version", 0))))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error.code").value("COMMON_002"));
             mockMvc.perform(delete("/api/v1/shifts/change-requests/{id}", othersRequestId))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.error.code").value("SHIFT_019"));
@@ -560,29 +561,31 @@ class ShiftChangeRequestScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-5: 非メンバーの SYSTEM_ADMIN は一覧・審査できる")
-        void AC5_systemAdminは通る() throws Exception {
+        @DisplayName("AC-5（CMP-261125-2114 で改訂）: チームロールを持たない SYSTEM_ADMIN は一覧も審査も部外者と同じ 404")
+        void AC5_systemAdminは短絡で通らない() throws Exception {
             setAuth(systemAdminId);
             mockMvc.perform(get("/api/v1/shifts/change-requests")
                             .param("scheduleId", scheduleAId.toString()))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("SHIFT_001"));
             mockMvc.perform(patch("/api/v1/shifts/change-requests/{id}/review", myRequestId)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(
                                     Map.of("decision", "ACCEPTED", "reviewComment", "x", "version", 0))))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("SHIFT_030"));
         }
 
         @Test
-        @DisplayName("非メンバーの SYSTEM_ADMIN が変更依頼を作成すると 403 COMMON_002 で、件数が増えない")
-        void 非メンバーSYSTEM_ADMINの作成は403で件数不変() throws Exception {
+        @DisplayName("チームロールを持たない SYSTEM_ADMIN が変更依頼を作成すると部外者と同じ 404 SHIFT_001（CMP-261125-2114）で、件数が増えない")
+        void 非メンバーSYSTEM_ADMINの作成は404で件数不変() throws Exception {
             long before = changeRequestRepository.count();
             setAuth(systemAdminId);
             MvcResult res = call("create", scheduleAId);
-            org.assertj.core.api.Assertions.assertThat(res.getResponse().getStatus()).isEqualTo(403);
+            org.assertj.core.api.Assertions.assertThat(res.getResponse().getStatus()).isEqualTo(404);
             org.assertj.core.api.Assertions.assertThat(
                     (String) JsonPath.read(res.getResponse().getContentAsString(), "$.error.code"))
-                    .isEqualTo("COMMON_002");
+                    .isEqualTo("SHIFT_001");
             em.flush();
             em.clear();
             org.assertj.core.api.Assertions.assertThat(changeRequestRepository.count()).isEqualTo(before);

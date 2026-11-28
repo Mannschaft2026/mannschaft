@@ -42,7 +42,7 @@ public class ShiftHourlyRateDeletionFacade {
         Long targetUserId = entity.getUserId();
         Long teamId = entity.getTeamId();
 
-        hourlyRateAuthorizer.checkHourlyRateAccess(currentUserId, targetUserId, teamId);
+        hourlyRateAuthorizer.checkHourlyRateDeleteAccess(currentUserId, targetUserId, teamId);
 
         hourlyRateRepository.deleteById(rateId);
         log.info("時給設定削除: id={}, userId={}, teamId={}", rateId, targetUserId, teamId);

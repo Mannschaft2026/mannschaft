@@ -130,6 +130,14 @@ watch(targetRole, () => {
   selected.value = next
 })
 
+/**
+ * 「シフトの管理」を対象ロールがメンバーのグループに含めたとき。BE の ShiftManageAccessGate は MEMBER に MANAGE_SHIFTS が
+ * 付いていても 403 にする（副管理者のグループでのみ有効）ので、効かない組合せであることを注記する（保存は止めない）。
+ */
+const shiftRoleNotice = computed(() =>
+  targetRole.value === 'MEMBER'
+  && catalog.value.some(i => i.name === 'MANAGE_SHIFTS' && selected.value.has(i.id)))
+
 const valid = computed(() => name.value.trim().length > 0 && selected.value.size > 0 && !roleConflict.value)
 
 async function save() {
@@ -245,6 +253,10 @@ async function save() {
 
         <Message v-if="roleConflict" severity="warn" data-testid="pf-role-conflict">
           {{ t('teamAffiliations.group_form.role_conflict') }}
+        </Message>
+
+        <Message v-if="shiftRoleNotice" severity="warn" data-testid="pf-shift-role-notice">
+          {{ t('teamAffiliations.group_form.shift_role_notice') }}
         </Message>
 
         <Message v-if="lockedByAdminOnly" severity="warn" data-testid="pf-admin-only-locked">

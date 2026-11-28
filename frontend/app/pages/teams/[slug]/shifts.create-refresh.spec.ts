@@ -29,11 +29,13 @@ const ownedMounts = new Map<VueWrapper, HTMLElement>()
 mockNuxtImport('useRoute', () => () => route)
 mockNuxtImport('useTeamShellContext', () => () => ({ team: shellTeam }))
 mockNuxtImport('useTeamApi', () => () => ({ getTeam: vi.fn() }))
-mockNuxtImport('useRoleAccess', () => () => ({
-  isAdmin: ref(role.value === 'ADMIN'),
-  isAdminOrDeputy: ref(['ADMIN', 'DEPUTY_ADMIN'].includes(role.value)),
-  roleName: role,
-  loadPermissions: vi.fn(async () => undefined),
+// 判定本体は useShiftPermission（別 spec で検証済み）。ここでは role に応じた結果だけを返す。
+mockNuxtImport('useShiftPermission', () => () => ({
+  canManageShift: ref(role.value === 'ADMIN'),
+  isScopeAdmin: ref(role.value === 'ADMIN'),
+  isMember: ref(['ADMIN', 'DEPUTY_ADMIN', 'MEMBER'].includes(role.value)),
+  isDeputyWithoutManage: ref(false),
+  loadPermissions: vi.fn(async () => ({ ok: true })),
 }))
 mockNuxtImport('useShiftApi', () => () => ({ listSchedules, createSchedule }))
 mockNuxtImport('useDatetime', () => () => ({ userTimezone: ref('Asia/Tokyo'), formatDate: (value: string) => value }))

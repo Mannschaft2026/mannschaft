@@ -81,8 +81,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * <ul>
  *   <li>同じチームの権限不足（一般メンバーの管理操作・SUPPORTER の参照）は 403 COMMON_002（AC-2）。</li>
  *   <li>teamId 直接指定（S1・S3）の越境・不在は 403 COMMON_002（AC-6）。</li>
- *   <li>SYSTEM_ADMIN（非メンバー・メンバーの両方）は全 EP で是正前どおり通る（殿の判断 5。新規許可なし）。
- *       存在しない teamId に SA が作成できる件は別課題（W6a では現行維持）。</li>
+ *   <li>SYSTEM_ADMIN（非メンバー・メンバーの両方）は、CMP-261125-2114 で短絡を廃止した。チームロールを持たない
+ *       SYSTEM_ADMIN は非メンバーなら他の部外者と同じ応答、メンバーなら一般メンバーと同じ応答。</li>
  *   <li>PDF の越境は 404 SHIFT_001 のまま（殿の判断 2）。</li>
  *   <li>user_roles だけを持つ ADMIN（memberships の在籍行なし）: 詳細（S2）・枠一覧（L1）・管理系は通し、
  *       一覧（S1）と PDF は是正前どおり 403 COMMON_002（殿の判断 4＝退行させない。許可は広げない）。</li>
@@ -226,11 +226,12 @@ class ShiftScheduleSlotFacadeContractIT extends AbstractMySqlIntegrationTest {
     /** ep_tables_w6.md §1.2・§1.3 と殿の判断（2026-10-03）から導く期待値。 */
     static Expect expected(Ep ep, Actor actor) {
         Expect forbidden = Expect.error(403, CommonErrorCode.COMMON_002);
-        if (actor.systemAdmin()) {
-            // 殿の判断 5: SA は是正前から全 EP で通っている（新規許可なし）。
-            return Expect.ok(ep.successStatus);
+        if (actor == Actor.SYSTEM_ADMIN_MEMBER_A) {
+            // CMP-261125-2114: SYSTEM_ADMIN の短絡は廃止。チームロールを持たない SYSTEM_ADMIN は在籍していても一般メンバーと同じ。
+            return ep.access == Access.READ ? Expect.ok(ep.successStatus) : forbidden;
         }
-        if (actor.crossBorder()) {
+        if (actor.crossBorder() || actor == Actor.SYSTEM_ADMIN) {
+            // 非メンバーの SYSTEM_ADMIN も他の部外者と同じ応答（CMP-261125-2114）。
             // teamId 直接指定（S1・S3）は隠さない（AC-6）。それ以外は ID 起点の不在コードへ畳む（remind も・殿の判断 1）。
             return ep.kind == Kind.TEAM ? forbidden : Expect.error(404, ep.notFound);
         }
@@ -238,12 +239,9 @@ class ShiftScheduleSlotFacadeContractIT extends AbstractMySqlIntegrationTest {
             case ADMIN_A:
                 return Expect.ok(ep.successStatus);
             case USER_ROLES_ONLY_ADMIN_A:
-                // 殿の判断 4（退行させない＝是正前の挙動を保つ）: 一覧（S1）と PDF は是正前から在籍を要求して 403。
-                // 許可を広げないので 403 のまま固定する（AC-16）。それ以外（S2・L1・管理系）は是正前どおり通す。
-                if (ep == Ep.S1_LIST || ep == Ep.S1_LIST_PERIOD || ep.pdf()) {
-                    return forbidden;
-                }
-                return Expect.ok(ep.successStatus);
+                // CMP-261125-2114: 在籍の無い user_roles のみの ADMIN は管理者として扱わず、一般メンバーとしても扱わない。
+                // 同チーム所属者の権限不足として全 EP で 403（越境の 404 には化けない）。
+                return forbidden;
             case MEMBER_A:
                 return ep.access == Access.READ ? Expect.ok(ep.successStatus) : forbidden;
             case SUPPORTER_A:
@@ -385,8 +383,8 @@ class ShiftScheduleSlotFacadeContractIT extends AbstractMySqlIntegrationTest {
         if (ep.kind == Kind.TEAM) {
             assertResponse(perform(Actor.ADMIN_A, ep, missing), ep, Expect.error(403, CommonErrorCode.COMMON_002),
                     "管理者・不在 teamId");
-            // 殿の判断 5: SA は是正前どおり（一覧は空で 200、作成は不在 teamId でも 201 ＝別課題で台帳起票候補）。
-            assertResponse(perform(Actor.SYSTEM_ADMIN, ep, missing), ep, Expect.ok(ep.successStatus),
+            // CMP-261125-2114: SA の短絡は廃止。不在 teamId でも他の部外者と同じ 403（一覧・作成とも）。
+            assertResponse(perform(Actor.SYSTEM_ADMIN, ep, missing), ep, Expect.error(403, CommonErrorCode.COMMON_002),
                     "SA・不在 teamId");
             return;
         }
@@ -564,19 +562,14 @@ class ShiftScheduleSlotFacadeContractIT extends AbstractMySqlIntegrationTest {
     // ═════════════════════════════════════════════════════════════════════
 
     @Test
-    @DisplayName("殿の判断 4: user_roles のみの ADMIN は詳細・枠一覧で 403 にならず未公開も見える。一覧・PDF は是正前どおり 403")
-    void userRolesのみのADMINは閲覧系で403にならない() throws Exception {
+    @DisplayName("CMP-261125-2114（殿の判断 4 を改訂）: user_roles のみの ADMIN（退会済みでロールだけ残った。在籍なし）は未公開の詳細・枠一覧・一覧・PDF のいずれも所属者向けの 403")
+    void userRolesのみのADMINは在籍が無ければ閲覧系も403() throws Exception {
         em.createNativeQuery("UPDATE shift_schedules SET status = 'DRAFT', published_at = NULL WHERE id = :id")
                 .setParameter("id", scheduleAId).executeUpdate();
         em.flush();
         em.clear();
-        // 是正前に通していた閲覧（退行させない）。未公開でも管理者として見える（是正前の isPrivilegedViewer と同じ）。
-        for (Ep ep : List.of(Ep.S2_GET, Ep.L1_LIST)) {
-            assertResponse(perform(Actor.USER_ROLES_ONLY_ADMIN_A, ep, targetId(ep)), ep, Expect.ok(200),
-                    ep + " user_roles のみの ADMIN・未公開");
-        }
-        // 是正前から在籍を要求していた閲覧（許可を広げない＝AC-16）。
-        for (Ep ep : List.of(Ep.S1_LIST, Ep.P1_PDF_TEAM)) {
+        // ADMIN の判定は在籍を問わないため、管理者の形の閲覧にも在籍を要求する。越境の 404 には化けない。
+        for (Ep ep : List.of(Ep.S2_GET, Ep.L1_LIST, Ep.S1_LIST, Ep.P1_PDF_TEAM)) {
             assertResponse(perform(Actor.USER_ROLES_ONLY_ADMIN_A, ep, targetId(ep)), ep,
                     Expect.error(403, CommonErrorCode.COMMON_002), ep + " user_roles のみの ADMIN");
         }
@@ -613,7 +606,7 @@ class ShiftScheduleSlotFacadeContractIT extends AbstractMySqlIntegrationTest {
         assertThat(member.getResponse().getStatus()).isEqualTo(200);
         assertThat((Boolean) JsonPath.read(member.getResponse().getContentAsString(), "$.data[0].assignmentMasked"))
                 .isTrue();
-        for (Actor actor : List.of(Actor.ADMIN_A, Actor.USER_ROLES_ONLY_ADMIN_A, Actor.SYSTEM_ADMIN)) {
+        for (Actor actor : List.of(Actor.ADMIN_A)) {
             MvcResult admin = perform(actor, Ep.L1_LIST, targetId(Ep.L1_LIST));
             assertThat(admin.getResponse().getStatus()).as(actor.name()).isEqualTo(200);
             List<Object> assigned = JsonPath.read(admin.getResponse().getContentAsString(),
