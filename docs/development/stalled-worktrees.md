@@ -12,7 +12,7 @@
 
 ## 運用ルール
 
-- 台帳（`docs/task-list.md` の索引と `docs/task-list/YYYY-MM.md` の月別ファイル）への行の追加・更新を抱えた worktree は、新規行を ID の月のファイル末尾へ追加する形（旧配置の `docs/task-list.md` 末尾追記なら `node scripts/task-list-ledger.mjs port-diff <base> <head>` で移す）に直してから push する。
+- 台帳（`docs/task-list.md` の索引と `docs/task-list/YYYY-MM.md` の月別ファイル）への行の追加・更新を抱えた worktree は、月別ファイル・索引の直接編集を `git checkout origin/main -- docs/task-list.md docs/task-list/` の要領で main に戻し、同じ内容を `node scripts/task-list-ledger.mjs add "<7列行>"` / `update <CMP-ID> --set <列名>=<値>` の申告（`docs/task-list/changes/`）で作り直してから push する（直接編集のまま push すると PR ゲートが赤にする。予約済み等で自動修復の対象になれば bot が申告へ変換する）。古い申告が孤児・fork で赤なら `node scripts/task-list-ledger.mjs rebase <申告ファイル>` で base を取り直す。
 
 1. **着手するときは、その行の「状態」を「再開中」に更新する。** 同じ行を並行セッションが二重に再開しないための宣言である（横展開型の戦役の担当重複防止と同じ作法）。
 2. **決着したら worktree を撤去する。** 決着とは「再開して PR マージ」「既存 PR へ統合」「破棄（理由を添えてマスター承認）」のいずれかで、状態を「決着」にし、証拠（PR 番号または破棄理由と承認）を「次の一手」列に書き添える。

@@ -13,7 +13,8 @@
 //
 // 使い方: node scripts/task-list-structure-check.mjs <task-list.md のパス> [--base <ref|dir>] [--merge-base <ref|dir>]
 //   月別ファイル・申告（task-list/changes/）は索引と同じディレクトリの task-list/ から読む。
-//   --base を付けると仮想 head の等式・連鎖検査（checkVirtualHead）も行う。直接編集は警告（exit 0）、申告の改変・削除・連鎖違反は exit 1。
+//   --base を付けると仮想 head の等式・連鎖検査（checkVirtualHead）も行う。申告の改変・削除・連鎖違反と月別ファイルの直接編集（段3 で施行）は exit 1。
+//   --allow-direct-edit は互換期間（段1c〜段3）の挙動で、直接編集を警告（exit 0）に留める。
 // 違反・ファイル不在・空・走査不能はすべて理由を出力して exit 1（例外の stack で落とさない）。
 // 依存パッケージなし（GitHub ランナー既定の Node で動く）。
 
@@ -175,6 +176,13 @@ export function checkTaskListStructure(input) {
   return { ok: errors.length === 0, errors, stats };
 }
 
+/**
+ * 月別ファイルを直接編集した PR への案内（段3 の施行後、直接編集は赤。CMP-261124-1222 ④ P2-4）。
+ * PR ゲート・merge_group・自動修復のコメントで同じ文言を使う。
+ */
+export const DIRECT_EDIT_GUIDANCE = '行の追加は `node scripts/task-list-ledger.mjs add "<7列行>"`、更新は `node scripts/task-list-ledger.mjs update <CMP-ID> --set <列名>=<値>` で申告（docs/task-list/changes/）を作ること（月別ファイルへの反映は台帳 bot の畳み込みが行う）。'
+  + '月別ファイル・索引を直接編集した旧手順の PR は、台帳の自動修復（task-list-conflict-autofix）が申告へ変換して main の月別ファイルに戻す（変換できない差分は PR にコメントする）。';
+
 /** 名前の別名（全ファイル横断であることを呼び出し側で明示したいとき）。 */
 export const checkLedger = checkTaskListStructure;
 
@@ -189,10 +197,10 @@ export const checkLedger = checkTaskListStructure;
 //   D- の申告は「月別ファイルへ畳み込まれた」ときだけ消してよい。畳み込みが正しければ左辺（消した申告も適用）と右辺（月別に反映済み）が一致する。
 //   （正本の記述は「changes(mb)∪D+ ∖D-」だが、∖D- を左辺から除くと正しい畳み込みが常に不一致になるため、D- は左辺に残して評価する。）
 // - 結果種別: 違反（violations）= 申告の改変（change-modified）・畳み込みでない申告の削除（change-deleted）・PR が足した申告の連鎖違反
-//   （fork / orphan / duplicate / 形式）。警告（warnings）= 月別ファイルの直接編集（direct-edit。互換期間 P2-4 のあいだは警告のみ。
-//   段3 で違反へ上げる）。等式が成り立ち申告を消している PR は fold（畳み込み）と分類する（作者が bot かは PR ゲート側で見る）。
+//   （fork / orphan / duplicate / 形式）・月別ファイルの直接編集（direct-edit。段3 で施行。enforceDirectEdit: false＝互換期間 P2-4 の
+//   挙動では警告 warnings に回す）。等式が成り立ち申告を消している PR は fold（畳み込み）と分類する（作者が bot かは PR ゲート側で見る）。
 // - 連鎖は仮想マージ month(base)＋changes(base) ∪ D+ で判定し、D+ に関わる問題だけを違反にする（main の前進だけでは古い PR を赤にしない）。
-// - 月別ファイルの行以外（見出し・前置き・表ヘッダ）は変えてはならない。新しい月のファイルは雛形（newFileSkeleton）と同じでなければ警告。
+// - 月別ファイルの行以外（見出し・前置き・表ヘッダ）は変えてはならない。新しい月のファイルは雛形（newFileSkeleton）と同じでなければ direct-edit。
 
 function changeMapOf(ledger) {
   return new Map((ledger.changes?.entries ?? []).map((e) => [e.path, e]));
@@ -226,14 +234,21 @@ function nonRowLines(content, path) {
 
 /**
  * 仮想 head の等式・連鎖を検査する。引数はいずれも readLedger の結果（既定・raw どちらでもよい。rawFiles と changes を使う）。
+ * enforceDirectEdit（既定 true＝段3 の施行後）: 月別ファイルの直接編集を違反にする。false は互換期間（段1c〜段3）の挙動で警告のみ。
+ *   分岐点・base・head のどれも旧単一ファイル配置のとき（新配置の main と無関係な台帳）は施行しない。
  * @returns {{ ok: boolean, violations: {kind: string, path?: string, message: string}[], warnings: {kind: string, path?: string, message: string}[], fold: boolean, addedChanges: string[], removedChanges: string[], modifiedChanges: string[] }}
  */
-export function checkVirtualHead({ mergeBase, base = mergeBase, head }) {
+export function checkVirtualHead({ mergeBase, base = mergeBase, head, enforceDirectEdit = true }) {
   const mbC = changeMapOf(mergeBase);
   const baseC = changeMapOf(base);
   const headC = changeMapOf(head);
   const violations = [];
   const warnings = [];
+  // 旧単一ファイル配置どうし（月別ファイルも申告の置き場も無い台帳）では直接編集が唯一の手段なので施行しない（main は新配置）。
+  const enforce = enforceDirectEdit && [mergeBase, base, head].some((l) => l.layout === 'split');
+  const directEdit = (message) => (enforce
+    ? violations.push({ kind: 'direct-edit', message: message + DIRECT_EDIT_GUIDANCE })
+    : warnings.push({ kind: 'direct-edit', message: message + '（互換期間のため警告のみ）' }));
   const added = [...headC.keys()].filter((p) => !mbC.has(p)).sort();
   const removed = [...mbC.keys()].filter((p) => !headC.has(p)).sort();
   const modified = [...headC.keys()].filter((p) => mbC.has(p) && mbC.get(p).content !== headC.get(p).content).sort();
@@ -249,7 +264,7 @@ export function checkVirtualHead({ mergeBase, base = mergeBase, head }) {
   if (diff.length && removed.length) {
     violations.push({ kind: 'change-deleted', path: removed[0], message: removed.join(', ') + ': 申告の削除（change-deleted）: 消した申告が月別ファイルへ正しく畳み込まれていない（実効台帳が変わる ID: ' + shown + '）。申告は畳み込み以外で消さないこと。' });
   } else if (diff.length) {
-    warnings.push({ kind: 'direct-edit', message: '月別ファイルの直接編集（direct-edit）: 実効台帳が変わる ID: ' + shown + '。行の追加・更新は申告（docs/task-list/changes/）で行うこと（互換期間のため警告のみ）。' });
+    directEdit('月別ファイルの直接編集（direct-edit）: 実効台帳が変わる ID: ' + shown + '。行の追加・更新は申告（docs/task-list/changes/）で行うこと。');
   }
   const mbMonths = monthFiles(mergeBase);
   const headMonths = monthFiles(head);
@@ -262,7 +277,7 @@ export function checkVirtualHead({ mergeBase, base = mergeBase, head }) {
     else if (after.join('\n') !== before.join('\n')) nonRowChanged.push(path);
   }
   if (nonRowChanged.length) {
-    warnings.push({ kind: 'direct-edit', message: '月別ファイルの行以外の変更（direct-edit）: ' + nonRowChanged.join(', ') + '。月別ファイルの見出し・表ヘッダは変えないこと（互換期間のため警告のみ）。' });
+    directEdit('月別ファイルの行以外の変更（direct-edit）: ' + nonRowChanged.join(', ') + '。月別ファイルの見出し・表ヘッダは変えないこと。');
   }
   const addedSet = new Set(added);
   const virtualMerge = applyChanges(base.rawFiles ?? base.files, base.layout, [...baseC.values(), ...addedEntries.filter((e) => !baseC.has(e.path))]);
@@ -282,16 +297,17 @@ function readerFor(spec) {
 
 /** CLI 本体。終了コードを返す（0: 問題なし・警告のみ / 1: 違反・読めない）。 */
 export async function main(argv, out = console.log, err = console.error) {
-  const opts = { base: null, mergeBase: null };
+  const opts = { base: null, mergeBase: null, allowDirectEdit: false };
   const positional = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--base') opts.base = argv[++i] ?? null;
     else if (argv[i] === '--merge-base') opts.mergeBase = argv[++i] ?? null;
+    else if (argv[i] === '--allow-direct-edit') opts.allowDirectEdit = true;
     else positional.push(argv[i]);
   }
   const [filePath] = positional;
   if (!filePath || (argv.includes('--base') && !opts.base) || (argv.includes('--merge-base') && !opts.mergeBase)) {
-    err('使い方: node scripts/task-list-structure-check.mjs <docs/task-list.md のパス> [--base <ref|dir>] [--merge-base <ref|dir>]');
+    err('使い方: node scripts/task-list-structure-check.mjs <docs/task-list.md のパス> [--base <ref|dir>] [--merge-base <ref|dir>] [--allow-direct-edit]');
     return 1;
   }
   let ledger;
@@ -307,7 +323,7 @@ export async function main(argv, out = console.log, err = console.error) {
     try {
       const base = await readLedger(readerFor(opts.base), { requireRows: false });
       const mergeBase = opts.mergeBase ? await readLedger(readerFor(opts.mergeBase), { requireRows: false }) : base;
-      virtualHead = checkVirtualHead({ mergeBase, base, head: ledger });
+      virtualHead = checkVirtualHead({ mergeBase, base, head: ledger, enforceDirectEdit: !opts.allowDirectEdit });
     } catch (error) {
       err('比較元の台帳を読めなかった（--base ' + opts.base + (opts.mergeBase ? ' --merge-base ' + opts.mergeBase : '') + '）: ' + error.message);
       return 1;

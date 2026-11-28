@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
@@ -405,15 +408,90 @@ test('AC-6（PR 側・bot）: bot の正しい畳み込みは緑で、警告も�
   assert.ok(infos.some((m) => /畳み込み|fold/.test(m)), infos.join('\n'));
 });
 
-test('AC-6 / P2-4（PR 側・人・互換期間）: 月別ファイルの直接編集は緑のまま notice（警告）で、作者が bot でないことを示す', async () => {
+test('AC-6 / P2-4（PR 側・人・施行後）: 月別ファイルの直接編集は赤で、申告 CLI（add / update）と自動修復を案内する', async () => {
   const base = ledgerFiles([A0]);
   const head = ledgerFiles([B0]);
-  const { failed, infos } = await runGate({ files: base, refs: { head }, prFiles: docsOnly('docs/task-list/2026-11.md') });
-  assert.deepEqual(failed, []);
-  assert.ok(infos.some((m) => /direct-edit/.test(m)), infos.join('\n'));
-  assert.ok(infos.some((m) => m.includes('someone') && m.includes('mannschaft-ledger-bot[bot] でない')), infos.join('\n'));
+  const { failed } = await runGate({ files: base, refs: { head }, prFiles: docsOnly('docs/task-list/2026-11.md') });
+  const text = failed.join('\n');
+  assert.match(text, /direct-edit/);
+  assert.ok(text.includes('someone') && text.includes('mannschaft-ledger-bot[bot]'), text);
+  assert.match(text, /node scripts\/task-list-ledger\.mjs add/);
+  assert.match(text, /node scripts\/task-list-ledger\.mjs update/);
+  assert.match(text, /自動修復/);
 });
 
+// ---------------------------------------------------------------------------
+// AC-6 の表（施行後）: 違反種別 × PR 側 / merge_group 側 × 人 / bot の各セルを独立に試す。
+// merge_group では PR の作者を取らない（設計）: queue に入れるのは必須チェック Task-List PR Gate が PR 側で緑の head だけで、
+// 作者の判定（月別ファイルを変えてよいのは台帳 bot の畳み込みだけ）は PR 側で済んでいる前提とし、merge_group 側は
+// base_sha と group head の等式・連鎖だけで判定する（作者に依らない）。よって merge_group 側の「人／bot」は同じ入力・同じ期待結果になり、
+// 人の畳み込み（等式は正しいが作者が bot でない）だけは merge_group 側では緑・PR 側で赤（PR 側で止まるので queue に入らない）。
+// ---------------------------------------------------------------------------
+
+const AC6_CHANGE = chName(T, '20261127T010000Z');
+const AC6_CELLS = [
+  // [種別, base の台帳, head の台帳, PR 側の期待（人）, PR 側の期待（bot）, merge_group 側の期待, 赤の識別子]
+  ['月別ファイルの直接編集', ledgerFiles([A0]), ledgerFiles([B0]), 'red', 'red', 'red', /direct-edit/],
+  ['申告の改変', ledgerFiles([A0], { [AC6_CHANGE]: chUpd(A0, B0, T) }), ledgerFiles([A0], { [AC6_CHANGE]: chUpd(A0, C0, T) }), 'red', 'red', 'red', /change-modified/],
+  ['畳み込みでない申告の削除', ledgerFiles([A0], { [AC6_CHANGE]: chUpd(A0, B0, T) }), ledgerFiles([A0]), 'red', 'red', 'red', /change-deleted/],
+  ['不正な畳み込み（申告を消し、月別へ別の内容を書く）', ledgerFiles([A0], { [AC6_CHANGE]: chUpd(A0, B0, T) }), ledgerFiles([C0]), 'red', 'red', 'red', /change-deleted/],
+  ['正しい畳み込み', ledgerFiles([A0], { [AC6_CHANGE]: chUpd(A0, B0, T) }), ledgerFiles([B0]), 'red', 'green', 'green', /change-deleted/],
+];
+
+for (const [kind, baseFiles, headFiles, human, bot, , marker] of AC6_CELLS) {
+  for (const [who, author, expected] of [['人', { login: 'someone', type: 'User' }, human], ['bot', BOT, bot]]) {
+    test('AC-6 表（PR 側・' + who + '）: ' + kind + ' は' + (expected === 'red' ? '赤' : '緑'), async () => {
+      const prFiles = docsOnly(...new Set([...Object.keys(baseFiles), ...Object.keys(headFiles)].filter((p) => baseFiles[p] !== headFiles[p])));
+      const { failed, infos } = await runGate({ files: baseFiles, refs: { head: headFiles }, author, prFiles });
+      if (expected === 'red') assert.ok(failed.some((m) => marker.test(m)), failed.join('\n'));
+      else {
+        assert.deepEqual(failed, []);
+        assert.ok(!infos.some((m) => /direct-edit/.test(m)), infos.join('\n'));
+      }
+    });
+  }
+}
+
+/** merge_group workflow の検査コマンドを、一時ワークスペース（直下＝信頼 base、.merge-group-head＝group head）で実際に走らせる。 */
+function runMergeGroupCheck(baseFiles, headFiles) {
+  const run = steps(mergeGroupWorkflow).find((step) => /node scripts\/task-list-structure-check\.mjs/.test(step.block));
+  const command = run.block.match(/node (scripts\/task-list-structure-check\.mjs [^\n]+)/)[1].trim().split(/\s+/);
+  const workspace = mkdtempSync(join(tmpdir(), 'task-list-mg-'));
+  try {
+    for (const [p, c] of Object.entries(baseFiles)) { mkdirSync(dirname(join(workspace, p)), { recursive: true }); writeFileSync(join(workspace, p), c); }
+    for (const [p, c] of Object.entries(headFiles)) { const full = join(workspace, '.merge-group-head', p); mkdirSync(dirname(full), { recursive: true }); writeFileSync(full, c); }
+    const script = fileURLToPath(new URL('../' + command[0], import.meta.url));
+    return spawnSync(process.execPath, [script, ...command.slice(1)], { cwd: workspace, encoding: 'utf8' });
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+}
+
+for (const [kind, baseFiles, headFiles, , , expected, marker] of AC6_CELLS) {
+  for (const who of ['人', 'bot']) {
+    test('AC-6 表（merge_group 側・' + who + '）: ' + kind + ' は' + (expected === 'red' ? '赤' : '緑') + '（作者は PR 側で判定済みの前提で、等式・連鎖だけで判定）', () => {
+      const r = runMergeGroupCheck(baseFiles, headFiles);
+      if (expected === 'red') {
+        assert.equal(r.status, 1, r.stdout + r.stderr);
+        assert.match(r.stderr, marker);
+      } else {
+        assert.equal(r.status, 0, r.stdout + r.stderr);
+        assert.doesNotMatch(r.stdout + r.stderr, /direct-edit/);
+      }
+    });
+  }
+}
+
+test('AC-6（merge_group 側）: 申告の追加だけの group は緑（施行後も申告は通る）', () => {
+  const r = runMergeGroupCheck(ledgerFiles([A0]), ledgerFiles([A0], { [AC6_CHANGE]: chUpd(A0, B0, T) }));
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+});
+
+test('AC-6（merge_group 側）: workflow は直接編集を許す互換フラグ（--allow-direct-edit）を付けない（施行）', () => {
+  const run = steps(mergeGroupWorkflow).find((step) => /node scripts\/task-list-structure-check\.mjs/.test(step.block));
+  assert.doesNotMatch(run.block, /--allow-direct-edit/);
+  assert.doesNotMatch(prWorkflow, /enforceDirectEdit:\s*false/);
+});
 test('AC-6（PR 側・人）: 人の畳み込み（等式は正しいが作者が bot でない申告の削除）は赤', async () => {
   const n = chName(T, '20261127T010000Z');
   const base = ledgerFiles([A0], { [n]: chUpd(A0, B0, T) });
@@ -489,9 +567,10 @@ test('検分 P1: 古い枝が最新 base の行から作った完了 update 申�
   await assert.rejects(runGate({ files: base, refs: { head, ancestor }, prFiles: docsOnly(n) }), /証拠JSONが空または不正/);
 });
 
-test('検分 P1: 月別の直接編集による完了遷移も従来どおり証拠 JSON 無しで赤', async () => {
+test('検分 P1 / 施行後: 月別の直接編集による完了遷移は赤（段3 からは証拠検査より前に direct-edit で止まる）', async () => {
   const done = R(T, '完了', '[証拠](../evidence/' + T + '.json)');
-  await assert.rejects(runGate({ files: ledgerFiles([A0]), refs: { head: ledgerFiles([done]) }, prFiles: docsOnly('docs/task-list/2026-11.md') }), /証拠JSONが空または不正/);
+  const { failed } = await runGate({ files: ledgerFiles([A0]), refs: { head: ledgerFiles([done]) }, prFiles: docsOnly('docs/task-list/2026-11.md') });
+  assert.ok(failed.some((m) => /direct-edit/.test(m)), failed.join('\n'));
 });
 
 for (const [label, extra] of [

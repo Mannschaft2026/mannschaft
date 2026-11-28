@@ -8,13 +8,15 @@
 //   （呼び出しは切られた blob の数だけで申告の件数には依らない。取り直せなければ赤）。申告（16KiB 以下）が切られていれば赤。
 //   GraphQL の失敗（5xx・errors・ref を解決できない）は不在と扱わず例外にする。
 // - 仮想 head の等式・連鎖（task-list-structure-check.mjs の checkVirtualHead）を PR 側の判定に写す:
-//   申告の改変・削除（畳み込み以外）と PR が足した申告の連鎖違反（fork・孤児・重複・形式）は赤、
-//   月別ファイルの直接編集による等式違反は互換期間（P2-4）のため notice（警告）のみ。段3で赤にする。
-// - 月別ファイルを変える PR の作者が台帳 bot（mannschaft-ledger-bot[bot]）かの判定（段3で赤の条件に使う。今は警告文に含めるだけ）。
+//   申告の改変・削除（畳み込み以外）と PR が足した申告の連鎖違反（fork・孤児・重複・形式）は赤。
+//   月別ファイルの直接編集は段3（施行）から赤（等式違反は作者を問わず赤、実効台帳が変わらない編集も作者が台帳 bot でなければ赤）。
+//   赤のメッセージで申告 CLI（node scripts/task-list-ledger.mjs add / update）と自動修復を案内する。
+//   enforceDirectEdit: false は互換期間（段1c〜段3、P2-4）の挙動で notice（警告）のみ（試験で両方の期待結果を固定する）。
+// - 月別ファイルを変える PR の作者が台帳 bot（mannschaft-ledger-bot[bot]）かの判定。
 // PR head のコードは実行しない（本モジュールは信頼 base の checkout から読む）。依存パッケージなし。
 
 import { LEDGER_DIR, LEDGER_INDEX_PATH, CHANGES_DIR, CHANGES_DIR_NAME, applyChanges, extractRows, readLedger } from './task-list-ledger.mjs';
-import { checkVirtualHead } from './task-list-structure-check.mjs';
+import { DIRECT_EDIT_GUIDANCE, checkVirtualHead } from './task-list-structure-check.mjs';
 
 /** 台帳の畳み込み bot（GitHub App）の PR 作者 login。 */
 export const LEDGER_BOT_LOGIN = 'mannschaft-ledger-bot[bot]';
@@ -159,12 +161,13 @@ export function virtualHeadLedger({ mergeBase, base, head }) {
 
 /**
  * PR の台帳変更（申告・月別ファイル）を判定する。引数は readLedger の結果（分岐点・base・head）と最新の PR（user を使う）。
+ * enforceDirectEdit（既定 true＝段3 の施行後）: 月別ファイルの直接編集を赤にする。false は互換期間の挙動（notice のみ）。
  * - 申告の削除は「等式が成り立つ（正しい畳み込み）」かつ「作者が台帳 bot」のときだけ許す。それ以外は赤（change-deleted）。
  * - reader が報告した申告ディレクトリの不正（.md 以外・不正名・ネスト・サイズ・形式・ID 不一致等）は赤。
  * @returns {{ violations: string[], notices: string[], fold: boolean, monthFilesChanged: string[], botAuthor: boolean, addedChanges: string[], removedChanges: string[], virtualHead: object }}
  */
-export function evaluateLedgerChanges({ mergeBase, base, head, pull }) {
-  const result = checkVirtualHead({ mergeBase, base, head });
+export function evaluateLedgerChanges({ mergeBase, base, head, pull, enforceDirectEdit = true }) {
+  const result = checkVirtualHead({ mergeBase, base, head, enforceDirectEdit });
   const monthFilesChanged = changedMonthFiles(mergeBase, head);
   const botAuthor = isLedgerBotAuthor(pull);
   const author = pull?.user?.login ?? '(不明)';
@@ -177,7 +180,9 @@ export function evaluateLedgerChanges({ mergeBase, base, head, pull }) {
     violations.push(result.removedChanges.join(', ') + ': 申告の削除（change-deleted）: 申告を消してよいのは ' + LEDGER_BOT_LOGIN + ' の畳み込みだけ（作者 ' + author + '）。月別ファイルへの反映と申告の削除は台帳 bot に任せること。');
   }
   const notices = result.warnings.map((w) => w.message);
-  if (monthFilesChanged.length && !botAuthor) {
+  if (monthFilesChanged.length && !botAuthor && enforceDirectEdit) {
+    violations.push('月別ファイルの直接編集（direct-edit）: 月別ファイルを変えてよいのは ' + LEDGER_BOT_LOGIN + ' の畳み込みだけ（作者 ' + author + '、変更: ' + monthFilesChanged.join(', ') + '）。' + DIRECT_EDIT_GUIDANCE);
+  } else if (monthFilesChanged.length && !botAuthor) {
     notices.push('月別ファイルを変える PR の作者 ' + author + ' は ' + LEDGER_BOT_LOGIN + ' でない（変更: ' + monthFilesChanged.join(', ')
       + '）。互換期間のため警告のみ。段3から月別ファイルの変更は台帳 bot の畳み込みに限る（行の追加・更新は node scripts/task-list-ledger.mjs add / update で申告を作る）。');
   }

@@ -19,7 +19,8 @@ import {
   isLedgerPath,
 } from './task-list-conflict-autofix.mjs';
 import { readLedger } from './task-list-ledger.mjs';
-import { checkTaskListStructure } from './task-list-structure-check.mjs';
+import { checkTaskListStructure, checkVirtualHead } from './task-list-structure-check.mjs';
+import { createHash } from 'node:crypto';
 
 // CMP-261124-1222: 台帳だけで衝突している PR を union で直して push し、auto-merge を予約し直す自動修復の試験。
 // gh / git は ops を差し替えてモックし、union の効き目だけは実際の git（一時リポジトリ）で確かめる。
@@ -712,8 +713,9 @@ test('統合 AC-7: add/add で同じ ID を両側が別内容で作った → un
       ghOps: { listComments: () => [], comment: (n, body) => { comments.push(body); return { ok: true }; }, enableAutoMerge: () => assert.fail('予約しない') },
       now: NOW, log: () => {}, sleep: async () => {}, checkStructure: checkTaskListStructure,
     });
-    assert.equal(result.outcome, 'structure-ng', JSON.stringify(result));
-    assert.match(result.reason, /重複: CMP-261201-1001/);
+    // 段3: 月別ファイルの直接編集は申告へ変換する。main に同じ ID が別内容で既にある（三者相違）ので人手（AC-12c）
+    assert.equal(result.outcome, 'skip-port-unportable', JSON.stringify(result));
+    assert.match(result.reason, /競合: CMP-261201-1001/);
     assert.equal(sh(repos.origin, 'rev-parse', 'refs/heads/feature/1-x'), repos.featureOid);
   } finally {
     repos.cleanup();
@@ -830,7 +832,7 @@ test('統合 移植: 行削除は変換できない → push せず port-diff �
     assert.equal(result.outcome, 'skip-port-unportable');
     assert.match(result.reason, /削除/);
     assert.equal(env.comments.length, 1);
-    assert.match(env.comments[0], /port-diff/);
+    assert.match(env.comments[0], /task-list-ledger\.mjs add/);
     await processPullRequest(p, env.deps);
     assert.equal(env.comments.length, 1, '同じ head には2回コメントしない');
     assert.equal(sh(repos.origin, 'rev-parse', 'refs/heads/feature/1-x'), before);
@@ -901,5 +903,193 @@ test('統合 移植: 旧配置に重複 ID があれば自動移植せずコメ�
     assert.equal(result.outcome, 'skip-port-unportable');
     assert.match(result.reason, /重複 ID/);
     assert.equal(env.comments.length, 1);
+  } finally { repos.cleanup(); }
+});
+
+
+// ---------------------------------------------------------------------------
+// 段3 planChangePort: 旧手順の PR（月別ファイル・索引を直接編集）を変更申告へ変換する（CMP-261124-1222 ④ AC-12）
+// ---------------------------------------------------------------------------
+
+const CHG = 'docs/task-list/changes/';
+const sha256Row = (line) => 'sha256:' + createHash('sha256').update(line.replace(/\r/g, ''), 'utf8').digest('hex');
+const chAddT = (line, id) => '<!-- ledger-change v1 op=add id=' + id + ' base=none -->\n' + line + '\n';
+const chUpdT = (from, to, id) => '<!-- ledger-change v1 op=update id=' + id + ' base=' + sha256Row(from) + ' -->\n' + to + '\n';
+const splitBase = { [LEDGER_PATH]: splitIndex, 'docs/task-list/2026-11.md': month(row('CMP-261124-0001', '完了'), row('CMP-261124-0002', 'P3 未着手')) };
+
+async function rawTreeLedger(ops, tree) {
+  return readLedger({ listDir: (dir) => ops.listDir(tree, dir), readFile: (p) => ops.readFile(tree, p) }, { requireRows: false, raw: true });
+}
+function changeFilesAt(ops, tree) {
+  return (ops.listDir(tree, 'docs/task-list/changes') ?? []).map((name) => [CHG + name, ops.readFile(tree, CHG + name)]);
+}
+function portEnv2(repos) {
+  const env = portEnv(repos);
+  env.autoMergeCalls = [];
+  env.deps.ghOps.enableAutoMerge = (p, oid) => { env.autoMergeCalls.push(oid); return { ok: true }; };
+  return env;
+}
+const ledgerEditPr = (repos, overrides = {}) => pr({ headRefName: 'feature/1-x', headRefOid: repos.featureOid, mergeable: 'MERGEABLE', timelineItems: { nodes: [] }, author: { login: 'someone' }, files: { totalCount: 1, nodes: [{ path: 'docs/task-list/2026-11.md' }] }, ...overrides });
+
+test('選定 段3: 月別ファイル・索引を変える bot でない PR は mergeable・予約に関係なく対象（trigger=ledger-edit）。bot の PR と台帳を触らない PR は対象外', () => {
+  const human = pr({ number: 1, mergeable: 'MERGEABLE', timelineItems: { nodes: [] }, author: { login: 'someone' }, files: { totalCount: 2, nodes: [{ path: 'docs/task-list/2026-11.md' }, { path: 'scripts/x.mjs' }] } });
+  const index = pr({ number: 2, mergeable: 'UNKNOWN', timelineItems: { nodes: [] }, author: { login: 'someone' }, files: { totalCount: 1, nodes: [{ path: 'docs/task-list.md' }] } });
+  const bot = pr({ number: 3, mergeable: 'CONFLICTING', autoMergeRequest: { enabledAt: 'x' }, author: { login: 'mannschaft-ledger-bot' }, files: { totalCount: 1, nodes: [{ path: 'docs/task-list/2026-11.md' }] } });
+  const untouched = pr({ number: 4, mergeable: 'MERGEABLE', timelineItems: { nodes: [] }, author: { login: 'someone' }, files: { totalCount: 1, nodes: [{ path: 'scripts/x.mjs' }] } });
+  const changesOnly = pr({ number: 5, mergeable: 'MERGEABLE', timelineItems: { nodes: [] }, author: { login: 'someone' }, files: { totalCount: 1, nodes: [{ path: 'docs/task-list/changes/CMP-261124-0001--20261124T000000Z--000001.md' }] } });
+  const tooMany = pr({ number: 6, mergeable: 'MERGEABLE', timelineItems: { nodes: [] }, author: { login: 'someone' }, files: { totalCount: 150, nodes: [{ path: 'scripts/x.mjs' }] } });
+  const conflict = pr({ number: 7, author: { login: 'someone' }, files: { totalCount: 1, nodes: [{ path: 'README.md' }] } });
+  const { candidates, skipped } = selectCandidates([human, index, bot, untouched, changesOnly, tooMany, conflict]);
+  assert.deepEqual(candidates.map((p) => [p.number, p.autofixTrigger]), [[1, 'ledger-edit'], [2, 'ledger-edit'], [6, 'ledger-edit'], [7, 'conflict']]);
+  assert.match(skipped.find((s) => s.number === 3).reason, /台帳 bot/);
+});
+
+test('統合 AC-12a: main が該当行を変えていない旧手順 PR（月別の行更新＋行追加）は申告へ変換し、月別ファイルは main に戻して push する。予約の意思が無ければ予約しない', async () => {
+  const repos = setupReposFiles({
+    base: splitBase,
+    feature: { 'docs/task-list/2026-11.md': month(row('CMP-261124-0001', '完了'), row('CMP-261124-0002', 'P2 実装中'), row('CMP-261124-1001', 'P3 未着手')) },
+    main: { 'docs/task-list/2026-11.md': month(row('CMP-261124-0001', '完了'), row('CMP-261124-0002', 'P3 未着手'), row('CMP-261124-2002', 'P2 未着手')) },
+  });
+  try {
+    const env = portEnv2(repos);
+    ensureUnionAttribute(makeRealGit(repos.runner));
+    const [candidate] = selectCandidates([ledgerEditPr(repos)]).candidates;
+    const result = await processPullRequest(candidate, env.deps);
+    assert.equal(result.outcome, 'fixed', JSON.stringify(result));
+    assert.equal(sh(repos.origin, 'rev-parse', 'refs/heads/feature/1-x'), result.mergeCommit);
+    const mainOid = sh(repos.origin, 'rev-parse', 'refs/heads/main');
+    const rawAfter = await rawTreeLedger(env.ops, result.mergeCommit);
+    const rawMain = await rawTreeLedger(env.ops, mainOid);
+    assert.deepEqual(rawAfter.rawFiles, rawMain.rawFiles, '月別ファイル・索引は main の内容に戻る');
+    const changes = changeFilesAt(env.ops, result.mergeCommit).map(([, c]) => c).sort();
+    assert.deepEqual(changes, [
+      chAddT(row('CMP-261124-1001', 'P3 未着手'), 'CMP-261124-1001'),
+      chUpdT(row('CMP-261124-0002', 'P3 未着手'), row('CMP-261124-0002', 'P2 実装中'), 'CMP-261124-0002'),
+    ].sort(), 'base は分岐点の実効行から計算する');
+    const after = await readTreeLedger(env.ops, result.mergeCommit);
+    assert.deepEqual(after.changes.problems, []);
+    assert.equal(after.rows.find((r) => r.id === 'CMP-261124-0002').line, row('CMP-261124-0002', 'P2 実装中'));
+    assert.ok(after.rows.some((r) => r.id === 'CMP-261124-1001') && after.rows.some((r) => r.id === 'CMP-261124-2002'));
+    // 変換後の head は施行後の PR ゲートの等式（分岐点 = 取り込んだ main）を満たす
+    const mainLedger = await readTreeLedger(env.ops, mainOid);
+    assert.deepEqual(checkVirtualHead({ mergeBase: mainLedger, base: mainLedger, head: after }).violations, []);
+    assert.deepEqual(env.autoMergeCalls, [], 'マージ待ちの意思が無い PR は予約しない');
+    const comment = env.comments.find((b) => b.includes(FIX_MARKER));
+    assert.ok(comment && /申告/.test(comment) && comment.includes('CMP-261124-1001') && comment.includes('CMP-261124-0002'), comment);
+    assert.match(sh(repos.runner, 'log', '-1', '--format=%B', result.mergeCommit), /申告/);
+  } finally { repos.cleanup(); }
+});
+
+test('統合 AC-12b: main が既に同じ結果（同じ行更新）なら申告を作らず、月別ファイルを main に戻すだけ', async () => {
+  const edited = month(row('CMP-261124-0001', '完了'), row('CMP-261124-0002', 'P2 実装中'));
+  const repos = setupReposFiles({ base: splitBase, feature: { 'docs/task-list/2026-11.md': edited }, main: { 'docs/task-list/2026-11.md': edited, 'README.md': 'main\n' } });
+  try {
+    const env = portEnv2(repos);
+    const [candidate] = selectCandidates([ledgerEditPr(repos)]).candidates;
+    const result = await processPullRequest(candidate, env.deps);
+    assert.equal(result.outcome, 'fixed', JSON.stringify(result));
+    assert.deepEqual(changeFilesAt(env.ops, result.mergeCommit), [], '申告不要');
+    const mainOid = sh(repos.origin, 'rev-parse', 'refs/heads/main');
+    assert.deepEqual((await rawTreeLedger(env.ops, result.mergeCommit)).rawFiles, (await rawTreeLedger(env.ops, mainOid)).rawFiles);
+  } finally { repos.cleanup(); }
+});
+
+test('統合 AC-12c: 分岐点・main・PR の三者が異なる行更新はコメントのみで push しない（同じ head に1回だけ）', async () => {
+  const repos = setupReposFiles({
+    base: splitBase,
+    feature: { 'docs/task-list/2026-11.md': month(row('CMP-261124-0001', '完了'), row('CMP-261124-0002', 'P2 実装中')) },
+    main: { 'docs/task-list/2026-11.md': month(row('CMP-261124-0001', '完了'), row('CMP-261124-0002', '完了（main で更新）')) },
+  });
+  try {
+    const env = portEnv2(repos);
+    const before = sh(repos.origin, 'rev-parse', 'refs/heads/feature/1-x');
+    const [candidate] = selectCandidates([ledgerEditPr(repos)]).candidates;
+    const result = await processPullRequest(candidate, env.deps);
+    assert.equal(result.outcome, 'skip-port-unportable', JSON.stringify(result));
+    assert.match(result.reason, /競合.*CMP-261124-0002/);
+    assert.equal(env.comments.length, 1);
+    assert.match(env.comments[0], /task-list-ledger\.mjs (add|update)/);
+    await processPullRequest(candidate, env.deps);
+    assert.equal(env.comments.length, 1, '同じ head には2回コメントしない');
+    assert.equal(sh(repos.origin, 'rev-parse', 'refs/heads/feature/1-x'), before);
+  } finally { repos.cleanup(); }
+});
+
+test('統合 AC-12c: main が既に同じ ID を別内容で追加していれば（三者相違）コメントのみ', async () => {
+  const repos = setupReposFiles({
+    base: splitBase,
+    feature: { 'docs/task-list/2026-12.md': monthDec(row('CMP-261201-1001', 'P3 未着手')) },
+    main: { [CHG + 'CMP-261201-1001--20261201T000000Z--000001.md']: chAddT(row('CMP-261201-1001', 'P2 実装中'), 'CMP-261201-1001') },
+  });
+  try {
+    const env = portEnv2(repos);
+    const [candidate] = selectCandidates([ledgerEditPr(repos, { files: { totalCount: 1, nodes: [{ path: 'docs/task-list/2026-12.md' }] } })]).candidates;
+    const result = await processPullRequest(candidate, env.deps);
+    assert.equal(result.outcome, 'skip-port-unportable', JSON.stringify(result));
+    assert.match(result.reason, /競合.*CMP-261201-1001/);
+  } finally { repos.cleanup(); }
+});
+
+test('統合 AC-12: 行削除・月別ファイルの行以外（見出し）の変更は人手扱いでコメントのみ', async () => {
+  for (const [label, feature, pattern] of [
+    ['行削除', { 'docs/task-list/2026-11.md': month(row('CMP-261124-0001', '完了')) }, /削除/],
+    ['見出しの変更', { 'docs/task-list/2026-11.md': month(row('CMP-261124-0001', '完了'), row('CMP-261124-0002', 'P3 未着手')).replace('# 2026-11', '# 2026-11 改') }, /行以外/],
+  ]) {
+    const repos = setupReposFiles({ base: splitBase, feature, main: { 'README.md': 'main\n' } });
+    try {
+      const env = portEnv2(repos);
+      const [candidate] = selectCandidates([ledgerEditPr(repos)]).candidates;
+      const result = await processPullRequest(candidate, env.deps);
+      assert.equal(result.outcome, 'skip-port-unportable', label + ': ' + JSON.stringify(result));
+      assert.match(result.reason, pattern, label);
+      assert.equal(env.comments.length, 1, label);
+      assert.equal(sh(repos.origin, 'rev-parse', 'refs/heads/feature/1-x'), repos.featureOid, label);
+    } finally { repos.cleanup(); }
+  }
+});
+
+test('統合 AC-12: 分岐点で未畳み込みの申告がある行を月別で直接編集した PR は人手扱い（base を決められない）', async () => {
+  const pending = CHG + 'CMP-261124-0002--20261124T000000Z--000001.md';
+  const repos = setupReposFiles({
+    base: { ...splitBase, [pending]: chUpdT(row('CMP-261124-0002', 'P3 未着手'), row('CMP-261124-0002', 'P2 実装中'), 'CMP-261124-0002') },
+    feature: { 'docs/task-list/2026-11.md': month(row('CMP-261124-0001', '完了'), row('CMP-261124-0002', 'P1 実装中')) },
+    main: { 'README.md': 'main\n' },
+  });
+  try {
+    const env = portEnv2(repos);
+    const [candidate] = selectCandidates([ledgerEditPr(repos)]).candidates;
+    const result = await processPullRequest(candidate, env.deps);
+    assert.equal(result.outcome, 'skip-port-unportable', JSON.stringify(result));
+    assert.match(result.reason, /未畳み込み/);
+  } finally { repos.cleanup(); }
+});
+
+test('統合 段3: 索引の前置きだけを変えた（月別ファイルを変えない）衝突なしの PR は何もしない（push もコメントもしない）', async () => {
+  const repos = setupReposFiles({ base: splitBase, feature: { [LEDGER_PATH]: splitIndex + '\n追記した規約。\n' }, main: { 'README.md': 'main\n' } });
+  try {
+    const env = portEnv2(repos);
+    const [candidate] = selectCandidates([ledgerEditPr(repos, { files: { totalCount: 1, nodes: [{ path: LEDGER_PATH }] } })]).candidates;
+    const result = await processPullRequest(candidate, env.deps);
+    assert.equal(result.outcome, 'skip-nothing-to-port', JSON.stringify(result));
+    assert.equal(env.comments.length, 0);
+    assert.equal(sh(repos.origin, 'rev-parse', 'refs/heads/feature/1-x'), repos.featureOid);
+  } finally { repos.cleanup(); }
+});
+
+test('統合 段3: 衝突で脱落した旧手順 PR（予約の意思あり）は変換後に auto-merge を予約し直す', async () => {
+  const repos = setupReposFiles({
+    base: splitBase,
+    feature: { 'docs/task-list/2026-11.md': month(row('CMP-261124-0001', '完了'), row('CMP-261124-0002', 'P3 未着手'), row('CMP-261124-1001', 'P3 未着手')) },
+    main: { 'docs/task-list/2026-11.md': month(row('CMP-261124-0001', '完了'), row('CMP-261124-0002', 'P3 未着手'), row('CMP-261124-2002', 'P2 未着手')) },
+  });
+  try {
+    const env = portEnv2(repos);
+    ensureUnionAttribute(makeRealGit(repos.runner));
+    const [candidate] = selectCandidates([pr({ headRefName: 'feature/1-x', headRefOid: repos.featureOid, author: { login: 'someone' } })]).candidates;
+    assert.equal(candidate.autofixTrigger, 'conflict');
+    const result = await processPullRequest(candidate, env.deps);
+    assert.equal(result.outcome, 'fixed', JSON.stringify(result));
+    assert.deepEqual(env.autoMergeCalls, [result.mergeCommit]);
+    assert.equal(changeFilesAt(env.ops, result.mergeCommit).length, 1);
   } finally { repos.cleanup(); }
 });

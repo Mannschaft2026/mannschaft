@@ -419,11 +419,11 @@ final class TaskListLedger {
         String name = path.substring(path.lastIndexOf('/') + 1);
         String heading;
         if (LEGACY_FILE_NAME.equals(name)) {
-            heading = "# 台帳 旧形式 ID（CMP-003 等）の行\n\n旧形式 ID の行はここに置く（月が決まらないため）。新しい行は ID の月のファイル docs/task-list/YYYY-MM.md の末尾に追加する。規約は [索引](../task-list.md) を参照。\n";
+            heading = "# 台帳 旧形式 ID（CMP-003 等）の行\n\n旧形式 ID の行はここに置く（月が決まらないため）。行の追加・更新は node scripts/task-list-ledger.mjs add / update で申告（docs/task-list/changes/）を作り、本ファイルは直接編集しない（反映は台帳 bot の畳み込み）。規約は [索引](../task-list.md) を参照。\n";
         } else {
             String month = name.substring(0, name.length() - 3);
             heading = "# 台帳 " + month + "（ID が CMP-" + month.substring(2, 4) + month.substring(5, 7)
-                    + "DD-HHMM の行）\n\n新しい行は本ファイルの末尾に追加する。規約は [索引](../task-list.md) を参照。\n";
+                    + "DD-HHMM の行）\n\n行の追加・更新は node scripts/task-list-ledger.mjs add / update で申告（docs/task-list/changes/）を作り、本ファイルは直接編集しない（反映は台帳 bot の畳み込み）。規約は [索引](../task-list.md) を参照。\n";
         }
         return heading + "\n" + TABLE_HEADER + "\n" + TABLE_SEPARATOR + "\n";
     }

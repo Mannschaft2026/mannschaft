@@ -12,7 +12,7 @@ metadata:
 ## 正本と生成物
 
 - 機能の正本: `docs/inventory/feature-inventory.yaml`
-- CMPの正本: 台帳。旧配置は `docs/task-list.md` 1ファイル。新配置（CMP-261124-1222）は索引 `docs/task-list.md`（前置きのみ）＋月別 `docs/task-list/YYYY-MM.md`（ID `CMP-YYMMDD-HHMM` の YYMM の月の行）＋ `docs/task-list/legacy.md`（旧形式 ID の行）。どちらの配置かは `docs/task-list/` に `YYYY-MM.md` か `legacy.md` があるかで決まり、生成・同期・検証スクリプトは `docs/prototypes/task_list_ledger.py`・`scripts/task-list-ledger.mjs` 経由で両配置を同じように読む
+- CMPの正本: 台帳。旧配置は `docs/task-list.md` 1ファイル。新配置（CMP-261124-1222）は索引 `docs/task-list.md`（前置きのみ）＋月別 `docs/task-list/YYYY-MM.md`（ID `CMP-YYMMDD-HHMM` の YYMM の月の行）＋ `docs/task-list/legacy.md`（旧形式 ID の行）＋未畳み込みの変更申告 `docs/task-list/changes/`（CMP-261124-1222 ④。読む側は申告適用後の実効台帳を使う）。どちらの配置かは `docs/task-list/` に `YYYY-MM.md` か `legacy.md` があるかで決まり、生成・同期・検証スクリプトは `docs/prototypes/task_list_ledger.py`・`scripts/task-list-ledger.mjs` 経由で両配置を同じように読む
 - GitHub Issue/PRの取得済みスナップショット: `docs/prototypes/beta-inventory-board-github.json`
 - GitHub同期状態: `docs/prototypes/beta-inventory-board-github-status.json`
 - 補助JSON: `docs/prototypes/beta-inventory-board-*.json`
@@ -57,4 +57,4 @@ metadata:
 
 - Artifactや外部公開先の更新はこのスキルの責務に含めない。公開を依頼された場合は、利用可能な公開ツールと既存URLを確認してから別途扱う。
 - GitHub同期は読み取り専用だが、取得済みスナップショットと生成データはローカルで更新する。認証情報をファイルへ保存しない。
-- `docs/inventory/feature-inventory.yaml`、台帳（`docs/task-list.md`・`docs/task-list/*.md`）、HTMLの手入力部分を、棚卸し更新のついでに自動編集しない。
+- `docs/inventory/feature-inventory.yaml`、台帳（`docs/task-list.md`・`docs/task-list/*.md`・`docs/task-list/changes/`）、HTMLの手入力部分を、棚卸し更新のついでに自動編集しない。台帳の変更が要るときは別の worktree + PR で `node scripts/task-list-ledger.mjs add` / `update` の申告を作る（月別ファイルは直接編集しない）。

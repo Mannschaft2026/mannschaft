@@ -174,11 +174,12 @@ jobs:
             const ancestorTaskList = await readLedgerAt(ancestorRef, 'the common ancestor');
 
             // 仮想 head の等式・連鎖（Codex 軍議検分 P1-1）。申告の改変・削除（畳み込み以外）と PR が足した申告の fork・孤児・重複・形式違反は赤。
-            // 月別ファイルの直接編集による等式違反は互換期間（P2-4）のため notice のみ（段3で赤）。
+            // 月別ファイルの直接編集は段3（施行）から赤（作者が台帳 bot mannschaft-ledger-bot[bot] でない月別ファイルの変更も赤）。
+            // 赤の理由に申告 CLI（node scripts/task-list-ledger.mjs add / update）と自動修復（task-list-conflict-autofix）の案内を含める。
             const ledgerChange = gateLib.evaluateLedgerChanges({ mergeBase: ancestorTaskList, base: baseTaskList, head: headTaskList, pull });
             for (const message of ledgerChange.notices) core.warning(message);
             if (ledgerChange.violations.length) {
-              core.setFailed('Task list change check failed (申告は追加のみ・base 連鎖を保つこと):\n' + ledgerChange.violations.join('\n'));
+              core.setFailed('Task list change check failed (申告は追加のみ・base 連鎖を保つこと。行の追加・更新は node scripts/task-list-ledger.mjs add / update で申告を作る):\n' + ledgerChange.violations.join('\n'));
               return;
             }
             if (ledgerChange.fold) core.info(`Ledger fold (畳み込み): ${ledgerChange.removedChanges.length} change file(s) folded into the month files by ${pull.user?.login ?? 'unknown'}${ledgerChange.botAuthor ? ' (ledger bot)' : ''}.`);
