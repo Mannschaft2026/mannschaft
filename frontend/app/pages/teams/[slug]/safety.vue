@@ -3,6 +3,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 
 const route = useRoute()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const safetyApi = useSafetyCheckApi()
 const notification = useNotification()
 const { isAdminOrDeputy, loadPermissions } = useRoleAccess('team', teamSlug)
@@ -44,14 +45,20 @@ function selectCheck(checkId: number) {
   selectedCheckId.value = checkId
 }
 
-
-onMounted(async () => {
+onGateOk(async () => {
   await loadPermissions()
   await loadChecks()
 })
 </script>
 
 <template>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
   <div>
     <div class="mb-4 flex items-center justify-between">
       <PageHeader title="安否確認" />
@@ -120,5 +127,7 @@ onMounted(async () => {
       :scope-id="teamSlug"
       @triggered="loadChecks"
     />
+  </div>
+    </template>
   </div>
 </template>

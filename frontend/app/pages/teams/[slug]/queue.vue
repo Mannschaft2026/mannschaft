@@ -3,6 +3,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 
 const route = useRoute()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const { isAdminOrDeputy, loadPermissions } = useRoleAccess('team', teamSlug)
 
 const activeTab = ref(0)
@@ -12,10 +13,17 @@ function onTicketIssued(_ticket: { ticketNumber: string }) {
   // リロードはQueueStatusBoardのポーリングで自動反映
 }
 
-onMounted(() => loadPermissions())
+onGateOk(() => loadPermissions())
 </script>
 
 <template>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
   <div>
     <div class="mb-4 flex items-center justify-between">
       <PageHeader title="順番待ち" />
@@ -38,5 +46,7 @@ onMounted(() => loadPermissions())
     </Tabs>
 
     <QueueTicketForm v-model:visible="showTicketForm" :team-id="teamSlug" @issued="onTicketIssued" />
+  </div>
+    </template>
   </div>
 </template>

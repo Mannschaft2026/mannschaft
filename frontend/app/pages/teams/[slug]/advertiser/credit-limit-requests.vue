@@ -8,6 +8,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 const route = useRoute()
 const { t } = useI18n()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const advertiserApi = useAdvertiserApi()
 const { success, error: showError } = useNotification()
 
@@ -51,55 +52,64 @@ function statusSeverity(status: string) {
   return status === 'APPROVED' ? 'success' : status === 'REJECTED' ? 'danger' : 'warn'
 }
 
-onMounted(load)
+onGateOk(load)
 </script>
 
 <template>
   <div>
-    <div class="mb-4 flex items-center justify-between">
-      <PageHeader :title="t('advertising.teams_page.credit_limit_requests.title')" :back-to="`/teams/${teamSlug}/advertiser`" />
-      <Button :label="t('advertising.teams_page.credit_limit_requests.create_button')" icon="pi pi-plus" @click="showCreate = true" />
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+        <div>
+          <div class="mb-4 flex items-center justify-between">
+            <PageHeader :title="t('advertising.teams_page.credit_limit_requests.title')" :back-to="`/teams/${teamSlug}/advertiser`" />
+            <Button :label="t('advertising.teams_page.credit_limit_requests.create_button')" icon="pi pi-plus" @click="showCreate = true" />
+          </div>
 
-    <div v-if="loading" class="flex justify-center py-10"><LoadingBounce /></div>
+          <div v-if="loading" class="flex justify-center py-10"><LoadingBounce /></div>
 
-    <DashboardErrorState
-      v-else-if="loadFailed"
-      testid="credit-limit-requests-error-state"
-      @retry="load"
-    />
+          <DashboardErrorState
+            v-else-if="loadFailed"
+            testid="credit-limit-requests-error-state"
+            @retry="load"
+          />
 
-    <DataTable v-else :value="requests" striped-rows>
-      <Column field="requestedLimit" :header="t('advertising.teams_page.credit_limit_requests.column_requested_limit')">
-        <template #body="{ data }">¥{{ data.requestedLimit.toLocaleString() }}</template>
-      </Column>
-      <Column field="currentLimit" :header="t('advertising.teams_page.credit_limit_requests.column_current_limit')">
-        <template #body="{ data }">¥{{ data.currentLimit.toLocaleString() }}</template>
-      </Column>
-      <Column field="reason" :header="t('advertising.teams_page.credit_limit_requests.column_reason')" />
-      <Column field="status" :header="t('advertising.teams_page.credit_limit_requests.column_status')">
-        <template #body="{ data }">
-          <Tag :value="data.status" :severity="statusSeverity(data.status)" />
-        </template>
-      </Column>
-      <Column field="reviewNote" :header="t('advertising.teams_page.credit_limit_requests.column_review_note')" />
-      <Column field="createdAt" :header="t('advertising.teams_page.credit_limit_requests.column_created_at')">
-        <template #body="{ data }">{{ data.createdAt?.substring(0, 10) }}</template>
-      </Column>
-    </DataTable>
+          <DataTable v-else :value="requests" striped-rows>
+            <Column field="requestedLimit" :header="t('advertising.teams_page.credit_limit_requests.column_requested_limit')">
+              <template #body="{ data }">¥{{ data.requestedLimit.toLocaleString() }}</template>
+            </Column>
+            <Column field="currentLimit" :header="t('advertising.teams_page.credit_limit_requests.column_current_limit')">
+              <template #body="{ data }">¥{{ data.currentLimit.toLocaleString() }}</template>
+            </Column>
+            <Column field="reason" :header="t('advertising.teams_page.credit_limit_requests.column_reason')" />
+            <Column field="status" :header="t('advertising.teams_page.credit_limit_requests.column_status')">
+              <template #body="{ data }">
+                <Tag :value="data.status" :severity="statusSeverity(data.status)" />
+              </template>
+            </Column>
+            <Column field="reviewNote" :header="t('advertising.teams_page.credit_limit_requests.column_review_note')" />
+            <Column field="createdAt" :header="t('advertising.teams_page.credit_limit_requests.column_created_at')">
+              <template #body="{ data }">{{ data.createdAt?.substring(0, 10) }}</template>
+            </Column>
+          </DataTable>
 
-    <Dialog v-model:visible="showCreate" :header="t('advertising.teams_page.credit_limit_requests.dialog_title')" :style="{ width: '500px' }" modal>
-      <div class="mb-4">
-        <label class="mb-1 block text-sm font-medium">{{ t('advertising.teams_page.credit_limit_requests.form_requested_limit_label') }}</label>
-        <InputNumber v-model="form.requestedLimit" :min="1" mode="currency" currency="JPY" locale="ja-JP" class="w-full" />
-      </div>
-      <div class="mb-4">
-        <label class="mb-1 block text-sm font-medium">{{ t('advertising.teams_page.credit_limit_requests.form_reason_label') }}</label>
-        <Textarea v-model="form.reason" rows="3" class="w-full" :placeholder="t('advertising.teams_page.credit_limit_requests.form_reason_placeholder')" />
-      </div>
-      <div class="flex justify-end">
-        <Button :label="t('advertising.teams_page.credit_limit_requests.submit_button')" icon="pi pi-check" :loading="creating" @click="create" />
-      </div>
-    </Dialog>
+          <Dialog v-model:visible="showCreate" :header="t('advertising.teams_page.credit_limit_requests.dialog_title')" :style="{ width: '500px' }" modal>
+            <div class="mb-4">
+              <label class="mb-1 block text-sm font-medium">{{ t('advertising.teams_page.credit_limit_requests.form_requested_limit_label') }}</label>
+              <InputNumber v-model="form.requestedLimit" :min="1" mode="currency" currency="JPY" locale="ja-JP" class="w-full" />
+            </div>
+            <div class="mb-4">
+              <label class="mb-1 block text-sm font-medium">{{ t('advertising.teams_page.credit_limit_requests.form_reason_label') }}</label>
+              <Textarea v-model="form.reason" rows="3" class="w-full" :placeholder="t('advertising.teams_page.credit_limit_requests.form_reason_placeholder')" />
+            </div>
+            <div class="flex justify-end">
+              <Button :label="t('advertising.teams_page.credit_limit_requests.submit_button')" icon="pi pi-check" :loading="creating" @click="create" />
+            </div>
+          </Dialog>
+        </div>
+    </template>
   </div>
 </template>

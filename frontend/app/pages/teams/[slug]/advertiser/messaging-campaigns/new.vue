@@ -16,6 +16,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 const route = useRoute()
 const router = useRouter()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate } = useTeamAccessGate(teamSlug)
 // F09.17 Phase 11-d-4: チーム配下ページは scope='TEAM' 固定で composable を呼ぶ。
 const scopeType: ScopeType = 'TEAM'
 const scopeId = teamSlug
@@ -246,132 +247,141 @@ async function fetchPreview() {
 
 <template>
   <div>
-    <PageHeader :title="t('advertising.pages.advertiser_campaign_create.title')" />
-
-    <!-- ステップインジケータ -->
-    <div class="my-4 flex items-center gap-2">
-      <div
-        v-for="(s, idx) in steps"
-        :key="idx"
-        class="flex items-center gap-2"
-      >
-        <span
-          class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium"
-          :class="step >= idx ? 'bg-primary text-white' : 'bg-surface-200 text-surface-500 dark:bg-surface-700'"
-        >
-          {{ idx + 1 }}
-        </span>
-        <span class="hidden text-sm sm:inline" :class="step === idx ? 'font-semibold' : 'text-surface-500'">
-          {{ t(s) }}
-        </span>
-        <i v-if="idx < steps.length - 1" class="pi pi-chevron-right text-xs text-surface-300" />
-      </div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+        <div>
+          <PageHeader :title="t('advertising.pages.advertiser_campaign_create.title')" />
 
-    <SectionCard>
-      <!-- Step 1: 基本情報 -->
-      <div v-if="step === 0">
-        <AdMessagingCampaignFormFields
-          v-model="basic"
-          :errors="basicErrors"
-        />
-      </div>
-
-      <!-- Step 2: チャネル -->
-      <div v-else-if="step === 1" class="space-y-4">
-        <div v-if="channels.length > 0" class="space-y-2">
-          <div
-            v-for="(ch, idx) in channels"
-            :key="idx"
-            class="flex items-center justify-between rounded-lg border border-surface-300 p-3 dark:border-surface-600"
-          >
-            <div>
-              <Tag :value="t(`advertising.channel.${ch.channelType.toLowerCase()}`)" />
-              <span class="ml-2 text-sm text-surface-500">{{ ch.locale }}</span>
-              <p class="mt-1 max-w-md truncate text-sm">{{ ch.subject || ch.bodyMarkdown.slice(0, 80) }}</p>
+          <!-- ステップインジケータ -->
+          <div class="my-4 flex items-center gap-2">
+            <div
+              v-for="(s, idx) in steps"
+              :key="idx"
+              class="flex items-center gap-2"
+            >
+              <span
+                class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium"
+                :class="step >= idx ? 'bg-primary text-white' : 'bg-surface-200 text-surface-500 dark:bg-surface-700'"
+              >
+                {{ idx + 1 }}
+              </span>
+              <span class="hidden text-sm sm:inline" :class="step === idx ? 'font-semibold' : 'text-surface-500'">
+                {{ t(s) }}
+              </span>
+              <i v-if="idx < steps.length - 1" class="pi pi-chevron-right text-xs text-surface-300" />
             </div>
-            <Button icon="pi pi-times" severity="danger" text rounded @click="removeChannel(idx)" />
           </div>
+
+          <SectionCard>
+            <!-- Step 1: 基本情報 -->
+            <div v-if="step === 0">
+              <AdMessagingCampaignFormFields
+                v-model="basic"
+                :errors="basicErrors"
+              />
+            </div>
+
+            <!-- Step 2: チャネル -->
+            <div v-else-if="step === 1" class="space-y-4">
+              <div v-if="channels.length > 0" class="space-y-2">
+                <div
+                  v-for="(ch, idx) in channels"
+                  :key="idx"
+                  class="flex items-center justify-between rounded-lg border border-surface-300 p-3 dark:border-surface-600"
+                >
+                  <div>
+                    <Tag :value="t(`advertising.channel.${ch.channelType.toLowerCase()}`)" />
+                    <span class="ml-2 text-sm text-surface-500">{{ ch.locale }}</span>
+                    <p class="mt-1 max-w-md truncate text-sm">{{ ch.subject || ch.bodyMarkdown.slice(0, 80) }}</p>
+                  </div>
+                  <Button icon="pi pi-times" severity="danger" text rounded @click="removeChannel(idx)" />
+                </div>
+              </div>
+
+              <div class="rounded-lg border-2 border-dashed border-surface-300 p-4 dark:border-surface-600">
+                <p class="mb-3 font-semibold">{{ t('advertising.actions.add_channel') }}</p>
+                <AdChannelEditor v-model="channelDraft" />
+                <div class="mt-3 flex justify-end">
+                  <Button
+                    icon="pi pi-plus"
+                    :label="t('advertising.actions.add_channel')"
+                    size="small"
+                    :disabled="!channelDraft.bodyMarkdown"
+                    @click="addChannel"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- Step 3: audience -->
+            <div v-else-if="step === 2">
+              <AdAudienceComposer v-model="segments" />
+            </div>
+
+            <!-- Step 4: preview -->
+            <div v-else-if="step === 3" class="space-y-4">
+              <AdPreviewCard :preview="preview" :loading="previewLoading" />
+              <div class="text-center">
+                <Button
+                  icon="pi pi-sync"
+                  :label="t('advertising.advertiser_crud.preview.fetch')"
+                  severity="secondary"
+                  outlined
+                  @click="fetchPreview"
+                />
+              </div>
+
+              <div class="rounded-lg border border-surface-300 p-4 dark:border-surface-600">
+                <p class="mb-2 font-semibold">{{ t('advertising.advertiser_crud.detail_tab.overview') }}</p>
+                <dl class="grid grid-cols-2 gap-2 text-sm">
+                  <dt class="text-surface-500">{{ t('advertising.advertiser_crud.form.name') }}</dt>
+                  <dd>{{ basic.name }}</dd>
+                  <dt class="text-surface-500">{{ t('advertising.advertiser_crud.form.total_budget') }}</dt>
+                  <dd>¥{{ basic.totalBudgetYen.toLocaleString() }}</dd>
+                  <dt class="text-surface-500">{{ t('advertising.advertiser_crud.form.starts_at') }}</dt>
+                  <dd>{{ basic.startsAt }}</dd>
+                  <dt class="text-surface-500">{{ t('advertising.advertiser_crud.form.ends_at') }}</dt>
+                  <dd>{{ basic.endsAt }}</dd>
+                  <dt class="text-surface-500">{{ t('advertising.advertiser_crud.detail_tab.channels') }}</dt>
+                  <dd>{{ channels.length }}</dd>
+                  <dt class="text-surface-500">{{ t('advertising.advertiser_crud.detail_tab.audience') }}</dt>
+                  <dd>{{ segments.length }}</dd>
+                </dl>
+              </div>
+            </div>
+
+            <!-- ナビゲーション -->
+            <div class="mt-6 flex justify-between">
+              <Button
+                v-if="step > 0"
+                :label="t('advertising.advertiser_crud.create_nav.back')"
+                severity="secondary"
+                icon="pi pi-arrow-left"
+                @click="back"
+              />
+              <div v-else />
+              <Button
+                v-if="step < 3"
+                :label="t('advertising.advertiser_crud.create_nav.next')"
+                icon="pi pi-arrow-right"
+                icon-pos="right"
+                @click="next"
+              />
+              <Button
+                v-else
+                :label="t('advertising.advertiser_crud.create_nav.submit')"
+                icon="pi pi-check"
+                :loading="submitting"
+                severity="success"
+                @click="submit"
+              />
+            </div>
+          </SectionCard>
         </div>
-
-        <div class="rounded-lg border-2 border-dashed border-surface-300 p-4 dark:border-surface-600">
-          <p class="mb-3 font-semibold">{{ t('advertising.actions.add_channel') }}</p>
-          <AdChannelEditor v-model="channelDraft" />
-          <div class="mt-3 flex justify-end">
-            <Button
-              icon="pi pi-plus"
-              :label="t('advertising.actions.add_channel')"
-              size="small"
-              :disabled="!channelDraft.bodyMarkdown"
-              @click="addChannel"
-            />
-          </div>
-        </div>
-      </div>
-
-      <!-- Step 3: audience -->
-      <div v-else-if="step === 2">
-        <AdAudienceComposer v-model="segments" />
-      </div>
-
-      <!-- Step 4: preview -->
-      <div v-else-if="step === 3" class="space-y-4">
-        <AdPreviewCard :preview="preview" :loading="previewLoading" />
-        <div class="text-center">
-          <Button
-            icon="pi pi-sync"
-            :label="t('advertising.advertiser_crud.preview.fetch')"
-            severity="secondary"
-            outlined
-            @click="fetchPreview"
-          />
-        </div>
-
-        <div class="rounded-lg border border-surface-300 p-4 dark:border-surface-600">
-          <p class="mb-2 font-semibold">{{ t('advertising.advertiser_crud.detail_tab.overview') }}</p>
-          <dl class="grid grid-cols-2 gap-2 text-sm">
-            <dt class="text-surface-500">{{ t('advertising.advertiser_crud.form.name') }}</dt>
-            <dd>{{ basic.name }}</dd>
-            <dt class="text-surface-500">{{ t('advertising.advertiser_crud.form.total_budget') }}</dt>
-            <dd>¥{{ basic.totalBudgetYen.toLocaleString() }}</dd>
-            <dt class="text-surface-500">{{ t('advertising.advertiser_crud.form.starts_at') }}</dt>
-            <dd>{{ basic.startsAt }}</dd>
-            <dt class="text-surface-500">{{ t('advertising.advertiser_crud.form.ends_at') }}</dt>
-            <dd>{{ basic.endsAt }}</dd>
-            <dt class="text-surface-500">{{ t('advertising.advertiser_crud.detail_tab.channels') }}</dt>
-            <dd>{{ channels.length }}</dd>
-            <dt class="text-surface-500">{{ t('advertising.advertiser_crud.detail_tab.audience') }}</dt>
-            <dd>{{ segments.length }}</dd>
-          </dl>
-        </div>
-      </div>
-
-      <!-- ナビゲーション -->
-      <div class="mt-6 flex justify-between">
-        <Button
-          v-if="step > 0"
-          :label="t('advertising.advertiser_crud.create_nav.back')"
-          severity="secondary"
-          icon="pi pi-arrow-left"
-          @click="back"
-        />
-        <div v-else />
-        <Button
-          v-if="step < 3"
-          :label="t('advertising.advertiser_crud.create_nav.next')"
-          icon="pi pi-arrow-right"
-          icon-pos="right"
-          @click="next"
-        />
-        <Button
-          v-else
-          :label="t('advertising.advertiser_crud.create_nav.submit')"
-          icon="pi pi-check"
-          :loading="submitting"
-          severity="success"
-          @click="submit"
-        />
-      </div>
-    </SectionCard>
+    </template>
   </div>
 </template>

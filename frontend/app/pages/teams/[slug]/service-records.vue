@@ -5,6 +5,7 @@ import type { ServiceRecordResponse } from '~/types/service'
 definePageMeta({ layout: 'team', middleware: 'auth' })
 const route = useRoute()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 
 const { getRecords, createRecord } = useServiceRecordApi()
 const notification = useNotification()
@@ -68,10 +69,17 @@ async function handleCreate() {
   }
 }
 
-onMounted(() => load())
+onGateOk(() => load())
 </script>
 
 <template>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
   <div>
     <div class="mb-4 flex items-center justify-between">
       <PageHeader title="サービス履歴" />
@@ -131,5 +139,7 @@ onMounted(() => load())
         <Button label="登録" icon="pi pi-check" :loading="saving" @click="handleCreate" />
       </template>
     </Dialog>
+  </div>
+    </template>
   </div>
 </template>

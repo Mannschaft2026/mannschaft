@@ -20,6 +20,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 const { t } = useI18n()
 const route = useRoute()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const { handleApiError } = useErrorHandler()
 
 const { isAdmin, loadPermissions } = useRoleAccess('team', teamSlug)
@@ -142,7 +143,7 @@ async function loadPage(): Promise<void> {
     loading.value = false
   }
 }
-onMounted(loadPage)
+onGateOk(loadPage)
 
 /** 次のページを読み込む */
 async function loadMore() {
@@ -214,115 +215,124 @@ function onDeleteConfirm(id: number) {
 </script>
 
 <template>
-  <div data-announcement-list class="mx-auto max-w-3xl p-4">
-    <span tabindex="-1" data-announcement-heading class="sr-only">{{ t('announcement.widget_title') }}</span>
-    <!-- ヘッダー -->
-    <div class="mb-4 flex items-center gap-3">
-      <PageHeader :title="t('announcement.widget_title')">
-        <template #subtitle>
-          <span class="text-sm text-surface-400">{{ t('announcement.all_announcements') }}</span>
-        </template>
-      </PageHeader>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+        <div data-announcement-list class="mx-auto max-w-3xl p-4">
+          <span tabindex="-1" data-announcement-heading class="sr-only">{{ t('announcement.widget_title') }}</span>
+          <!-- ヘッダー -->
+          <div class="mb-4 flex items-center gap-3">
+            <PageHeader :title="t('announcement.widget_title')">
+              <template #subtitle>
+                <span class="text-sm text-surface-400">{{ t('announcement.all_announcements') }}</span>
+              </template>
+            </PageHeader>
+          </div>
 
-    <!-- アクションバー -->
-    <div class="mb-4 flex items-center justify-between">
-      <span v-if="meta" class="text-sm text-surface-500">
-        {{ t('announcement.unread_count', { count: meta.unreadCount }) }}
-      </span>
-      <Button
-        v-if="meta && meta.unreadCount > 0"
-        :label="t('announcement.mark_all_read')"
-        icon="pi pi-check-circle"
-        size="small"
-        outlined
-        @click="onMarkAllRead"
-      />
-    </div>
-
-    <!-- ローディング -->
-    <PageLoading v-if="loading && feed.length === 0" />
-
-    <!-- エラー -->
-    <DashboardErrorState v-else-if="error" :message="error" @retry="loadPage" />
-
-    <!-- 空状態 -->
-    <DashboardEmptyState
-      v-else-if="feed.length === 0"
-      icon="pi pi-bell"
-      :message="t('announcement.empty')"
-    />
-
-    <!-- 一覧 -->
-    <div v-else>
-      <SectionCard>
-        <div role="list" class="divide-y divide-surface-100 dark:divide-surface-700">
-          <template v-for="(item, idx) in feed" :key="item.id">
-            <AnnouncementItem
-              :item="item"
-              :show-pin-control="isAdmin"
-              :can-remove="canRemove(item)"
-              @click="onItemClick"
-              @pin="onTogglePin"
-              @delete="onDeleteConfirm"
+          <!-- アクションバー -->
+          <div class="mb-4 flex items-center justify-between">
+            <span v-if="meta" class="text-sm text-surface-500">
+              {{ t('announcement.unread_count', { count: meta.unreadCount }) }}
+            </span>
+            <Button
+              v-if="meta && meta.unreadCount > 0"
+              :label="t('announcement.mark_all_read')"
+              icon="pi pi-check-circle"
+              size="small"
+              outlined
+              @click="onMarkAllRead"
             />
-            <!-- IN_FEED 掲載面（非 pinned 3 件目直後・1 ページ 1 枠） -->
-            <!-- CLS 防止: 取得中は 96px 固定スケルトンで枠を確保し、解決後に slot へ差し替える。 -->
-            <!-- 取得完了かつ候補なし（item 無し）のときのみ枠を畳む。 -->
-            <div
-              v-if="idx === spotlightInsertIndex - 1 && (spotlightLoading || spotlightInfeedItem)"
-              class="spotlight-infeed py-2"
-              data-testid="spotlight-infeed"
-              :style="spotlightInfeedStyle"
-            >
-              <div
-                v-if="spotlightLoading"
-                class="spotlight-infeed-skeleton w-full animate-pulse rounded-xl bg-surface-100 dark:bg-surface-700"
-                style="min-height: 96px"
-                data-testid="spotlight-infeed-skeleton"
-              />
-              <SpotlightSlot
-                v-else-if="spotlightInfeedItem"
-                :item="spotlightInfeedItem"
-                placement="IN_FEED"
+          </div>
+
+          <!-- ローディング -->
+          <PageLoading v-if="loading && feed.length === 0" />
+
+          <!-- エラー -->
+          <DashboardErrorState v-else-if="error" :message="error" @retry="loadPage" />
+
+          <!-- 空状態 -->
+          <DashboardEmptyState
+            v-else-if="feed.length === 0"
+            icon="pi pi-bell"
+            :message="t('announcement.empty')"
+          />
+
+          <!-- 一覧 -->
+          <div v-else>
+            <SectionCard>
+              <div role="list" class="divide-y divide-surface-100 dark:divide-surface-700">
+                <template v-for="(item, idx) in feed" :key="item.id">
+                  <AnnouncementItem
+                    :item="item"
+                    :show-pin-control="isAdmin"
+                    :can-remove="canRemove(item)"
+                    @click="onItemClick"
+                    @pin="onTogglePin"
+                    @delete="onDeleteConfirm"
+                  />
+                  <!-- IN_FEED 掲載面（非 pinned 3 件目直後・1 ページ 1 枠） -->
+                  <!-- CLS 防止: 取得中は 96px 固定スケルトンで枠を確保し、解決後に slot へ差し替える。 -->
+                  <!-- 取得完了かつ候補なし（item 無し）のときのみ枠を畳む。 -->
+                  <div
+                    v-if="idx === spotlightInsertIndex - 1 && (spotlightLoading || spotlightInfeedItem)"
+                    class="spotlight-infeed py-2"
+                    data-testid="spotlight-infeed"
+                    :style="spotlightInfeedStyle"
+                  >
+                    <div
+                      v-if="spotlightLoading"
+                      class="spotlight-infeed-skeleton w-full animate-pulse rounded-xl bg-surface-100 dark:bg-surface-700"
+                      style="min-height: 96px"
+                      data-testid="spotlight-infeed-skeleton"
+                    />
+                    <SpotlightSlot
+                      v-else-if="spotlightInfeedItem"
+                      :item="spotlightInfeedItem"
+                      placement="IN_FEED"
+                    />
+                  </div>
+                </template>
+              </div>
+            </SectionCard>
+
+            <!-- もっと見るボタン -->
+            <div v-if="meta?.hasNext" class="mt-4 flex justify-center">
+              <Button
+                :label="t('button.next')"
+                icon="pi pi-chevron-down"
+                outlined
+                :loading="loading"
+                @click="loadMore"
               />
             </div>
-          </template>
+          </div>
+
+          <!-- F08.9 P4b: ペイウォールモーダル -->
+          <Dialog
+            v-model:visible="paywallModalVisible"
+            :header="$t('payment.paywall.locked')"
+            :modal="true"
+            :closable="true"
+            :draggable="false"
+            class="w-full max-w-md"
+          >
+            <PaywallLock :loading="paywallGateLoading" :gate-result="paywallGateResult" />
+          </Dialog>
+          <AnnouncementDetailModal
+            :state="preview.state.value"
+            :preview="preview.preview.value"
+            :item-title="preview.item.value?.title ?? ''"
+            :error="preview.error.value"
+            :trigger="preview.trigger.value"
+            @close="preview.close"
+            @retry="preview.retry"
+            @displayed="preview.markDisplayed"
+          />
         </div>
-      </SectionCard>
-
-      <!-- もっと見るボタン -->
-      <div v-if="meta?.hasNext" class="mt-4 flex justify-center">
-        <Button
-          :label="t('button.next')"
-          icon="pi pi-chevron-down"
-          outlined
-          :loading="loading"
-          @click="loadMore"
-        />
-      </div>
-    </div>
-
-    <!-- F08.9 P4b: ペイウォールモーダル -->
-    <Dialog
-      v-model:visible="paywallModalVisible"
-      :header="$t('payment.paywall.locked')"
-      :modal="true"
-      :closable="true"
-      :draggable="false"
-      class="w-full max-w-md"
-    >
-      <PaywallLock :loading="paywallGateLoading" :gate-result="paywallGateResult" />
-    </Dialog>
-    <AnnouncementDetailModal
-      :state="preview.state.value"
-      :preview="preview.preview.value"
-      :item-title="preview.item.value?.title ?? ''"
-      :error="preview.error.value"
-      :trigger="preview.trigger.value"
-      @close="preview.close"
-      @retry="preview.retry"
-      @displayed="preview.markDisplayed"
-    />
+    </template>
   </div>
 </template>

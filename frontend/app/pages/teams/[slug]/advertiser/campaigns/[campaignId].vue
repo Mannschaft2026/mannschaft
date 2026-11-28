@@ -17,6 +17,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 const { t } = useI18n()
 const route = useRoute()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const campaignId = Number(route.params.campaignId)
 const advertiserApi = useAdvertiserApi()
 
@@ -106,58 +107,67 @@ async function handleExportCsv() {
   }
 }
 
-onMounted(load)
+onGateOk(load)
 watch([dateFrom, dateTo], load)
 </script>
 
 <template>
   <div>
-    <PageHeader
-      :title="performance?.campaignName ?? t('advertising.teams_page.campaign_detail.default_title')"
-      :back-to="`/teams/${teamSlug}/advertiser`"
-    >
-      <Tag
-        v-if="performance"
-        :value="performance.status"
-        :severity="statusSeverityMap[performance.status] ?? 'secondary'"
-      />
-      <template #actions>
-        <DatePicker v-model="dateFrom" date-format="yy-mm-dd" :placeholder="t('advertising.teams_page.campaign_detail.date_from_placeholder')" class="w-36" />
-        <span class="text-surface-400">〜</span>
-        <DatePicker v-model="dateTo" date-format="yy-mm-dd" :placeholder="t('advertising.teams_page.campaign_detail.date_to_placeholder')" class="w-36" />
-        <Button
-          icon="pi pi-download"
-          :label="t('advertising.teams_page.campaign_detail.csv_button')"
-          severity="secondary"
-          size="small"
-          :loading="exportingCsv"
-          @click="handleExportCsv"
-        />
-      </template>
-    </PageHeader>
-
-    <div v-if="loading" class="flex justify-center py-20"><LoadingBounce /></div>
-
-    <template v-else-if="performance">
-      <CampaignMetricsCards :performance="performance" />
-      <CampaignDataTables
-        :points="performance.points"
-        :creatives="creatives"
-        :breakdown="breakdown"
-      />
-    </template>
-
-    <div v-else class="py-20 text-center">
-      <i class="pi pi-chart-bar mb-4 text-6xl text-surface-400" />
-      <p class="text-surface-500">{{ t('advertising.teams_page.campaign_detail.load_failed') }}</p>
-      <NuxtLink :to="`/teams/${teamSlug}/advertiser`">
-        <Button
-          :label="t('advertising.teams_page.campaign_detail.back_to_dashboard')"
-          icon="pi pi-arrow-left"
-          severity="secondary"
-          class="mt-4"
-        />
-      </NuxtLink>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+        <div>
+          <PageHeader
+            :title="performance?.campaignName ?? t('advertising.teams_page.campaign_detail.default_title')"
+            :back-to="`/teams/${teamSlug}/advertiser`"
+          >
+            <Tag
+              v-if="performance"
+              :value="performance.status"
+              :severity="statusSeverityMap[performance.status] ?? 'secondary'"
+            />
+            <template #actions>
+              <DatePicker v-model="dateFrom" date-format="yy-mm-dd" :placeholder="t('advertising.teams_page.campaign_detail.date_from_placeholder')" class="w-36" />
+              <span class="text-surface-400">〜</span>
+              <DatePicker v-model="dateTo" date-format="yy-mm-dd" :placeholder="t('advertising.teams_page.campaign_detail.date_to_placeholder')" class="w-36" />
+              <Button
+                icon="pi pi-download"
+                :label="t('advertising.teams_page.campaign_detail.csv_button')"
+                severity="secondary"
+                size="small"
+                :loading="exportingCsv"
+                @click="handleExportCsv"
+              />
+            </template>
+          </PageHeader>
+
+          <div v-if="loading" class="flex justify-center py-20"><LoadingBounce /></div>
+
+          <template v-else-if="performance">
+            <CampaignMetricsCards :performance="performance" />
+            <CampaignDataTables
+              :points="performance.points"
+              :creatives="creatives"
+              :breakdown="breakdown"
+            />
+          </template>
+
+          <div v-else class="py-20 text-center">
+            <i class="pi pi-chart-bar mb-4 text-6xl text-surface-400" />
+            <p class="text-surface-500">{{ t('advertising.teams_page.campaign_detail.load_failed') }}</p>
+            <NuxtLink :to="`/teams/${teamSlug}/advertiser`">
+              <Button
+                :label="t('advertising.teams_page.campaign_detail.back_to_dashboard')"
+                icon="pi pi-arrow-left"
+                severity="secondary"
+                class="mt-4"
+              />
+            </NuxtLink>
+          </div>
+        </div>
+    </template>
   </div>
 </template>

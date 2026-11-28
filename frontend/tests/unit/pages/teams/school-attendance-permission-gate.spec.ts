@@ -4,6 +4,7 @@ import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
 import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
+import { flushPromises } from '@vue/test-utils'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -28,6 +29,7 @@ vi.mock('~/composables/useAttendancePermissionsApi', () => ({
   useAttendancePermissionsApi: () => ({ getPermissions: mockGetPermissions }),
 }))
 mockNuxtImport('useErrorHandler', () => () => ({ handleApiError, handleError: handleApiError }))
+mockNuxtImport('useTeamApi', () => () => ({ getTeam: vi.fn().mockResolvedValue({ data: { id: 'x', numericId: 1 } }) }))
 mockNuxtImport('useRoute', () => () => ({ params: { slug: 't1' } }))
 mockNuxtImport('useDatetime', () => () => ({ userTimezone: ref('Asia/Tokyo') }))
 mockNuxtImport('useDailyRollCall', () => () => ({
@@ -79,9 +81,8 @@ const ALL_TRUE = { teamId: 1, canView: true, canRecordDaily: true, canRecordPeri
 const ALL_FALSE = { teamId: 1, canView: false, canRecordDaily: false, canRecordPeriod: false }
 
 async function flush(): Promise<void> {
-  for (let i = 0; i < 10; i++) {
-    await Promise.resolve()
-  }
+  // チーム判定（useTeamAccessGate）の非同期を含めて流し切る
+  await flushPromises()
 }
 
 type Wrapper = Awaited<ReturnType<typeof mountSuspended>>

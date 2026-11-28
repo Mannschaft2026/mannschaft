@@ -5,6 +5,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 const { t } = useI18n()
 const route = useRoute()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const { getUnits } = useResidentApi()
 const { isAdminOrDeputy, loadPermissions } = useRoleAccess('team', teamSlug)
 const units = ref<DwellingUnit[]>([])
@@ -30,13 +31,20 @@ async function onCreated() {
   await load()
 }
 
-onMounted(async () => {
+onGateOk(async () => {
   await loadPermissions()
   await load()
 })
 </script>
 
 <template>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
   <div>
     <div class="mb-4 flex items-center justify-between">
       <PageHeader :title="t('property.residents.title')" />
@@ -85,5 +93,7 @@ onMounted(async () => {
       :scope-id="teamSlug"
       @created="onCreated"
     />
+  </div>
+    </template>
   </div>
 </template>

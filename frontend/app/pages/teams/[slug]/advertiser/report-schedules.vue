@@ -8,6 +8,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 const route = useRoute()
 const { t } = useI18n()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const advertiserApi = useAdvertiserApi()
 const { success, error: showError } = useNotification()
 
@@ -65,51 +66,60 @@ async function remove(id: number) {
   catch { showError(t('advertising.teams_page.report_schedules.delete_failed_toast')) }
 }
 
-onMounted(load)
+onGateOk(load)
 </script>
 
 <template>
   <div>
-    <div class="mb-4 flex items-center justify-between">
-      <PageHeader :title="t('advertising.teams_page.report_schedules.title')" :back-to="`/teams/${teamSlug}/advertiser`" />
-      <Button :label="t('advertising.teams_page.report_schedules.create_button')" icon="pi pi-plus" :disabled="schedules.length >= 3" @click="showCreate = true" />
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
-
-    <div v-if="loading" class="flex justify-center py-10"><LoadingBounce /></div>
-
-    <DashboardErrorState
-      v-else-if="loadFailed"
-      testid="report-schedules-error-state"
-      @retry="load"
-    />
-
-    <div v-else-if="schedules.length === 0" class="py-10 text-center text-surface-500">
-      {{ t('advertising.teams_page.report_schedules.empty') }}
-    </div>
-
-    <div v-else class="space-y-3">
-      <div v-for="s in schedules" :key="s.id" class="flex items-center justify-between rounded-xl border border-surface-300 bg-surface-0 p-4 dark:border-surface-600 dark:bg-surface-800">
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
         <div>
-          <Tag :value="s.frequency" :severity="s.frequency === 'WEEKLY' ? 'info' : 'warn'" class="mr-2" />
-          <span class="text-sm">{{ s.recipients.join(', ') }}</span>
-          <p v-if="s.lastSentAt" class="mt-1 text-xs text-surface-400">{{ t('advertising.teams_page.report_schedules.last_sent_label', { date: s.lastSentAt }) }}</p>
-        </div>
-        <Button icon="pi pi-trash" severity="danger" text @click="remove(s.id)" />
-      </div>
-    </div>
+          <div class="mb-4 flex items-center justify-between">
+            <PageHeader :title="t('advertising.teams_page.report_schedules.title')" :back-to="`/teams/${teamSlug}/advertiser`" />
+            <Button :label="t('advertising.teams_page.report_schedules.create_button')" icon="pi pi-plus" :disabled="schedules.length >= 3" @click="showCreate = true" />
+          </div>
 
-    <Dialog v-model:visible="showCreate" :header="t('advertising.teams_page.report_schedules.dialog_title')" :style="{ width: '500px' }" modal>
-      <div class="mb-4">
-        <label class="mb-1 block text-sm font-medium">{{ t('advertising.teams_page.report_schedules.form_frequency_label') }}</label>
-        <Select v-model="form.frequency" :options="frequencyOptions" option-label="label" option-value="value" class="w-full" />
-      </div>
-      <div class="mb-4">
-        <label class="mb-1 block text-sm font-medium">{{ t('advertising.teams_page.report_schedules.form_recipients_label') }}</label>
-        <InputText v-model="form.recipients" class="w-full" :placeholder="t('advertising.teams_page.report_schedules.form_recipients_placeholder')" />
-      </div>
-      <div class="flex justify-end">
-        <Button :label="t('advertising.teams_page.report_schedules.submit_button')" icon="pi pi-check" :loading="creating" @click="create" />
-      </div>
-    </Dialog>
+          <div v-if="loading" class="flex justify-center py-10"><LoadingBounce /></div>
+
+          <DashboardErrorState
+            v-else-if="loadFailed"
+            testid="report-schedules-error-state"
+            @retry="load"
+          />
+
+          <div v-else-if="schedules.length === 0" class="py-10 text-center text-surface-500">
+            {{ t('advertising.teams_page.report_schedules.empty') }}
+          </div>
+
+          <div v-else class="space-y-3">
+            <div v-for="s in schedules" :key="s.id" class="flex items-center justify-between rounded-xl border border-surface-300 bg-surface-0 p-4 dark:border-surface-600 dark:bg-surface-800">
+              <div>
+                <Tag :value="s.frequency" :severity="s.frequency === 'WEEKLY' ? 'info' : 'warn'" class="mr-2" />
+                <span class="text-sm">{{ s.recipients.join(', ') }}</span>
+                <p v-if="s.lastSentAt" class="mt-1 text-xs text-surface-400">{{ t('advertising.teams_page.report_schedules.last_sent_label', { date: s.lastSentAt }) }}</p>
+              </div>
+              <Button icon="pi pi-trash" severity="danger" text @click="remove(s.id)" />
+            </div>
+          </div>
+
+          <Dialog v-model:visible="showCreate" :header="t('advertising.teams_page.report_schedules.dialog_title')" :style="{ width: '500px' }" modal>
+            <div class="mb-4">
+              <label class="mb-1 block text-sm font-medium">{{ t('advertising.teams_page.report_schedules.form_frequency_label') }}</label>
+              <Select v-model="form.frequency" :options="frequencyOptions" option-label="label" option-value="value" class="w-full" />
+            </div>
+            <div class="mb-4">
+              <label class="mb-1 block text-sm font-medium">{{ t('advertising.teams_page.report_schedules.form_recipients_label') }}</label>
+              <InputText v-model="form.recipients" class="w-full" :placeholder="t('advertising.teams_page.report_schedules.form_recipients_placeholder')" />
+            </div>
+            <div class="flex justify-end">
+              <Button :label="t('advertising.teams_page.report_schedules.submit_button')" icon="pi pi-check" :loading="creating" @click="create" />
+            </div>
+          </Dialog>
+        </div>
+    </template>
   </div>
 </template>

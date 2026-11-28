@@ -9,6 +9,7 @@ definePageMeta({ middleware: 'auth', layout: 'team' })
 const { t } = useI18n()
 const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const { getTimeline } = useRepairPlanTimelineApi()
 const { listKanbans, createKanban, moveCard } = useRepairPlanKanbanApi()
 const notification = useNotification()
@@ -155,13 +156,20 @@ async function handleCardMoved(cardId: string, newStage: KanbanStage) {
   }
 }
 
-onMounted(async () => {
+onGateOk(async () => {
   await loadPermissions()
   await loadTimeline()
 })
 </script>
 
 <template>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
   <div class="mx-auto max-w-7xl">
     <!-- ページヘッダ -->
     <div class="mb-4 flex items-center gap-3">
@@ -416,5 +424,7 @@ onMounted(async () => {
         <Button :label="$t('button.create')" @click="handleCreateKanban" />
       </template>
     </Dialog>
+  </div>
+    </template>
   </div>
 </template>
