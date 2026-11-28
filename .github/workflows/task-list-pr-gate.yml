@@ -56,7 +56,7 @@ jobs:
               await new Promise(resolve => setTimeout(resolve, 10000));
             }
             core.setOutput('base_sha', latest.base.sha);
-            core.setOutput('pull', JSON.stringify({ number: latest.number, title: latest.title, body: latest.body, created_at: latest.created_at, changed_files: latest.changed_files, base: { sha: latest.base.sha, ref: latest.base.ref }, head: { sha: latest.head.sha } }));
+            core.setOutput('pull', JSON.stringify({ number: latest.number, title: latest.title, body: latest.body, created_at: latest.created_at, changed_files: latest.changed_files, user: latest.user ? { login: latest.user.login, type: latest.user.type } : null, base: { sha: latest.base.sha, ref: latest.base.ref }, head: { sha: latest.head.sha } }));
 
       # pull_request_target では必ず信頼 base SHA（最新）をcheckoutする。PRのソースはcheckout/import/実行しない。
       - name: Checkout trusted base
@@ -108,11 +108,16 @@ jobs:
             const { pathToFileURL } = require('node:url');
             const validatorPath = path.join(process.cwd(), 'scripts', 'completion-evidence.mjs');
             const validatorAvailable = fs.existsSync(validatorPath);
-            // 台帳の両配置（旧: docs/task-list.md 1ファイル / 新: 索引＋docs/task-list/YYYY-MM.md・legacy.md）は信頼 base の
-            // scripts/task-list-ledger.mjs（readLedger）で読む。Contents API はディレクトリ単位で取得し、404 だけを不在、それ以外の失敗は例外にする。
+            // 台帳の両配置（旧: docs/task-list.md 1ファイル / 新: 索引＋docs/task-list/YYYY-MM.md・legacy.md）と変更申告（docs/task-list/changes/）は
+            // 信頼 base の scripts/task-list-ledger.mjs（readLedger）で実効台帳として読む。取得は scripts/task-list-pr-gate.mjs の GraphQL Tree entries 一括取得
+            // （1参照1回・blob は oid でキャッシュ）で、呼び出し数は申告の件数に依らない。null・取得失敗（5xx 等）は不在とせず例外にする（CMP-261124-1222 ④）。
             const ledgerLibPath = path.join(process.cwd(), 'scripts', 'task-list-ledger.mjs');
             if (!fs.existsSync(ledgerLibPath)) throw new Error('The trusted ledger reader scripts/task-list-ledger.mjs is absent from the base checkout.');
             const ledgerLib = await import(pathToFileURL(ledgerLibPath).href);
+            const gateLibPath = path.join(process.cwd(), 'scripts', 'task-list-pr-gate.mjs');
+            if (!fs.existsSync(gateLibPath)) throw new Error('The trusted ledger gate library scripts/task-list-pr-gate.mjs is absent from the base checkout.');
+            const gateLib = await import(pathToFileURL(gateLibPath).href);
+            const ledgerSource = gateLib.createGraphqlLedgerSource({ github, owner, repo });
             async function readContent(filePath, ref) {
               try {
                 const response = await github.rest.repos.getContent({ owner, repo, path: filePath, ref });
@@ -128,19 +133,9 @@ jobs:
                 throw error;
               }
             }
-            async function listContentDir(dirPath, ref) {
-              try {
-                const response = await github.rest.repos.getContent({ owner, repo, path: dirPath, ref });
-                if (!Array.isArray(response.data)) throw new Error(`Expected a directory: ${dirPath}@${ref}`);
-                return response.data.map(entry => entry.name);
-              } catch (error) {
-                if (error.status === 404) return null;
-                throw error;
-              }
-            }
             async function readLedgerAt(ref, label) {
               try {
-                return await ledgerLib.readLedger({ listDir: dirPath => listContentDir(dirPath, ref), readFile: filePath => readContent(filePath, ref) });
+                return await ledgerSource.read(ref);
               } catch (error) {
                 throw new Error(`The task list could not be read from ${label} (${ref}): ${error.message}`);
               }
@@ -161,22 +156,46 @@ jobs:
               || file.previous_filename === ledgerLibPathInBase
             );
             if (ledgerLibRemoval) throw new Error('The trusted ledger reader cannot be deleted or renamed.');
+            const trustedPathsInBase = ['scripts/task-list-pr-gate.mjs', 'scripts/task-list-structure-check.mjs'];
+            const gateLibRemoval = files.find(file =>
+              trustedPathsInBase.includes(file.filename) && file.status === 'removed'
+              || trustedPathsInBase.includes(file.previous_filename)
+            );
+            if (gateLibRemoval) throw new Error('The trusted ledger gate library cannot be deleted or renamed.');
+
+            // base・head・分岐点それぞれの実効台帳（取得失敗・索引不在・0件は例外）。
+            const baseRef = pull.base.sha;
+            const headRef = pull.head.sha;
+            const comparison = await github.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead: `${baseRef}...${headRef}` });
+            const ancestorRef = comparison.data.merge_base_commit?.sha;
+            if (!/^[0-9a-f]{40}$/i.test(ancestorRef || '')) throw new Error('A valid common ancestor SHA could not be read.');
+            const baseTaskList = await readLedgerAt(baseRef, 'base');
+            const headTaskList = await readLedgerAt(headRef, 'PR head');
+            const ancestorTaskList = await readLedgerAt(ancestorRef, 'the common ancestor');
+
+            // 仮想 head の等式・連鎖（Codex 軍議検分 P1-1）。申告の改変・削除（畳み込み以外）と PR が足した申告の fork・孤児・重複・形式違反は赤。
+            // 月別ファイルの直接編集による等式違反は互換期間（P2-4）のため notice のみ（段3で赤）。
+            const ledgerChange = gateLib.evaluateLedgerChanges({ mergeBase: ancestorTaskList, base: baseTaskList, head: headTaskList, pull });
+            for (const message of ledgerChange.notices) core.warning(message);
+            if (ledgerChange.violations.length) {
+              core.setFailed('Task list change check failed (申告は追加のみ・base 連鎖を保つこと):\n' + ledgerChange.violations.join('\n'));
+              return;
+            }
+            if (ledgerChange.fold) core.info(`Ledger fold (畳み込み): ${ledgerChange.removedChanges.length} change file(s) folded into the month files by ${pull.user?.login ?? 'unknown'}${ledgerChange.botAuthor ? ' (ledger bot)' : ''}.`);
+            core.info(`Ledger changes: +${ledgerChange.addedChanges.length} / -${ledgerChange.removedChanges.length} change file(s); ledger fetched with ${ledgerSource.stats.graphql} GraphQL call(s).`);
 
             let trustedValidator = null;
             if (validatorAvailable) {
-              const baseRef = pull.base.sha;
-              const headRef = pull.head.sha;
-              const comparison = await github.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead: `${baseRef}...${headRef}` });
-              const ancestorRef = comparison.data.merge_base_commit?.sha;
-              if (!/^[0-9a-f]{40}$/i.test(ancestorRef || '')) throw new Error('A valid common ancestor SHA could not be read.');
-              // base・head・分岐点それぞれの配置を判別して読む（取得失敗・索引不在・0件は例外）。
-              const baseTaskList = await readLedgerAt(baseRef, 'base');
-              const headTaskList = await readLedgerAt(headRef, 'PR head');
-              const ancestorTaskList = await readLedgerAt(ancestorRef, 'the common ancestor');
+              // 完了証拠の検査にも実効台帳（申告適用後）を渡す。完了 update 申告は証拠 JSON が要り、畳み込み PR は実効台帳が変わらないので選定0件。
               trustedValidator = await import(pathToFileURL(validatorPath).href);
               const evidencePathPattern = /^docs\/evidence\/CMP-(?:\d{6}-\d{4}|\d{3})\.json$/;
               const changedEvidencePaths = [...new Set(files.flatMap(file => [file.filename, file.previous_filename]).filter(filePath => evidencePathPattern.test(filePath)))];
-              const selectedEvidencePaths = trustedValidator.selectEvidencePaths(baseTaskList, headTaskList, changedEvidencePaths, { ancestorTaskList });
+              // 生の PR head（月別の直接編集による完了遷移）と仮想 head（最新 base＋PR が追加した申告。古い枝が最新 base の行から作った申告も適用）の両方で選ぶ。
+              const virtualHeadTaskList = ledgerChange.virtualHead;
+              const selectedEvidencePaths = [...new Set([
+                ...trustedValidator.selectEvidencePaths(baseTaskList, headTaskList, changedEvidencePaths, { ancestorTaskList }),
+                ...trustedValidator.selectEvidencePaths(baseTaskList, virtualHeadTaskList, changedEvidencePaths),
+              ])];
               const evidenceByPath = {};
               const evidenceChanged = new Set(changedEvidencePaths.filter(filePath => selectedEvidencePaths.includes(filePath)));
               const evidenceDeleted = new Set(files.flatMap(file => file.status === 'removed' ? [file.filename] : file.previous_filename ? [file.previous_filename] : []).filter(filePath => selectedEvidencePaths.includes(filePath)));
@@ -251,6 +270,15 @@ jobs:
                 implementations: implementationsByPr,
                 runs: runsById,
               });
+              // 仮想 head でも同じく検証する（PR が追加した申告による完了遷移を必ず拾う。最新 base との差なので分岐点は使わない）。
+              trustedValidator.validateCompletionChanges(input.baseTaskList, virtualHeadTaskList, input.evidenceByPath, {
+                repository: input.repository,
+                fileExists: filePath => input.existingFiles.includes(filePath),
+                evidenceChanged: new Set(input.evidenceChanged),
+                evidenceDeleted: new Set(input.evidenceDeleted),
+                implementations: implementationsByPr,
+                runs: runsById,
+              });
               core.info(`Completion evidence validated for ${selectedEvidencePaths.length} changed/new completion proof(s).`);
             } else {
               core.notice('Completion validator is absent from the trusted base (bootstrap PR); completion evidence validation starts after this PR lands. Registration checks still run.');
@@ -274,7 +302,7 @@ jobs:
               return;
             }
             const cmpId = references[0];
-            // 実装 PR は base で登録済み・実装中であること（台帳の配置は base 側で判別する）。
+            // 実装 PR は base の実効台帳（申告適用後）で登録済み・実装中であること（申告だけで実装中になった CMP も可。台帳の配置は base 側で判別する）。
             const taskList = await readLedgerAt(pull.base.ref, 'the PR base branch');
             const ledgerRow = taskList.rows.find(item => item.id === cmpId);
             const matchedRow = trustedValidator
