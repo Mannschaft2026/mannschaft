@@ -7,6 +7,7 @@ import com.mannschaft.app.cms.Visibility;
 import com.mannschaft.app.cms.entity.BlogPostEntity;
 import com.mannschaft.app.cms.repository.BlogPostRepository;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.MembersOnlyTeamQuery;
 import com.mannschaft.app.publicview.dto.PublicPostCommentRequest;
 import com.mannschaft.app.publicview.dto.PublicPostCommentResponse;
 import com.mannschaft.app.publicview.entity.PublicPostCommentEntity;
@@ -19,6 +20,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -48,6 +50,8 @@ public class PublicPostCommentService {
     private final BlogPostRepository blogPostRepository;
     // TODO: publicview → auth のクロスドメイン参照。将来はイベント駆動化候補。
     private final UserRepository userRepository;
+    /** CMP-261124-0159: 記事の所属チームが非公開チーム（メンバー限定）かの判定（F00 §20.5.3）。 */
+    private final MembersOnlyTeamQuery membersOnlyTeamQuery;
 
     /**
      * 指定した投稿のコメント一覧を取得する（未ログインでも取得可能）。
@@ -165,6 +169,11 @@ public class PublicPostCommentService {
         if (post.getVisibility() != Visibility.PUBLIC
                 || post.getStatus() != PostStatus.PUBLISHED
                 || !post.isPublicVisible()) {
+            throw new BusinessException(PublicViewErrorCode.PUBLIC_008);
+        }
+        // CMP-261124-0159: 非公開チームの記事は PUBLIC でも公開コメントの対象にしない（不在の記事と同一応答）。
+        if (post.getTeamId() != null
+                && membersOnlyTeamQuery.findMembersOnlyTeamIds(List.of(post.getTeamId())).contains(post.getTeamId())) {
             throw new BusinessException(PublicViewErrorCode.PUBLIC_008);
         }
     }

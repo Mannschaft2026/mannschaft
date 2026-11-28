@@ -1,5 +1,6 @@
 package com.mannschaft.app.notification.confirmable.service;
 
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.common.BusinessException;
@@ -64,6 +65,10 @@ class ConfirmableNotificationConfirmServiceTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    /** CMP-261124-0159: 親チーム上限の判定（既定では上限に掛からない）。 */
+    @Mock
+    private ScopeContentAccessGate scopeContentAccessGate;
 
     @InjectMocks
     private ConfirmableNotificationConfirmService confirmService;

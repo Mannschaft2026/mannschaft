@@ -1,6 +1,7 @@
 package com.mannschaft.app.filesharing.service;
 
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.MembersOnlyTeamQuery;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.token.IssuedToken;
 import com.mannschaft.app.common.token.SecretTokenVault;
@@ -49,6 +50,8 @@ public class SharedFileLinkService {
      * 公開リンク DL の C: download_disabled 貫通防御を担う。
      */
     private final SharedFolderQueryService folderQueryService;
+    /** CMP-261124-0159: ファイルの所属チームが非公開チーム（メンバー限定）かの判定（F00 §20.5.3 ファイル行）。 */
+    private final MembersOnlyTeamQuery membersOnlyTeamQuery;
 
     /**
      * ファイルの共有リンク一覧を取得する。
@@ -77,6 +80,11 @@ public class SharedFileLinkService {
         // PR-D 発行認可是正: 公開リンクを発行できるのはスコープの管理者（ADMIN/DEPUTY・PERSONAL は所有者）のみ。
         // 未認証・非会員にファイルを開く capability を配る強力な操作のため、一般 MEMBER は 403。
         folderQueryService.authorizeLinkManageByFileId(fileId, userId);
+
+        // CMP-261124-0159: 非公開チームのファイルには公開リンクを発行しない（判定順: 既存の認可 → 公開範囲。F00 §20.5.3 (1)）。
+        if (isMembersOnlyTeamFile(fileId)) {
+            throw new BusinessException(FileSharingErrorCode.LINK_MEMBERS_ONLY_TEAM);
+        }
 
         // PR-D マスター確定仕様: 有効期限は必須・最大30日先まで（無期限リンク不可）。
         LocalDateTime expiresAt = request.getExpiresAt();
@@ -191,12 +199,41 @@ public class SharedFileLinkService {
      * @param request アクセスリクエスト（パスワード・任意）
      * @return 検証を通過したリンクエンティティ
      */
+    /**
+     * チームのファイルの公開リンク（論理削除済みのファイル・フォルダを含む）を一括で失効させる
+     * （CMP-261124-0159・F00 §20.5.3 (2)。非公開化フロー PR-T の {@code TeamVisibilityTransitionFacade} が呼ぶ）。
+     *
+     * @param teamId チーム ID
+     * @return 失効させたリンクの件数（既に無効なものは数えない）
+     */
+    @Transactional
+    public int deactivateLinksForTeam(Long teamId) {
+        if (teamId == null) {
+            return 0;
+        }
+        int count = linkRepository.deactivateActiveLinksByTeam(teamId);
+        log.info("共有リンク一括失効（非公開化）: teamId={}, count={}", teamId, count);
+        return count;
+    }
+
+    private boolean isMembersOnlyTeamFile(Long fileId) {
+        return linkRepository.findTeamIdByFileId(fileId)
+                .map(teamId -> membersOnlyTeamQuery.findMembersOnlyTeamIds(List.of(teamId)).contains(teamId))
+                .orElse(false);
+    }
+
     private SharedFileLinkEntity validateLinkForAccess(String token, AccessLinkRequest request) {
         SharedFileLinkEntity entity = linkRepository.findByTokenHash(vault.hash(token))
                 .orElseThrow(() -> new BusinessException(FileSharingErrorCode.LINK_NOT_FOUND));
 
         // 手動失効（is_active=false）→ 410 Gone。
         if (!entity.isActive()) {
+            throw new BusinessException(FileSharingErrorCode.LINK_INACTIVE);
+        }
+        // CMP-261124-0159: アクセス時にもファイルの所属チームの公開範囲を再確認する（多層防御・F00 §20.5.3 (3)）。
+        // 非公開化・是正 migration の取りこぼしで is_active=TRUE のまま残ったリンクでも、無効化済みリンクと同一応答
+        // （410 LINK_INACTIVE）にする。期限・パスワードより先に判定し、応答から状態を区別させない。
+        if (isMembersOnlyTeamFile(entity.getFileId())) {
             throw new BusinessException(FileSharingErrorCode.LINK_INACTIVE);
         }
         // 期限切れ → 410 Gone。

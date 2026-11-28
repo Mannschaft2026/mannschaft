@@ -3345,8 +3345,19 @@ Resolver を通らない読み取り経路（スコープ単位の一覧・集�
 | `GET /api/v1/public/users/{userId}/posts` | `PublicUserProfileController` | 非公開チームのスコープの投稿を含めない |
 | `GET /api/v1/public/teams/search`（Discover） | `PublicDiscoverController` | 既存どおり PUBLIC のみ（回帰固定） |
 | `GET /api/v1/public/teams/slug-resolve` | `PublicSlugResolveController` | 対象外（slug の実在は非機密。2026-08-04 確定） |
+| `GET /api/v1/organizations/*/teams/search` | `OrganizationTeamSearchController`（F15.4） | 対象外（チームの検索 2 クラスは PR-01 の `exempt_direct_calls.txt` で既決。チームの中身を返さない） |
+| `GET /api/v1/public/organizations/**`・`/api/v1/embed/organizations/**`・`/api/v1/tournaments/*/folders` | 組織・大会の公開ページ | 対象外（ORGANIZATION / TOURNAMENT スコープ。組織 PRIVATE は §20.10） |
 
 実装時に `SecurityConfig` の permitAll と `@IntentionallyPublic` の全件を列挙して本表と突き合わせ、漏れがあれば本表に足す（§20.5.7）。
+
+**実装状況（PR-P・2026-11-27）**: 本表の全行を実装・回帰固定した。突き合わせ（origin/main 2026-11-27 の `SecurityConfig` permitAll 全行と `@IntentionallyPublic` 付与 30 クラス）で、チームの中身に触れる未掲載の経路は無く、対象外の 2 行（組織内チーム検索・組織／大会の公開ページ）を追記した。
+- 公開マーケット: `RecruitmentListingRepository` の市向け 6 クエリ（一覧 2・詳細 2・地域別件数 2）に同じ述語（TEAM なら `NOT EXISTS (teams.visibility = 'MEMBERS_AND_ABOVE')`）を足した。`/regions`・`/categories` は件数を返さないので不変。
+- 共有リンク: `SharedFileLinkService#createLink`（403 `FILE_SHARING_021`）・アクセス時の再確認（`validateLinkForAccess` で is_active の直後、410 `FILE_SHARING_018`）・一括失効 `SharedFileLinkService#deactivateLinksForTeam(teamId)`（論理削除済みのファイル・フォルダを含む UPDATE 1 本。PR-T が呼ぶ）。
+- サイネージ: `SignageAccessTokenService#issueToken`（403 `SIGNAGE_009`）・`#validateToken` の再確認（無効トークンと同一の `SIGNAGE_002`）・一括無効化 `#deactivateTokensForTeam(teamId)`（期限なし・削除済み画面を含む UPDATE 1 本。PR-T が呼ぶ）。管理画面の読み取り 4 経路（`SignageScreenReadFacade`・`SignageScreenService#listScreensForActor`・`SignageSlotService#listSlotsForActor`・`SignageEmergencyService#listEmergencyMessages`）は門に置換。購読認可は §20.5.5。
+- 確認トークン: `ConfirmableNotificationConfirmService#confirmByToken` が、送り元 TEAM の通知で宛先が `isBeyondTeamContentCap` なら不在トークンと同一の `INVALID_TOKEN`。
+- 公開プロフィールの投稿一覧: `BlogPostRepository#findPublicPostsByAuthorId` に同じ述語。公開記事コメント: `PublicPostCommentService#validatePublicPost` で不在の記事と同一の `PUBLIC_008`（一覧・投稿とも）。
+- 既知の制約: JPQL の述語は `TeamEntity` の `@SQLRestriction`（論理削除済みを隠す）を受けるため、**論理削除済みの非公開チーム**の募集・記事は述語で除外されない（`MembersOnlyTeamQuery` は削除済みも判定するので、トークン・リンク・コメント・確認トークンの経路は除外される）。削除済みチームの公開経路の扱いは別課題（殿判断）。
+- 試練: `PublicRoutesMembersOnlyTeamIT`・`MarketMembersOnlyTeamCeilingIT`・`SharedFileLinkMembersOnlyTeamIT`・`SignageMembersOnlyTeamCeilingIT`・`SignageSubscriptionAuthzIntegrationTest`。
 
 #### 20.5.4 一斉配信の宛先作成（精査 M-1）
 
@@ -3373,7 +3384,7 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 | `/topic/corkboard/{boardId}` | `CorkboardEventListener` | カード本体 | **無し → 新設** `CorkboardSubscriptionInterceptor`（REST の `CorkboardScopedBoardVisibilityGuard` と同じ判定） | チームのボードは門を AND |
 | `/topic/matches/{matchId}/live` | `MatchLiveBroadcastListener` | 試合速報 | `MatchLiveSubscriptionInterceptor`（匿名も F00 判定へ渡す） | Resolver 上限（§20.2）で自動 |
 | `/topic/teams/{teamId}/emergency-closures/{closureId}/confirmations` | `EmergencyClosureBroadcastListener` | 臨時休業の確認状況 | `EmergencyClosureSubscriptionInterceptor` | 門を AND |
-| `/topic/signage/{screenId}/emergency`・`/update` | `SignageWebSocketPublisher` | 緊急メッセージ本文・画面更新 | **無し → 新設** `SignageSubscriptionInterceptor`（`/ws/signage` の接続に使ったトークンの画面と一致し、トークンが有効で、画面の所属チームが非公開でないこと） | 拒否（§20.5.3 のトークン失効と合わせる） |
+| `/topic/signage/{screenId}/emergency`・`/update` | `SignageWebSocketPublisher` | 緊急メッセージ本文・画面更新 | `SignageSubscriptionInterceptor`（PR-P で新設・`WebSocketConfig` に登録済み）。端末は STOMP CONNECT のネイティブヘッダ `signage-token` にトークンを載せ、サーバはハッシュだけをセッションに保持する。SUBSCRIBE ごとに、トークンが有効（存在・未失効・期限内）で画面が購読先と一致し、画面の所属チームが非公開でないことを DB で確かめる。`/topic/signage/` 配下のそれ以外の宛先は `INVALID_DESTINATION`、トークンなしは `UNAUTHENTICATED`、それ以外の拒否は理由を区別せず `FORBIDDEN` | 拒否（§20.5.3 のトークン失効と合わせる。既存購読の失効は PR-WS） |
 | `/user/queue/notifications` | `NotificationDispatchService`・`WebSocketRelaySubscriber` | 本人宛て通知 | 本人のみ（既存） | 通知の作成時点で宛先が絞られる（§20.5.4）。送り元が非公開チームで受信者が MEMBER 未満なら送出しない（§20.3.1 と同じ述語） |
 | `/topic/villages/{villageId}/lobby/presence` | `VillageLobbyPresenceService` | 村のロビー在席 | 既存 | 対象外（VILLAGE スコープ） |
 
@@ -3491,6 +3502,7 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 - **AC-0159-25** 番人: `ScopeContentAccessMatrixIT` が §20.5.2 の「門」「Resolver」の全パッケージの読み取りエンドポイントを網羅して緑（AC-0159-10〜24 はその主要部分）。`ScopeContentAccessGateCoverageTest` が、任意のパッケージで `checkMembership` / `isMember` を直接呼ぶ変更で赤になる。`ScopeContentAccessGateEquivalenceTest` が緑。
 - **AC-0159-26b** サイネージ: 非公開チームの画面へのトークン発行は 403（新規 `SIGNAGE_009`）。非公開化・是正 migration の後、そのチームのトークン（期限なしを含む）は無効。フィクスチャで有効のまま残したトークンで `GET /signage/{token}` を叩くと無効トークンと同一応答で、画面名・スロット・緊急メッセージが返らない。そのトークンで `/ws/signage` から `/topic/signage/{screenId}/emergency` を購読しても拒否され、緊急メッセージ本文を 1 件も受信しない。公開チームでは従来どおり。
 - **AC-0159-27** 公開マーケット: 公開募集を持つチーム（地域 A・B に属する募集 1 件、地域 A のみの募集 1 件）を非公開化すると、匿名・認証済みの `/api/v1/public/market/listings` の一覧と total からその 2 件が消え、`/listings/{id}` は不在の募集と同一応答、総件数は一覧の `total` が 2 減ることで検証し、`/summary` は `byPrefecture`・`byCity` の地域別件数で地域 A が 2・地域 B が 1 減ることを検証する（各集計の期待値を個別に検証し、地域別件数の合計と一覧 total との一致は求めない）。`/regions` の応答は前後で変わらない（マスタ）。公開に戻すと再び出る。他チームの募集は不変。
+- **AC-0159-99** サイネージ画面間 IDOR: 公開チームの画面 A の有効トークンで `/ws/signage` に接続し、別画面 B の `/topic/signage/{B}/emergency`・`/update` を購読すると拒否され 1 件も受信しない。A の `/emergency`・`/update` は許可。トークンなし・無効トークン・失効トークンでの購読はすべて拒否（`SignageSubscriptionAuthzIntegrationTest`）。
 - **AC-0159-26** 公開ファイルリンク: 非公開チームのファイルにリンクを発行すると 403 `FILE_SHARING_021`。非公開化（F01.2 03）と是正 migration の後、そのチームのファイルの既存リンクは `is_active = FALSE`。フィクスチャで `is_active = TRUE` のまま残したリンクでも、アクセス・ダウンロード URL 発行は無効化済みリンクと同一応答（410 `FILE_SHARING_018`）で、URL もファイル名も返らない。公開チームのリンクは従来どおり。
 
 #### S. 全体検索（F04.6 §6）

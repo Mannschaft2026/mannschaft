@@ -1,6 +1,7 @@
 package com.mannschaft.app.signage.service;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.signage.SignageErrorCode;
 import com.mannschaft.app.signage.entity.SignageEmergencyMessageEntity;
@@ -34,6 +35,8 @@ public class SignageEmergencyService {
     private final SignageScreenRepository screenRepository;
     private final SignageWebSocketPublisher webSocketPublisher;
     private final AccessControlService accessControlService;
+    /** CMP-261124-0159: 中身の読み取りは共通の門で非公開チームの上限を課す（F00 §20.3）。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
 
     // ========================================
     // DTO 定義
@@ -121,7 +124,7 @@ public class SignageEmergencyService {
     public List<EmergencyMessageResponse> listEmergencyMessages(Long screenId, Long actor) {
         SignageScreenEntity screen = screenRepository.findByIdAndDeletedAtIsNull(screenId)
                 .orElseThrow(() -> new BusinessException(SignageErrorCode.SIGNAGE_001));
-        accessControlService.checkMembership(actor, screen.getScopeId(), screen.getScopeType());
+        scopeContentAccessGate.checkScopeContentAccess(actor, screen.getScopeId(), screen.getScopeType());
 
         return emergencyRepository.findByScreenIdOrderByCreatedAtDesc(screenId)
                 .stream()

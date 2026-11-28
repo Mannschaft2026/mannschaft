@@ -1,5 +1,6 @@
 package com.mannschaft.app.filesharing;
 
+import com.mannschaft.app.common.MembersOnlyTeamQuery;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
@@ -75,6 +76,10 @@ class SharedFileLinkTokenHashTest {
     private SharedFolderQueryService folderQueryService;
     @Spy
     private SecretTokenVault vault = new SecretTokenVault();
+
+    /** CMP-261124-0159: 親チーム上限の判定（既定では上限に掛からない）。 */
+    @Mock
+    private MembersOnlyTeamQuery membersOnlyTeamQuery;
 
     @InjectMocks
     private SharedFileLinkService service;
